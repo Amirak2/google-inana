@@ -31,6 +31,23 @@ import {
   validatePassword,
 } from './server/validation';
 import { logger, requestLoggerMiddleware } from './server/logger';
+import {
+  db,
+  runDbTransaction,
+  getAllProductsFromDb,
+  getProductByIdFromDb,
+  saveProductToDb,
+  saveAllProductsToDb,
+  deleteProductFromDb,
+  getAllOrdersFromDb,
+  getOrderByIdOrTrackingFromDb,
+  saveOrderToDb,
+  deleteOrderFromDb,
+  deleteOrdersBulkFromDb,
+  getIdempotentOrderFromDb,
+  saveIdempotencyKeyToDb,
+  seedDatabaseIfEmpty,
+} from './server/db';
 
 const app = express();
 const PORT = 3000;
@@ -325,230 +342,38 @@ function saveSettingsToDb(settings: PricingSettings): void {
   );
 }
 
-// --- Products Persistence ---
-function loadProductsFromDb(): Product[] {
-  try {
-    if (fs.existsSync(PRODUCTS_DB_FILE)) {
-      const data = fs.readFileSync(PRODUCTS_DB_FILE, 'utf-8');
-      const list = JSON.parse(data);
-      if (Array.isArray(list) && list.length > 0) {
-        return list;
-      }
-    }
-  } catch (err) {
-    console.error('[PRODUCTS DB] Error reading products_db.json:', err);
-  }
-  saveProductsToDb(INITIAL_PRODUCTS);
-  return [...INITIAL_PRODUCTS];
-}
+// --- SQLite Database Backed Storage & Mutex Transactions ---
+// Seed SQLite database on boot if tables are empty
+seedDatabaseIfEmpty(INITIAL_PRODUCTS, DEFAULT_SEED_ORDERS);
 
-let isSavingProducts = false;
-let needsReSaveProducts = false;
-
-async function saveProductsToDbAsync(products: Product[]): Promise<void> {
-  if (isSavingProducts) {
-    needsReSaveProducts = true;
-    return;
-  }
-  isSavingProducts = true;
-  try {
-    const tmpFile = `${PRODUCTS_DB_FILE}.tmp`;
-    const jsonStr = JSON.stringify(products, null, 2);
-    await fs.promises.writeFile(tmpFile, jsonStr, 'utf-8');
-    await fs.promises.rename(tmpFile, PRODUCTS_DB_FILE);
-  } catch (err) {
-    console.error('[PRODUCTS DB] Error async writing products_db.json:', err);
-  } finally {
-    isSavingProducts = false;
-    if (needsReSaveProducts) {
-      needsReSaveProducts = false;
-      saveProductsToDbAsync(productsList).catch(() => {});
-    }
-  }
-}
-
-function saveProductsToDb(products: Product[]): void {
-  saveProductsToDbAsync(products).catch((err) =>
-    console.error('[PRODUCTS DB] Background saveProductsToDb error:', err)
-  );
-}
-
-/**
- * Sequential Mutex Queue for Database Transactions
- * Guarantees serial execution of state mutations so concurrent requests cannot
- * interleave between memory mutation, file writes, and rollbacks.
- */
-let dbTransactionLock: Promise<any> = Promise.resolve();
-
-export async function runInDbTransaction<T>(action: () => Promise<T>): Promise<T> {
-  let releaseLock: () => void;
-  const nextLock = new Promise<void>((resolve) => {
-    releaseLock = resolve;
-  });
-  const currentLock = dbTransactionLock;
-  dbTransactionLock = dbTransactionLock.then(() => nextLock);
-
-  await currentLock;
-  try {
-    return await action();
-  } finally {
-    releaseLock!();
-  }
-}
-
-/**
- * Truly atomic two-file commit for Products and Orders database (Issue #5 Fix).
- * Prevents partial writes:
- * 1. Writes changes to unique temporary files first.
- * 2. Creates backups of existing databases on disk.
- * 3. Commits renames atomically.
- * 4. If any rename or write fails, rolls back the disk files from backups.
- */
-async function commitProductsAndOrdersTransaction(
-  newProducts: Product[],
-  newOrders: Order[]
-): Promise<void> {
-  const nonce = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-  const tmpProducts = `${PRODUCTS_DB_FILE}.${nonce}.tmp`;
-  const tmpOrders = `${ORDERS_DB_FILE}.${nonce}.tmp`;
-  const bakProducts = `${PRODUCTS_DB_FILE}.${nonce}.bak`;
-  const bakOrders = `${ORDERS_DB_FILE}.${nonce}.bak`;
-
-  const productsJson = JSON.stringify(newProducts, null, 2);
-  const ordersJson = JSON.stringify(newOrders, null, 2);
-
-  let productsBackedUp = false;
-  let ordersBackedUp = false;
-  let productsRenamed = false;
-
-  try {
-    // 1. Stage writes to temporary files first
-    await fs.promises.writeFile(tmpProducts, productsJson, 'utf-8');
-    await fs.promises.writeFile(tmpOrders, ordersJson, 'utf-8');
-
-    // 2. Backup current existing database files for disk rollback capability
-    if (fs.existsSync(PRODUCTS_DB_FILE)) {
-      await fs.promises.copyFile(PRODUCTS_DB_FILE, bakProducts);
-      productsBackedUp = true;
-    }
-    if (fs.existsSync(ORDERS_DB_FILE)) {
-      await fs.promises.copyFile(ORDERS_DB_FILE, bakOrders);
-      ordersBackedUp = true;
-    }
-
-    // 3. Atomically commit products
-    await fs.promises.rename(tmpProducts, PRODUCTS_DB_FILE);
-    productsRenamed = true;
-
-    // 4. Atomically commit orders
-    await fs.promises.rename(tmpOrders, ORDERS_DB_FILE);
-
-    // 5. Success: Clean up backup files
-    if (productsBackedUp && fs.existsSync(bakProducts)) {
-      await fs.promises.unlink(bakProducts).catch(() => {});
-    }
-    if (ordersBackedUp && fs.existsSync(bakOrders)) {
-      await fs.promises.unlink(bakOrders).catch(() => {});
-    }
-  } catch (err) {
-    // Clean up temporary files
-    if (fs.existsSync(tmpProducts)) await fs.promises.unlink(tmpProducts).catch(() => {});
-    if (fs.existsSync(tmpOrders)) await fs.promises.unlink(tmpOrders).catch(() => {});
-
-    // If products was renamed but orders failed, restore products to previous disk state!
-    if (productsRenamed && productsBackedUp && fs.existsSync(bakProducts)) {
-      try {
-        await fs.promises.copyFile(bakProducts, PRODUCTS_DB_FILE);
-      } catch (restoreErr) {
-        console.error('[DB TRANSACTION] Failed to restore products backup after failed orders commit:', restoreErr);
-      }
-    }
-
-    // Clean up backups on failure
-    if (productsBackedUp && fs.existsSync(bakProducts)) {
-      await fs.promises.unlink(bakProducts).catch(() => {});
-    }
-    if (ordersBackedUp && fs.existsSync(bakOrders)) {
-      await fs.promises.unlink(bakOrders).catch(() => {});
-    }
-
-    throw err;
-  }
-}
-
-/**
- * Atomic synchronous-awaitable persistence for transactions (throws on error)
- */
-async function persistProducts(): Promise<void> {
-  const tmpFile = `${PRODUCTS_DB_FILE}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  const jsonStr = JSON.stringify(productsList, null, 2);
-  await fs.promises.writeFile(tmpFile, jsonStr, 'utf-8');
-  await fs.promises.rename(tmpFile, PRODUCTS_DB_FILE);
-}
-
-// --- Orders Persistence ---
-function loadOrdersFromDb(): Order[] {
-  try {
-    if (fs.existsSync(ORDERS_DB_FILE)) {
-      const data = fs.readFileSync(ORDERS_DB_FILE, 'utf-8');
-      const list = JSON.parse(data);
-      if (Array.isArray(list)) {
-        return list;
-      }
-    }
-  } catch (err) {
-    console.error('[ORDERS DB] Error reading orders_db.json:', err);
-  }
-  saveOrdersToDb(DEFAULT_SEED_ORDERS);
-  return [...DEFAULT_SEED_ORDERS];
-}
-
-// Asynchronous Non-Blocking Atomic File Persistence (Prevents Event Loop Blocking on 100+ Concurrent Writes)
-let isSavingOrders = false;
-let needsReSaveOrders = false;
-
-async function saveOrdersToDbAsync(orders: Order[]): Promise<void> {
-  if (isSavingOrders) {
-    needsReSaveOrders = true;
-    return;
-  }
-  isSavingOrders = true;
-  try {
-    const tmpFile = `${ORDERS_DB_FILE}.tmp`;
-    const jsonStr = JSON.stringify(orders, null, 2);
-    await fs.promises.writeFile(tmpFile, jsonStr, 'utf-8');
-    await fs.promises.rename(tmpFile, ORDERS_DB_FILE);
-  } catch (err) {
-    console.error('[ORDERS DB] Error async writing orders_db.json:', err);
-  } finally {
-    isSavingOrders = false;
-    if (needsReSaveOrders) {
-      needsReSaveOrders = false;
-      saveOrdersToDbAsync(ordersList).catch(() => {});
-    }
-  }
-}
-
-function saveOrdersToDb(orders: Order[]): void {
-  saveOrdersToDbAsync(orders).catch((err) =>
-    console.error('[ORDERS DB] Background saveOrdersToDb error:', err)
-  );
-}
-
-/**
- * Atomic synchronous-awaitable persistence for transactions (throws on error)
- */
-async function persistOrders(): Promise<void> {
-  const tmpFile = `${ORDERS_DB_FILE}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  const jsonStr = JSON.stringify(ordersList, null, 2);
-  await fs.promises.writeFile(tmpFile, jsonStr, 'utf-8');
-  await fs.promises.rename(tmpFile, ORDERS_DB_FILE);
-}
-
-// Persistent In-Memory Databases Synchronized with Persistent Storage
+// Synchronized state loaded from SQLite database
 let pricingSettings: PricingSettings = loadSettingsFromDb();
-let productsList: Product[] = loadProductsFromDb();
-let ordersList: Order[] = loadOrdersFromDb();
+let productsList: Product[] = getAllProductsFromDb();
+let ordersList: Order[] = getAllOrdersFromDb();
+
+// Save products both to SQLite DB and keep JSON file synced for backward compatibility
+function saveProductsToDb(products: Product[]): void {
+  try {
+    saveAllProductsToDb(products);
+    fs.promises.writeFile(PRODUCTS_DB_FILE, JSON.stringify(products, null, 2), 'utf-8').catch(() => {});
+  } catch (err) {
+    console.error('[PRODUCTS DB] Error writing products:', err);
+  }
+}
+
+// Save orders both to SQLite DB and keep JSON file synced for backward compatibility
+function saveOrdersToDb(orders: Order[]): void {
+  try {
+    for (const o of orders) {
+      saveOrderToDb(o);
+    }
+    fs.promises.writeFile(ORDERS_DB_FILE, JSON.stringify(orders, null, 2), 'utf-8').catch(() => {});
+  } catch (err) {
+    console.error('[ORDERS DB] Error writing orders:', err);
+  }
+}
+
+export const runInDbTransaction = runDbTransaction;
 
 // -------------------------------------------------------------
 // Real-time Stock Lock & Concurrency Reservation Engine
@@ -1415,6 +1240,7 @@ app.delete('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedReque
     return;
   }
   const deleted = productsList.splice(index, 1);
+  deleteProductFromDb(deleted[0].id);
   saveProductsToDb(productsList);
   logger.security('ADMIN', `حذف محصول توسط مدیر: ${deleted[0].title} (${deleted[0].id})`, {
     admin: req.user?.email,
@@ -1655,20 +1481,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
     return;
   }
 
-  // Idempotency Key check
   const idempotencyKey = String(req.headers['x-idempotency-key'] || req.body.idempotencyKey || '').trim();
-  if (idempotencyKey) {
-    const existing = idempotencyOrdersMap.get(idempotencyKey);
-    if (existing) {
-      res.status(200).json({
-        success: true,
-        order: existing,
-        isIdempotentReplay: true,
-        message: 'این سفارش قبلاً با موفقیت ثبت شده است.',
-      });
-      return;
-    }
-  }
 
   const {
     customerName,
@@ -1695,11 +1508,6 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
     return;
   }
 
-  if (!items || !Array.isArray(items) || items.length === 0 || items.length > 50) {
-    res.status(400).json({ error: 'لیست اقلام سفارش نامعتبر است (حداقل ۱ و حداکثر ۵۰ قلم کالا).' });
-    return;
-  }
-
   // 1. Prevent OOM: Enforce receipt image length limit (~600KB max base64)
   if (
     paymentReceiptImage &&
@@ -1718,226 +1526,250 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
   const orderUserEmail = req.user!.email;
   const uId = `usr_${orderUserId}`;
 
-  // 3. Authoritative Quote & Inventory Matching (Issue #2 Fix)
-  let effectiveGoldPrice = currentGoldState.pricePerGram;
-  let validatedItems: Order['items'] = [];
-  let computedTotalWeight = 0;
-  let computedTotalPrice = 0;
-  let itemsToProcess: { productId: string; quantity: number }[] = [];
-
-  if (quoteId && typeof quoteId === 'string') {
-    const activeQuote = quotesMap.get(quoteId.trim());
-    if (!activeQuote || Date.now() > activeQuote.expiresAt) {
-      res.status(400).json({
-        error: 'پیش‌فاکتور قیمت طلا منقضی گردیده است. لطفاً مجدداً پیش‌فاکتور دریافت نمایید.',
-        quoteExpired: true,
-      });
-      return;
-    }
-
-    // Strict ownership verification: A user cannot submit or steal another user's quote
-    if (activeQuote.userId && activeQuote.userId !== orderUserId) {
-      res.status(403).json({
-        error: 'دسترسی غیرمجاز: این پیش‌فاکتور متعلق به حساب کاربری شما نمی‌باشد.',
-      });
-      return;
-    }
-
-    // Verify consistency: If client also sent items in body, verify 1-to-1 match with quote items
-    if (items && Array.isArray(items)) {
-      const quoteMap = new Map<string, number>();
-      for (const qi of activeQuote.items) {
-        quoteMap.set(qi.productId, (quoteMap.get(qi.productId) || 0) + qi.quantity);
-      }
-      const reqMap = new Map<string, number>();
-      for (const ri of items) {
-        if (ri && ri.productId) {
-          reqMap.set(String(ri.productId), (reqMap.get(String(ri.productId)) || 0) + Number(ri.quantity));
-        }
-      }
-      if (quoteMap.size !== reqMap.size) {
-        res.status(400).json({ error: 'اقلام ارسالی با اقلام پیش‌فاکتور معتبر مطابقت ندارند.' });
-        return;
-      }
-      for (const [pId, qQty] of quoteMap.entries()) {
-        if (reqMap.get(pId) !== qQty) {
-          res.status(400).json({ error: `تعداد یا قلم کالای ${pId} با پیش‌فاکتور همخوانی ندارد.` });
-          return;
-        }
-      }
-    }
-
-    // Derive all calculation AND inventory deduction strictly from the validated quote
-    effectiveGoldPrice = activeQuote.goldPriceAtQuote;
-    computedTotalWeight = activeQuote.totalWeight;
-    computedTotalPrice = activeQuote.totalPrice;
-    validatedItems = activeQuote.items;
-    itemsToProcess = activeQuote.items.map((qi) => ({
-      productId: qi.productId,
-      quantity: qi.quantity,
-    }));
-  } else {
-    // Dynamic recalculation when no quote is used
-    if (!items || !Array.isArray(items) || items.length === 0 || items.length > 50) {
-      res.status(400).json({ error: 'لیست اقلام سفارش نامعتبر است (حداقل ۱ و حداکثر ۵۰ قلم کالا).' });
-      return;
-    }
-
-    for (const item of items) {
-      if (!item || !item.productId) {
-        res.status(400).json({ error: 'اطلاعات ردیف‌های سفارش ناقص است.' });
-        return;
-      }
-      const qty = Number(item.quantity);
-      if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
-        res.status(400).json({ error: 'تعداد هر قلم در سفارش باید یک عدد صحیح بین ۱ تا ۲۰ باشد.' });
-        return;
-      }
-      itemsToProcess.push({ productId: String(item.productId), quantity: qty });
-    }
-
-    for (const itm of itemsToProcess) {
-      const product = productsList.find((p) => p.id === itm.productId);
-      if (!product) {
-        res.status(404).json({ error: `محصول با شناسه ${itm.productId} یافت نشد.` });
-        return;
-      }
-      const priceBreakdown = calculateProductPrice(product, effectiveGoldPrice, pricingSettings);
-      const unitPrice = priceBreakdown.finalPrice;
-      const itemTotal = unitPrice * itm.quantity;
-
-      computedTotalWeight += product.weight * itm.quantity;
-      computedTotalPrice += itemTotal;
-
-      validatedItems.push({
-        productId: product.id,
-        productTitle: product.title,
-        productImage: product.images[0] || '',
-        weight: product.weight,
-        unitPrice,
-        quantity: itm.quantity,
-        totalPrice: itemTotal,
-        goldPriceAtOrder: effectiveGoldPrice,
-        makingChargePercent: priceBreakdown.effectiveMakingChargePercent,
-      });
-    }
-  }
-
-  // 4. Aggregate quantities strictly from authoritative items (Issue #2 Fix)
-  const aggregatedQuantities = new Map<string, number>();
-  for (const item of itemsToProcess) {
-    const pId = String(item.productId);
-    aggregatedQuantities.set(pId, (aggregatedQuantities.get(pId) || 0) + item.quantity);
-  }
-
-  // 5. Verify stock availability
-  for (const [pId, totalRequestedQty] of aggregatedQuantities.entries()) {
-    const product = productsList.find((p) => p.id === pId);
-    if (!product) {
-      res.status(404).json({ error: `محصول با شناسه ${pId} یافت نشد.` });
-      return;
-    }
-    const available = getAvailableStock(product, uId);
-    if (product.stock !== undefined && available < totalRequestedQty) {
-      res.status(409).json({
-        error: 'اتمام موجودی قطعه طلا',
-        message: `متأسفانه مجموع تعداد درخواستی قطعه «${product.title}» (${totalRequestedQty} عدد) بیش از موجودی قابل سفارش (${available} عدد) است.`,
-        productId: product.id,
-        availableStock: available,
-        requestedQuantity: totalRequestedQty,
-      });
-      return;
-    }
-  }
-
-  const newOrder: Order = {
-    id: `ord-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
-    trackingCode: generateUniqueTrackingCode(),
-    userId: orderUserId,
-    userEmail: orderUserEmail,
-    customerName: nameVal.value,
-    customerPhone: phoneVal.phone,
-    customerAddress: customerAddress || 'ارسال پستی بیمه‌شده',
-    contactMethod: contactMethod || 'telegram',
-    notes,
-    items: validatedItems,
-    totalWeight: Number(computedTotalWeight.toFixed(3)),
-    totalPrice: computedTotalPrice,
-    goldPriceAtCheckout: effectiveGoldPrice,
-    status: 'در انتظار بررسی',
-    paymentMethod: paymentMethod || 'card_to_card',
-    paymentTrackingNumber: paymentTrackingNumber ? String(paymentTrackingNumber).trim() : '',
-    paymentReceiptImage: paymentReceiptImage || '',
-    paymentDate: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    inventoryReleased: false,
-    idempotencyKey: idempotencyKey || undefined,
-    quoteId: quoteId || undefined,
-  };
-
-  // 6. Real Transactional Execution (Issue #5 Fix)
-  // Uses sequential mutex lock (runInDbTransaction) and atomic two-file commit with disk rollback
+  // 3. Complete Transactional Execution (Issues #2, #3, #4 Fix)
+  // Everything (Idempotency, Quote validation, Stock verification, Stock deduction, Order insertion)
+  // runs strictly inside a single SQLite ACID transaction under a sequential mutex lock.
   try {
-    await runInDbTransaction(async () => {
-      const productsSnapshot = JSON.parse(JSON.stringify(productsList));
-      const ordersSnapshot = JSON.parse(JSON.stringify(ordersList));
-
-      try {
-        // Atomically decrement stock and clear reservations in memory
-        for (const [pId, totalQty] of aggregatedQuantities.entries()) {
-          const product = productsList.find((p) => p.id === pId);
-          if (product && product.stock !== undefined) {
-            product.stock = Math.max(0, product.stock - totalQty);
-          }
-          if (product && stockReservations.has(product.id)) {
-            const remaining = (stockReservations.get(product.id) || []).filter((r) => r.userId !== uId);
-            if (remaining.length > 0) stockReservations.set(product.id, remaining);
-            else stockReservations.delete(product.id);
-          }
+    const result = await runDbTransaction(async () => {
+      // A. Persistent Idempotency Check INSIDE transaction (Issue #4 Fix)
+      if (idempotencyKey) {
+        const existing = getIdempotentOrderFromDb(orderUserId, idempotencyKey);
+        if (existing) {
+          return { isExisting: true, order: existing };
         }
-
-        ordersList.unshift(newOrder);
-
-        // Commit both files atomically to disk; rolls back disk files if any write/rename fails
-        await commitProductsAndOrdersTransaction(productsList, ordersList);
-
-        // Successfully committed: Invalidate used quote
-        if (quoteId && typeof quoteId === 'string') {
-          quotesMap.delete(quoteId.trim());
-        }
-
-        if (idempotencyKey) {
-          idempotencyOrdersMap.set(idempotencyKey, newOrder);
-        }
-      } catch (transErr) {
-        // Rollback memory to snapshot
-        productsList = productsSnapshot;
-        ordersList = ordersSnapshot;
-        throw transErr;
       }
+
+      // B. Authoritative Quote & Items Matching INSIDE transaction (Issue #2 Fix)
+      let effectiveGoldPrice = currentGoldState.pricePerGram;
+      let validatedItems: Order['items'] = [];
+      let computedTotalWeight = 0;
+      let computedTotalPrice = 0;
+      let itemsToProcess: { productId: string; quantity: number }[] = [];
+
+      if (quoteId && typeof quoteId === 'string') {
+        const activeQuote = quotesMap.get(quoteId.trim());
+        if (!activeQuote || Date.now() > activeQuote.expiresAt) {
+          const err: any = new Error('پیش‌فاکتور قیمت طلا منقضی گردیده است. لطفاً مجدداً پیش‌فاکتور دریافت نمایید.');
+          err.statusCode = 400;
+          err.quoteExpired = true;
+          throw err;
+        }
+
+        // Strict ownership verification: A user cannot submit or steal another user's quote
+        if (activeQuote.userId && activeQuote.userId !== orderUserId) {
+          const err: any = new Error('دسترسی غیرمجاز: این پیش‌فاکتور متعلق به حساب کاربری شما نمی‌باشد.');
+          err.statusCode = 403;
+          throw err;
+        }
+
+        // Verify consistency if client sent items
+        if (items && Array.isArray(items)) {
+          const quoteMap = new Map<string, number>();
+          for (const qi of activeQuote.items) {
+            quoteMap.set(qi.productId, (quoteMap.get(qi.productId) || 0) + qi.quantity);
+          }
+          const reqMap = new Map<string, number>();
+          for (const ri of items) {
+            if (ri && ri.productId) {
+              reqMap.set(String(ri.productId), (reqMap.get(String(ri.productId)) || 0) + Number(ri.quantity));
+            }
+          }
+          if (quoteMap.size !== reqMap.size) {
+            const err: any = new Error('اقلام ارسالی با اقلام پیش‌فاکتور معتبر مطابقت ندارند.');
+            err.statusCode = 400;
+            throw err;
+          }
+          for (const [pId, qQty] of quoteMap.entries()) {
+            if (reqMap.get(pId) !== qQty) {
+              const err: any = new Error(`تعداد یا قلم کالای ${pId} با پیش‌فاکتور همخوانی ندارد.`);
+              err.statusCode = 400;
+              throw err;
+            }
+          }
+        }
+
+        effectiveGoldPrice = activeQuote.goldPriceAtQuote;
+        computedTotalWeight = activeQuote.totalWeight;
+        computedTotalPrice = activeQuote.totalPrice;
+        validatedItems = activeQuote.items;
+        itemsToProcess = activeQuote.items.map((qi) => ({
+          productId: qi.productId,
+          quantity: qi.quantity,
+        }));
+      } else {
+        // Dynamic recalculation when no quote is used
+        if (!items || !Array.isArray(items) || items.length === 0 || items.length > 50) {
+          const err: any = new Error('لیست اقلام سفارش نامعتبر است (حداقل ۱ و حداکثر ۵۰ قلم کالا).');
+          err.statusCode = 400;
+          throw err;
+        }
+
+        for (const item of items) {
+          if (!item || !item.productId) {
+            const err: any = new Error('اطلاعات ردیف‌های سفارش ناقص است.');
+            err.statusCode = 400;
+            throw err;
+          }
+          const qty = Number(item.quantity);
+          if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
+            const err: any = new Error('تعداد هر قلم در سفارش باید یک عدد صحیح بین ۱ تا ۲۰ باشد.');
+            err.statusCode = 400;
+            throw err;
+          }
+          itemsToProcess.push({ productId: String(item.productId), quantity: qty });
+        }
+
+        for (const itm of itemsToProcess) {
+          const product = productsList.find((p) => p.id === itm.productId);
+          if (!product) {
+            const err: any = new Error(`محصول با شناسه ${itm.productId} یافت نشد.`);
+            err.statusCode = 404;
+            throw err;
+          }
+          const priceBreakdown = calculateProductPrice(product, effectiveGoldPrice, pricingSettings);
+          const unitPrice = priceBreakdown.finalPrice;
+          const itemTotal = unitPrice * itm.quantity;
+
+          computedTotalWeight += product.weight * itm.quantity;
+          computedTotalPrice += itemTotal;
+
+          validatedItems.push({
+            productId: product.id,
+            productTitle: product.title,
+            productImage: product.images[0] || '',
+            weight: product.weight,
+            unitPrice,
+            quantity: itm.quantity,
+            totalPrice: itemTotal,
+            goldPriceAtOrder: effectiveGoldPrice,
+            makingChargePercent: priceBreakdown.effectiveMakingChargePercent,
+          });
+        }
+      }
+
+      // C. Aggregate quantities strictly from authoritative items
+      const aggregatedQuantities = new Map<string, number>();
+      for (const item of itemsToProcess) {
+        const pId = String(item.productId);
+        aggregatedQuantities.set(pId, (aggregatedQuantities.get(pId) || 0) + item.quantity);
+      }
+
+      // D. Verify stock availability INSIDE transaction (Issue #2 Fix)
+      for (const [pId, totalRequestedQty] of aggregatedQuantities.entries()) {
+        const product = productsList.find((p) => p.id === pId);
+        if (!product) {
+          const err: any = new Error(`محصول با شناسه ${pId} یافت نشد.`);
+          err.statusCode = 404;
+          throw err;
+        }
+        const available = getAvailableStock(product, uId);
+        if (product.stock !== undefined && available < totalRequestedQty) {
+          const err: any = new Error(`متأسفانه مجموع تعداد درخواستی قطعه «${product.title}» (${totalRequestedQty} عدد) بیش از موجودی قابل سفارش (${available} عدد) است.`);
+          err.statusCode = 409;
+          err.productId = product.id;
+          err.availableStock = available;
+          err.requestedQuantity = totalRequestedQty;
+          throw err;
+        }
+      }
+
+      // E. Deduct stock atomically in SQLite DB & in-memory cache (Issue #2 & #3 Fix)
+      for (const [pId, totalQty] of aggregatedQuantities.entries()) {
+        const product = productsList.find((p) => p.id === pId);
+        if (product && product.stock !== undefined) {
+          product.stock = Math.max(0, product.stock - totalQty);
+          saveProductToDb(product); // Atomic write to SQLite products table
+        }
+        if (product && stockReservations.has(product.id)) {
+          const remaining = (stockReservations.get(product.id) || []).filter((r) => r.userId !== uId);
+          if (remaining.length > 0) stockReservations.set(product.id, remaining);
+          else stockReservations.delete(product.id);
+        }
+      }
+
+      // F. Create Order and save in SQLite DB & in-memory cache
+      const newOrder: Order = {
+        id: `ord-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+        trackingCode: generateUniqueTrackingCode(),
+        userId: orderUserId,
+        userEmail: orderUserEmail,
+        customerName: nameVal.value,
+        customerPhone: phoneVal.phone,
+        customerAddress: customerAddress || 'ارسال پستی بیمه‌شده',
+        contactMethod: contactMethod || 'telegram',
+        notes,
+        items: validatedItems,
+        totalWeight: Number(computedTotalWeight.toFixed(3)),
+        totalPrice: computedTotalPrice,
+        goldPriceAtCheckout: effectiveGoldPrice,
+        status: 'در انتظار بررسی',
+        paymentMethod: paymentMethod || 'card_to_card',
+        paymentTrackingNumber: paymentTrackingNumber ? String(paymentTrackingNumber).trim() : '',
+        paymentReceiptImage: paymentReceiptImage || '',
+        paymentDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        inventoryReleased: false,
+        idempotencyKey: idempotencyKey || undefined,
+        quoteId: quoteId || undefined,
+      };
+
+      ordersList.unshift(newOrder);
+      saveOrderToDb(newOrder); // Atomic write to SQLite orders table
+
+      // G. Store idempotency key with unique constraint in SQLite (Issue #4 Fix)
+      if (idempotencyKey) {
+        saveIdempotencyKeyToDb(orderUserId, idempotencyKey, newOrder.id, newOrder);
+        idempotencyOrdersMap.set(idempotencyKey, newOrder);
+      }
+
+      // H. Invalidate used quote
+      if (quoteId && typeof quoteId === 'string') {
+        quotesMap.delete(quoteId.trim());
+      }
+
+      return { isExisting: false, order: newOrder };
     });
-  } catch (persistErr: any) {
-    console.error('[ORDERS DB] Transaction rollback due to error:', persistErr);
-    res.status(500).json({ error: 'خطای سیستمی در پردازش و ذخیره‌سازی تراکنش سفارش. لطفاً مجدداً تلاش فرمایید.' });
-    return;
+
+    if (result.isExisting) {
+      res.status(200).json({
+        success: true,
+        order: result.order,
+        isIdempotentReplay: true,
+        message: 'این سفارش قبلاً با موفقیت ثبت شده است.',
+      });
+      return;
+    }
+
+    logger.order('ORDERS', `ثبت سفارش جدید کد ${result.order.trackingCode} با مبلغ ${result.order.totalPrice.toLocaleString('fa-IR')} تومان`, {
+      orderId: result.order.id,
+      trackingCode: result.order.trackingCode,
+      customerName: result.order.customerName,
+      customerPhone: result.order.customerPhone,
+      totalPrice: result.order.totalPrice,
+      totalWeight: result.order.totalWeight,
+      itemsCount: result.order.items.length,
+      hasReceiptImage: Boolean(result.order.paymentReceiptImage),
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'سفارش شما با موفقیت در پایگاه داده ثبت شد و در حال بررسی کارشناس است.',
+      order: result.order,
+    });
+  } catch (err: any) {
+    // If transaction failed or aborted, re-sync memory from SQLite authoritative state
+    productsList = getAllProductsFromDb();
+    ordersList = getAllOrdersFromDb();
+
+    const status = err.statusCode || 500;
+    res.status(status).json({
+      error: err.message || 'خطای سیستمی در پردازش و ذخیره‌سازی تراکنش سفارش. لطفاً مجدداً تلاش فرمایید.',
+      quoteExpired: err.quoteExpired,
+      productId: err.productId,
+      availableStock: err.availableStock,
+      requestedQuantity: err.requestedQuantity,
+    });
   }
-
-  logger.order('ORDERS', `ثبت سفارش جدید کد ${newOrder.trackingCode} با مبلغ ${newOrder.totalPrice.toLocaleString('fa-IR')} تومان`, {
-    orderId: newOrder.id,
-    trackingCode: newOrder.trackingCode,
-    customerName: newOrder.customerName,
-    customerPhone: newOrder.customerPhone,
-    totalPrice: newOrder.totalPrice,
-    totalWeight: newOrder.totalWeight,
-    itemsCount: newOrder.items.length,
-    hasReceiptImage: Boolean(newOrder.paymentReceiptImage),
-  });
-
-  res.status(201).json({
-    success: true,
-    message: 'سفارش شما با موفقیت در پایگاه داده ثبت شد و در حال بررسی کارشناس است.',
-    order: newOrder,
-  });
 });
 
 async function handleOrderStatusUpdate(
@@ -1947,11 +1779,6 @@ async function handleOrderStatusUpdate(
   res: Response
 ): Promise<void> {
   const { status, rejectionReason, paymentTrackingNumber } = body;
-  const order = ordersList.find((o) => o.id === orderId || o.trackingCode === orderId);
-  if (!order) {
-    res.status(404).json({ error: 'سفارش یافت نشد.' });
-    return;
-  }
 
   if (status !== undefined) {
     const validStatuses = [
@@ -1971,75 +1798,79 @@ async function handleOrderStatusUpdate(
   }
 
   const isRejecting = status === 'رد شده' || status === 'لغو شده';
-  const wasRejected = order.status === 'رد شده' || order.status === 'لغو شده';
-
-  const productsSnapshot = JSON.stringify(productsList);
-  const orderSnapshot = JSON.stringify(order);
 
   try {
-    // 1. Transition to Rejected/Cancelled: Restore inventory only once
-    if (isRejecting && !order.inventoryReleased) {
-      for (const itm of order.items) {
-        const prod = productsList.find((p) => p.id === itm.productId);
-        if (prod && prod.stock !== undefined) {
-          prod.stock += itm.quantity;
-        }
+    const updatedOrder = await runDbTransaction(async () => {
+      const order = ordersList.find((o) => o.id === orderId || o.trackingCode === orderId);
+      if (!order) {
+        const err: any = new Error('سفارش یافت نشد.');
+        err.statusCode = 404;
+        throw err;
       }
-      order.inventoryReleased = true;
-    }
-    // 2. Transition from Rejected/Cancelled to Active status: Deduct inventory again if available
-    else if (!isRejecting && wasRejected && order.inventoryReleased) {
-      for (const itm of order.items) {
-        const prod = productsList.find((p) => p.id === itm.productId);
-        if (prod && prod.stock !== undefined && prod.stock < itm.quantity) {
-          res.status(409).json({
-            error: 'موجودی ناکافی جهت بازفعال‌سازی سفارش',
-            message: `موجودی قطعه «${prod.title}» (${prod.stock} عدد) برای فعال‌سازی مجدد این سفارش (${itm.quantity} عدد) کافی نیست.`,
-          });
-          return;
-        }
-      }
-      for (const itm of order.items) {
-        const prod = productsList.find((p) => p.id === itm.productId);
-        if (prod && prod.stock !== undefined) {
-          prod.stock -= itm.quantity;
-        }
-      }
-      order.inventoryReleased = false;
-    }
 
-    if (status) {
-      order.status = status;
-      order.reviewedAt = new Date().toISOString();
-    }
-    if (rejectionReason !== undefined) {
-      order.rejectionReason = String(rejectionReason).slice(0, 500);
-    }
-    if (paymentTrackingNumber !== undefined) {
-      order.paymentTrackingNumber = String(paymentTrackingNumber).slice(0, 100);
-    }
-    order.updatedAt = new Date().toISOString();
+      const wasRejected = order.status === 'رد شده' || order.status === 'لغو شده';
 
-    await runInDbTransaction(async () => {
-      await commitProductsAndOrdersTransaction(productsList, ordersList);
+      // 1. Transition to Rejected/Cancelled: Restore inventory only once
+      if (isRejecting && !order.inventoryReleased) {
+        for (const itm of order.items) {
+          const prod = productsList.find((p) => p.id === itm.productId);
+          if (prod && prod.stock !== undefined) {
+            prod.stock += itm.quantity;
+            saveProductToDb(prod); // Persisted to SQLite inside transaction
+          }
+        }
+        order.inventoryReleased = true;
+      }
+      // 2. Transition from Rejected/Cancelled to Active status: Deduct inventory again if available
+      else if (!isRejecting && wasRejected && order.inventoryReleased) {
+        for (const itm of order.items) {
+          const prod = productsList.find((p) => p.id === itm.productId);
+          if (prod && prod.stock !== undefined && prod.stock < itm.quantity) {
+            const err: any = new Error(`موجودی قطعه «${prod.title}» (${prod.stock} عدد) برای فعال‌سازی مجدد این سفارش (${itm.quantity} عدد) کافی نیست.`);
+            err.statusCode = 409;
+            throw err;
+          }
+        }
+        for (const itm of order.items) {
+          const prod = productsList.find((p) => p.id === itm.productId);
+          if (prod && prod.stock !== undefined) {
+            prod.stock -= itm.quantity;
+            saveProductToDb(prod); // Persisted to SQLite inside transaction
+          }
+        }
+        order.inventoryReleased = false;
+      }
+
+      if (status) {
+        order.status = status;
+        order.reviewedAt = new Date().toISOString();
+      }
+      if (rejectionReason !== undefined) {
+        order.rejectionReason = String(rejectionReason).slice(0, 500);
+      }
+      if (paymentTrackingNumber !== undefined) {
+        order.paymentTrackingNumber = String(paymentTrackingNumber).slice(0, 100);
+      }
+      order.updatedAt = new Date().toISOString();
+
+      saveOrderToDb(order); // Persisted to SQLite inside transaction
+      return order;
     });
 
-    logger.order('ORDERS', `بروزرسانی وضعیت سفارش ${order.trackingCode} به «${order.status}» توسط مدیر`, {
+    logger.order('ORDERS', `بروزرسانی وضعیت سفارش ${updatedOrder.trackingCode} به «${updatedOrder.status}» توسط مدیر`, {
       admin: adminUser?.email,
-      orderId: order.id,
-      trackingCode: order.trackingCode,
-      status: order.status,
-      inventoryReleased: order.inventoryReleased,
+      orderId: updatedOrder.id,
+      trackingCode: updatedOrder.trackingCode,
+      status: updatedOrder.status,
+      inventoryReleased: updatedOrder.inventoryReleased,
     });
 
-    res.json({ success: true, order });
-  } catch (saveErr) {
-    productsList = JSON.parse(productsSnapshot);
-    const restoredOrder = JSON.parse(orderSnapshot);
-    Object.assign(order, restoredOrder);
-
-    console.error('[ORDERS DB] Error updating order status:', saveErr);
-    res.status(500).json({ error: 'خطای سرور در ذخیره‌سازی تغییرات وضعیت سفارش.' });
+    res.json({ success: true, order: updatedOrder });
+  } catch (err: any) {
+    productsList = getAllProductsFromDb();
+    ordersList = getAllOrdersFromDb();
+    const code = err.statusCode || 500;
+    res.status(code).json({ error: err.message || 'خطای سرور در ذخیره‌سازی تغییرات وضعیت سفارش.' });
   }
 }
 
@@ -2056,30 +1887,32 @@ app.put('/api/orders/:id/status', requireAdminAuth, (req: AuthenticatedRequest, 
 });
 
 async function handleDeleteOrder(orderId: string, adminUser: any, res: Response): Promise<void> {
-  const index = ordersList.findIndex((o) => o.id === orderId || o.trackingCode === orderId);
-  if (index === -1) {
-    res.status(404).json({ error: 'سفارش مورد نظر در پایگاه داده یافت نشد.' });
-    return;
-  }
-
-  const productsSnapshot = JSON.stringify(productsList);
-  const ordersSnapshot = JSON.stringify(ordersList);
-
-  const [deletedOrder] = ordersList.splice(index, 1);
-
   try {
-    if (!deletedOrder.inventoryReleased && deletedOrder.status !== 'رد شده' && deletedOrder.status !== 'لغو شده') {
-      for (const itm of deletedOrder.items) {
-        const prod = productsList.find((p) => p.id === itm.productId);
-        if (prod && prod.stock !== undefined) {
-          prod.stock += itm.quantity;
-        }
+    const deletedOrder = await runDbTransaction(async () => {
+      const index = ordersList.findIndex((o) => o.id === orderId || o.trackingCode === orderId);
+      if (index === -1) {
+        const err: any = new Error('سفارش مورد نظر در پایگاه داده یافت نشد.');
+        err.statusCode = 404;
+        throw err;
       }
-      deletedOrder.inventoryReleased = true;
-    }
 
-    await runInDbTransaction(async () => {
-      await commitProductsAndOrdersTransaction(productsList, ordersList);
+      const orderToDelete = ordersList[index];
+
+      if (!orderToDelete.inventoryReleased && orderToDelete.status !== 'رد شده' && orderToDelete.status !== 'لغو شده') {
+        for (const itm of orderToDelete.items) {
+          const prod = productsList.find((p) => p.id === itm.productId);
+          if (prod && prod.stock !== undefined) {
+            prod.stock += itm.quantity;
+            saveProductToDb(prod); // Persisted to SQLite inside transaction
+          }
+        }
+        orderToDelete.inventoryReleased = true;
+      }
+
+      ordersList.splice(index, 1);
+      deleteOrderFromDb(orderToDelete.id); // Persisted to SQLite inside transaction
+
+      return orderToDelete;
     });
 
     logger.security('ADMIN', `حذف سفارش توسط مدیر: کد ${deletedOrder.trackingCode}`, {
@@ -2093,10 +1926,11 @@ async function handleDeleteOrder(orderId: string, adminUser: any, res: Response)
       deletedId: deletedOrder.id,
       remainingCount: ordersList.length,
     });
-  } catch (err) {
-    productsList = JSON.parse(productsSnapshot);
-    ordersList = JSON.parse(ordersSnapshot);
-    res.status(500).json({ error: 'خطای سرور در حذف سفارش.' });
+  } catch (err: any) {
+    productsList = getAllProductsFromDb();
+    ordersList = getAllOrdersFromDb();
+    const code = err.statusCode || 500;
+    res.status(code).json({ error: err.message || 'خطای سرور در حذف سفارش.' });
   }
 }
 
@@ -2109,37 +1943,61 @@ app.delete('/api/admin/orders/:id', requireAdminAuth, (req: AuthenticatedRequest
 });
 
 // Bulk delete or clear orders from database and memory
-app.delete('/api/orders', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { ids, clearAll } = req.body || {};
-  if (clearAll === true) {
-    const prevCount = ordersList.length;
-    ordersList = [];
-    saveOrdersToDb(ordersList);
-    logger.security('ADMIN', `پاکسازی تمام سفارشات توسط مدیر (تعداد: ${prevCount})`, {
-      admin: req.user?.email,
-      prevCount,
+  try {
+    const result = await runDbTransaction(async () => {
+      if (clearAll === true) {
+        const prevCount = ordersList.length;
+        const allIds = ordersList.map((o) => o.id);
+        ordersList = [];
+        deleteOrdersBulkFromDb(allIds);
+        saveOrdersToDb([]);
+        return { clearAll: true, prevCount };
+      }
+      if (Array.isArray(ids) && ids.length > 0) {
+        const idSet = new Set(ids.map(String));
+        const prevCount = ordersList.length;
+        const toDeleteIds: string[] = [];
+        for (const o of ordersList) {
+          if (idSet.has(o.id) || idSet.has(o.trackingCode)) {
+            toDeleteIds.push(o.id);
+          }
+        }
+        ordersList = ordersList.filter((o) => !idSet.has(o.id) && !idSet.has(o.trackingCode));
+        deleteOrdersBulkFromDb(toDeleteIds);
+        return { clearAll: false, deletedCount: prevCount - ordersList.length, remainingCount: ordersList.length };
+      }
+      const err: any = new Error('پارامترهای حذف مشخص نشده است.');
+      err.statusCode = 400;
+      throw err;
     });
-    res.json({ success: true, message: 'تمام سفارش‌ها از پایگاه داده و حافظه حذف شدند.', deletedCount: prevCount });
-    return;
-  }
-  if (Array.isArray(ids) && ids.length > 0) {
-    const idSet = new Set(ids);
-    const prevCount = ordersList.length;
-    ordersList = ordersList.filter((o) => !idSet.has(o.id) && !idSet.has(o.trackingCode));
-    saveOrdersToDb(ordersList);
-    logger.security('ADMIN', `حذف دسته‌ای سفارشات توسط مدیر (تعداد: ${prevCount - ordersList.length})`, {
+
+    if (result.clearAll) {
+      logger.security('ADMIN', `پاکسازی تمام سفارشات توسط مدیر (تعداد: ${result.prevCount})`, {
+        admin: req.user?.email,
+        prevCount: result.prevCount,
+      });
+      res.json({ success: true, message: 'تمام سفارش‌ها از پایگاه داده و حافظه حذف شدند.', deletedCount: result.prevCount });
+      return;
+    }
+
+    logger.security('ADMIN', `حذف دسته‌ای سفارشات توسط مدیر (تعداد: ${result.deletedCount})`, {
       admin: req.user?.email,
-      deletedCount: prevCount - ordersList.length,
+      deletedCount: result.deletedCount,
     });
     res.json({
       success: true,
       message: 'سفارش‌های انتخابی با موفقیت حذف شدند.',
-      deletedCount: prevCount - ordersList.length,
-      remainingCount: ordersList.length,
+      deletedCount: result.deletedCount,
+      remainingCount: result.remainingCount,
     });
-    return;
+  } catch (err: any) {
+    productsList = getAllProductsFromDb();
+    ordersList = getAllOrdersFromDb();
+    const code = err.statusCode || 500;
+    res.status(code).json({ error: err.message || 'خطای سرور در حذف سفارشات.' });
   }
-  res.status(400).json({ error: 'پارامترهای حذف مشخص نشده است.' });
 });
 
 // 7. Authentication Endpoints (Email/Password registration & login for all users)
@@ -2250,6 +2108,7 @@ app.post('/api/auth/google-sync', async (req: Request, res: Response) => {
       email: verifiedGoogleUser.email,
       displayName: verifiedGoogleUser.displayName,
       photoURL: verifiedGoogleUser.photoURL,
+      emailVerified: verifiedGoogleUser.emailVerified,
     });
 
     setAuthCookie(res, result.token);

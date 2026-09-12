@@ -50,16 +50,20 @@ const PRIMARY_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'amirbiashad@gmail.com')
 const PRIMARY_ADMIN_PHONE = process.env.ADMIN_PHONE || '09120000000';
 const PRIMARY_ADMIN_INIT_PASS = process.env.ADMIN_DEFAULT_PASSWORD || '';
 
-// Load Firebase Web API Key for cryptographically verifying Google/Firebase ID tokens
+// Load Firebase Web API Key and Project config for cryptographically verifying Google/Firebase ID tokens
 let FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || '';
+let FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
+let FIREBASE_MESSAGING_SENDER_ID = process.env.FIREBASE_MESSAGING_SENDER_ID || '';
+let FIREBASE_APP_ID = process.env.FIREBASE_APP_ID || '';
 try {
   const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
   if (fs.existsSync(cfgPath)) {
     const raw = fs.readFileSync(cfgPath, 'utf-8');
     const parsed = JSON.parse(raw);
-    if (parsed.apiKey) {
-      FIREBASE_WEB_API_KEY = parsed.apiKey;
-    }
+    if (parsed.apiKey) FIREBASE_WEB_API_KEY = parsed.apiKey;
+    if (parsed.projectId) FIREBASE_PROJECT_ID = parsed.projectId;
+    if (parsed.messagingSenderId) FIREBASE_MESSAGING_SENDER_ID = parsed.messagingSenderId;
+    if (parsed.appId) FIREBASE_APP_ID = parsed.appId;
   }
 } catch (err) {
   console.warn('[AUTH] Could not load firebase-applet-config.json:', err);
@@ -608,7 +612,7 @@ export interface VerifiedGoogleUser {
 
 /**
  * Cryptographically verify Firebase ID token or Google OAuth ID token on server.
- * Ensures the client cannot forge user identities or impersonate admins.
+ * Ensures the client cannot forge user identities, use tokens from other apps, or bypass email verification.
  */
 export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<VerifiedGoogleUser> {
   const token = (idToken || '').trim();
@@ -616,7 +620,7 @@ export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<Veri
     throw new Error('توکن امنیتی گوگل یا فایربیس ارائه نشده یا نامعتبر است.');
   }
 
-  // 1. Verify via Firebase Identity Toolkit (official verification with API Key)
+  // 1. Verify via Firebase Identity Toolkit (official verification with Project API Key)
   if (FIREBASE_WEB_API_KEY) {
     try {
       const lookupEndpoint = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_WEB_API_KEY}`;
@@ -634,21 +638,31 @@ export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<Veri
           if (!u.email) {
             throw new Error('حساب کاربری گوگل فاقد ایمیل معتبر می‌باشد.');
           }
+
+          // Strict Requirement 1: Enforce that email is verified by Google before allowing access
+          const isVerified = Boolean(u.emailVerified);
+          if (!isVerified) {
+            throw new Error('ایمیل حساب گوگل تأیید نشده است (email_verified=false). اتصال به حساب یا ورود نیازمند تأیید مالکیت ایمیل است.');
+          }
+
           return {
             uid: u.localId,
             email: String(u.email).toLowerCase().trim(),
             displayName: u.displayName || '',
             photoURL: u.photoUrl || '',
-            emailVerified: Boolean(u.emailVerified),
+            emailVerified: true,
           };
         }
       }
     } catch (err: any) {
+      if (err.message && err.message.includes('تأیید نشده است')) {
+        throw err;
+      }
       console.warn('[AUTH] Firebase accounts:lookup verification notice:', err?.message || err);
     }
   }
 
-  // 2. Fallback: Google OAuth2 tokeninfo endpoint
+  // 2. Fallback: Google OAuth2 tokeninfo endpoint with strict Audience (aud) validation
   try {
     const googleTokenInfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`;
     const gResp = await fetch(googleTokenInfoUrl, {
@@ -658,16 +672,42 @@ export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<Veri
     if (gResp.ok) {
       const gData = await gResp.json();
       if (gData.email) {
+        // Strict Requirement 1: Match aud against this specific application/project IDs
+        const tokenAud = String(gData.aud || '').trim();
+        const validAudiences = [
+          FIREBASE_PROJECT_ID,
+          FIREBASE_APP_ID,
+          process.env.GOOGLE_CLIENT_ID,
+        ].filter(Boolean) as string[];
+
+        const isAudValid =
+          validAudiences.some((aud) => tokenAud === aud) ||
+          (FIREBASE_MESSAGING_SENDER_ID && tokenAud.includes(FIREBASE_MESSAGING_SENDER_ID)) ||
+          (FIREBASE_PROJECT_ID && tokenAud.includes(FIREBASE_PROJECT_ID));
+
+        if (!isAudValid) {
+          throw new Error('مخاطب توکن گوگل (aud) با شناسه این برنامه مطابقت ندارد و توکن برای برنامه دیگری صادر شده است.');
+        }
+
+        // Strict Requirement 1: Require email_verified === true
+        const isEmailVerified = gData.email_verified === 'true' || gData.email_verified === true;
+        if (!isEmailVerified) {
+          throw new Error('ایمیل حساب گوگل تأیید نشده است (email_verified=false). ورود یا اتصال به حساب تنها با ایمیل‌های تأییدشده ممکن است.');
+        }
+
         return {
           uid: gData.sub || `g_${Date.now()}`,
           email: String(gData.email).toLowerCase().trim(),
           displayName: gData.name || '',
           photoURL: gData.picture || '',
-          emailVerified: gData.email_verified === 'true' || gData.email_verified === true,
+          emailVerified: true,
         };
       }
     }
   } catch (err: any) {
+    if (err.message && (err.message.includes('مطابقت ندارد') || err.message.includes('تأیید نشده است'))) {
+      throw err;
+    }
     console.warn('[AUTH] Google oauth2:tokeninfo check notice:', err?.message || err);
   }
 
@@ -676,13 +716,19 @@ export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<Veri
 
 /**
  * Sync Google Authenticated User with Server Session
+ * Strictly enforces email verification before linking to or creating any account.
  */
 export function syncGoogleUser(googleUser: {
   uid: string;
   email: string;
   displayName?: string;
   photoURL?: string;
+  emailVerified: boolean;
 }): { user: UserProfile; token: string } {
+  if (!googleUser.emailVerified) {
+    throw new Error('تأیید مالکیت ایمیل توسط گوگل الزامی است. ایمیل این حساب تأیید نشده است.');
+  }
+
   const cleanEmail = googleUser.email.toLowerCase().trim();
   if (!cleanEmail || !cleanEmail.includes('@')) {
     throw new Error('فرمت ایمیل گوگل نامعتبر است.');
