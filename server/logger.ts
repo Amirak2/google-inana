@@ -1,14 +1,14 @@
-import fs from 'fs';
-import path from 'path';
+import type { Store } from './storage';
+
 import { Request, Response, NextFunction } from 'express';
 import { SystemLogEntry, SystemLogLevel, SystemLogModule, SystemLogStats } from '../src/types';
 import { formatJalaliDateTime } from '../src/utils/persianFormatter';
 
-const LOGS_DB_FILE = path.join(process.cwd(), 'system_logs.json');
+export function createLogger(store: Store) {
 const MAX_MEMORY_LOGS = 2000;
 
 // Format Persian timestamp with seconds for high-precision audit logs
-export function getPersianTimestamp(date: Date = new Date()): string {
+function getPersianTimestamp(date: Date = new Date()): string {
   try {
     const formatter = new Intl.DateTimeFormat('fa-IR', {
       year: 'numeric',
@@ -70,58 +70,11 @@ const INITIAL_SEED_LOGS: SystemLogEntry[] = [
   },
 ];
 
-let logsMemory: SystemLogEntry[] = loadLogsFromDisk();
-let isSavingLogs = false;
-let pendingSave = false;
-
-function loadLogsFromDisk(): SystemLogEntry[] {
-  try {
-    if (fs.existsSync(LOGS_DB_FILE)) {
-      const raw = fs.readFileSync(LOGS_DB_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    }
-  } catch (err) {
-    console.error('[LOGGER] Error loading logs from disk:', err);
-  }
-  // Initialize with seed
-  saveLogsToDiskAsync(INITIAL_SEED_LOGS).catch(() => {});
-  return [...INITIAL_SEED_LOGS];
-}
-
-async function saveLogsToDiskAsync(logs: SystemLogEntry[]): Promise<void> {
-  if (isSavingLogs) {
-    pendingSave = true;
-    return;
-  }
-  isSavingLogs = true;
-  try {
-    const tmpFile = `${LOGS_DB_FILE}.tmp`;
-    const jsonStr = JSON.stringify(logs.slice(0, MAX_MEMORY_LOGS), null, 2);
-    await fs.promises.writeFile(tmpFile, jsonStr, 'utf-8');
-    await fs.promises.rename(tmpFile, LOGS_DB_FILE);
-  } catch (err) {
-    console.error('[LOGGER] Error async writing system_logs.json:', err);
-  } finally {
-    isSavingLogs = false;
-    if (pendingSave) {
-      pendingSave = false;
-      saveLogsToDiskAsync(logsMemory).catch(() => {});
-    }
-  }
-}
-
-let saveDebounceTimer: NodeJS.Timeout | null = null;
+let logsMemory: SystemLogEntry[] = [...store.map<SystemLogEntry>('logs').values()];
 function scheduleSaveLogs(): void {
-  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(() => {
-    saveLogsToDiskAsync(logsMemory).catch(() => {});
-  }, 1000);
+  store.replaceMap('logs', new Map(logsMemory.slice(0, MAX_MEMORY_LOGS).map(log => [log.id, log])));
 }
-
-export class LoggerService {
+class LoggerService {
   public addLog(entry: {
     level: SystemLogLevel;
     module: SystemLogModule;
@@ -289,7 +242,7 @@ export class LoggerService {
     } else {
       logsMemory = logsMemory.slice(0, retainCount);
     }
-    saveLogsToDiskAsync(logsMemory).catch(() => {});
+    scheduleSaveLogs();
   }
 
   public exportCsv(): string {
@@ -310,10 +263,10 @@ export class LoggerService {
   }
 }
 
-export const logger = new LoggerService();
+const logger = new LoggerService();
 
 // Express Request Logging Middleware
-export function requestLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
+function requestLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
   // Only log API routes and ignore static assets, vite, HMR, etc.
   if (!req.path.startsWith('/api')) {
     return next();
@@ -353,7 +306,7 @@ export function requestLoggerMiddleware(req: Request, res: Response, next: NextF
     }
 
     // Skip verbose logs for admin polling of logs themselves
-    if (req.path.startsWith('/api/admin/logs')) {
+    if (req.path.startsWith('/api/admin/logs') || (req.method === 'GET' && statusCode < 400)) {
       return;
     }
 
@@ -373,4 +326,7 @@ export function requestLoggerMiddleware(req: Request, res: Response, next: NextF
   });
 
   next();
+}
+
+return { logger, requestLoggerMiddleware };
 }

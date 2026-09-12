@@ -1,6 +1,7 @@
 import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
+import type { Store } from './storage';
+import firebaseConfig from '../firebase-applet-config.json';
+
 import { UserProfile, UserRole } from '../src/types';
 
 export interface StoredUser {
@@ -24,66 +25,37 @@ interface OtpRecord {
   createdAt: number;
 }
 
-const USERS_FILE = path.join(process.cwd(), 'users_db.json');
-
-// Persistent session secret saved in .session_secret or process.env.SESSION_SECRET
-function getOrCreateSessionSecret(): string {
-  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.trim().length >= 16) {
-    return process.env.SESSION_SECRET.trim();
-  }
-  const secretFile = path.join(process.cwd(), '.session_secret');
-  try {
-    if (fs.existsSync(secretFile)) {
-      const existing = fs.readFileSync(secretFile, 'utf-8').trim();
-      if (existing.length >= 32) return existing;
-    }
-    const newSecret = crypto.randomBytes(32).toString('hex');
-    fs.writeFileSync(secretFile, newSecret, { encoding: 'utf-8', mode: 0o600 });
-    return newSecret;
-  } catch {
-    return 'inana_gold_secure_fallback_session_key_' + (process.pid || '1000');
-  }
-}
-
-const SECRET_KEY = getOrCreateSessionSecret();
-const PRIMARY_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'amirbiashad@gmail.com').toLowerCase().trim();
-const PRIMARY_ADMIN_PHONE = process.env.ADMIN_PHONE || '09120000000';
-const PRIMARY_ADMIN_INIT_PASS = process.env.ADMIN_DEFAULT_PASSWORD || '';
+export function createAuthStore(store: Store, env: Record<string, any>) {
+const SECRET_KEY = env.SESSION_SECRET;
+if (!SECRET_KEY || SECRET_KEY.length < 32) throw new Error('SESSION_SECRET is required');
+const PRIMARY_ADMIN_EMAIL = (env.ADMIN_EMAIL || 'amirbiashad@gmail.com').toLowerCase().trim();
+const PRIMARY_ADMIN_PHONE = env.ADMIN_PHONE || '09120000000';
+const PRIMARY_ADMIN_INIT_PASS = env.ADMIN_DEFAULT_PASSWORD || '';
 
 // Load Firebase Web API Key and Project config for cryptographically verifying Google/Firebase ID tokens
-let FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || '';
-let FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || '';
-let FIREBASE_MESSAGING_SENDER_ID = process.env.FIREBASE_MESSAGING_SENDER_ID || '';
-let FIREBASE_APP_ID = process.env.FIREBASE_APP_ID || '';
-try {
-  const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(cfgPath)) {
-    const raw = fs.readFileSync(cfgPath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (parsed.apiKey) FIREBASE_WEB_API_KEY = parsed.apiKey;
-    if (parsed.projectId) FIREBASE_PROJECT_ID = parsed.projectId;
-    if (parsed.messagingSenderId) FIREBASE_MESSAGING_SENDER_ID = parsed.messagingSenderId;
-    if (parsed.appId) FIREBASE_APP_ID = parsed.appId;
-  }
-} catch (err) {
-  console.warn('[AUTH] Could not load firebase-applet-config.json:', err);
-}
-
+let FIREBASE_WEB_API_KEY = env.FIREBASE_WEB_API_KEY || '';
+let FIREBASE_PROJECT_ID = env.FIREBASE_PROJECT_ID || '';
+let FIREBASE_MESSAGING_SENDER_ID = env.FIREBASE_MESSAGING_SENDER_ID || '';
+let FIREBASE_APP_ID = env.FIREBASE_APP_ID || '';
+FIREBASE_WEB_API_KEY ||= firebaseConfig.apiKey;
+FIREBASE_PROJECT_ID ||= firebaseConfig.projectId;
+FIREBASE_MESSAGING_SENDER_ID ||= firebaseConfig.messagingSenderId;
+FIREBASE_APP_ID ||= firebaseConfig.appId;
 // SMS OTP Provider Config
-const SMS_OTP_URL = process.env.SMS_OTP_URL || 'https://s.api.ir/api/sw1/SmsOTP';
-const SMS_OTP_API_KEY = process.env.SMS_OTP_API_KEY || '';
+const SMS_OTP_URL = env.SMS_OTP_URL || 'https://s.api.ir/api/sw1/SmsOTP';
+const SMS_OTP_API_KEY = env.SMS_OTP_API_KEY || '';
 
 // In-memory cache
-let usersCache: Map<string, StoredUser> = new Map();
-const otpCache: Map<string, OtpRecord> = new Map();
-const revokedTokensSet: Set<string> = new Set();
-const phoneChangeOtpCache: Map<string, { newMobile: string; code: string; expiresAt: number; attempts: number }> = new Map();
+let usersCache: Map<string, StoredUser> = store.map('users');
+const otpCache: Map<string, OtpRecord> = store.map('otp');
+const revokedTokensSet = store.tokenSet('revoked');
+const phoneChangeOtpCache: Map<string, { newMobile: string; code: string; expiresAt: number; attempts: number }> = store.map('phoneOtp');
 
 // PBKDF2 Iteration constants: 100k standard, 10k backward compatibility
 const CURRENT_ITERATIONS = 100000;
 const LEGACY_ITERATIONS = 10000;
 
-export function hashPassword(password: string, salt: string, iterations = CURRENT_ITERATIONS): string {
+function hashPassword(password: string, salt: string, iterations = CURRENT_ITERATIONS): string {
   return crypto.pbkdf2Sync(password, salt, iterations, 64, 'sha512').toString('hex');
 }
 
@@ -92,9 +64,9 @@ interface RateLimitRecord {
   count: number;
   resetAt: number;
 }
-const rateLimits = new Map<string, RateLimitRecord>();
+const rateLimits = store.map<RateLimitRecord>('rateLimits');
 
-export function checkRateLimit(
+function checkRateLimit(
   key: string,
   maxAttempts: number,
   windowMs: number
@@ -113,7 +85,7 @@ export function checkRateLimit(
   return { allowed: true, remaining: maxAttempts - record.count, retryAfterSeconds: 0 };
 }
 
-export function normalizeIranianMobile(phone: string): string {
+function normalizeIranianMobile(phone: string): string {
   if (!phone) return '';
   // Convert Persian/Arabic digits to English
   let clean = phone
@@ -132,25 +104,12 @@ export function normalizeIranianMobile(phone: string): string {
   return clean;
 }
 
-export function isValidIranianMobile(phone: string): boolean {
+function isValidIranianMobile(phone: string): boolean {
   const norm = normalizeIranianMobile(phone);
   return /^09\d{9}$/.test(norm);
 }
 
 function loadUsers(): void {
-  try {
-    if (fs.existsSync(USERS_FILE)) {
-      const data = fs.readFileSync(USERS_FILE, 'utf-8');
-      const list: StoredUser[] = JSON.parse(data);
-      usersCache.clear();
-      for (const u of list) {
-        usersCache.set(u.email.toLowerCase().trim(), u);
-      }
-    }
-  } catch (err) {
-    console.error('[AUTH STORE] Error loading users_db.json:', err);
-  }
-
   // Ensure default admin user template exists if not already registered
   const adminEmail = PRIMARY_ADMIN_EMAIL.toLowerCase().trim();
   if (!usersCache.has(adminEmail)) {
@@ -172,39 +131,12 @@ function loadUsers(): void {
   }
 }
 
-let isSavingUsers = false;
-let needsReSaveUsers = false;
-
-async function saveUsersAsync(): Promise<void> {
-  if (isSavingUsers) {
-    needsReSaveUsers = true;
-    return;
-  }
-  isSavingUsers = true;
-  try {
-    const list = Array.from(usersCache.values());
-    const tmpFile = `${USERS_FILE}.tmp`;
-    await fs.promises.writeFile(tmpFile, JSON.stringify(list, null, 2), 'utf-8');
-    await fs.promises.rename(tmpFile, USERS_FILE);
-  } catch (err) {
-    console.error('[AUTH STORE] Error saving users_db.json:', err);
-  } finally {
-    isSavingUsers = false;
-    if (needsReSaveUsers) {
-      needsReSaveUsers = false;
-      saveUsersAsync();
-    }
-  }
-}
-
-function saveUsers(): void {
-  saveUsersAsync().catch((err) => console.error('[AUTH STORE] Background saveUsers error:', err));
-}
-
+// Mutations are committed durably before the HTTP response is released.
+function saveUsers(): void {}
 // Initialize on boot
 loadUsers();
 
-export function createSessionToken(user: StoredUser): string {
+function createSessionToken(user: StoredUser): string {
   const payload = Buffer.from(
     JSON.stringify({
       uid: user.uid,
@@ -219,12 +151,12 @@ export function createSessionToken(user: StoredUser): string {
   return `${payload}.${signature}`;
 }
 
-export function revokeSessionToken(token: string): void {
+function revokeSessionToken(token: string): void {
   if (!token || typeof token !== 'string') return;
   revokedTokensSet.add(token.trim());
 }
 
-export function verifySessionToken(token: string): UserProfile | null {
+function verifySessionToken(token: string): UserProfile | null {
   try {
     if (!token || typeof token !== 'string') return null;
     const cleanToken = token.trim();
@@ -256,7 +188,7 @@ export function verifySessionToken(token: string): UserProfile | null {
   }
 }
 
-export function sanitizeUser(u: StoredUser): UserProfile {
+function sanitizeUser(u: StoredUser): UserProfile {
   // Only designated master admin UID or explicit stored role in database is admin.
   // Never elevate role to admin based solely on phone number!
   const isAdmin = u.uid === 'ina_admin_master' || u.role === 'admin';
@@ -272,7 +204,7 @@ export function sanitizeUser(u: StoredUser): UserProfile {
   };
 }
 
-export function findUserByMobile(mobile: string): StoredUser | undefined {
+function findUserByMobile(mobile: string): StoredUser | undefined {
   const norm = normalizeIranianMobile(mobile);
   if (!norm) return undefined;
   for (const u of usersCache.values()) {
@@ -283,7 +215,7 @@ export function findUserByMobile(mobile: string): StoredUser | undefined {
   return undefined;
 }
 
-export function registerUser(
+function registerUser(
   email: string,
   pass: string,
   displayName: string,
@@ -343,7 +275,7 @@ export function registerUser(
   return { user: sanitizeUser(newUser), token };
 }
 
-export function loginUser(
+function loginUser(
   email: string,
   pass: string
 ): { user: UserProfile; token: string } {
@@ -385,7 +317,7 @@ export function loginUser(
   return { user: sanitizeUser(user), token };
 }
 
-export function updateUser(
+function updateUser(
   uid: string,
   updates: Partial<UserProfile>
 ): UserProfile {
@@ -419,7 +351,7 @@ export function updateUser(
 /**
  * Send SMS OTP via s.api.ir provider (with dev fallback and rate-limiting)
  */
-export async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
+async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
   expiresInSeconds: number;
   isRegistered: boolean;
   isDevelopmentSimulation?: boolean;
@@ -492,7 +424,7 @@ export async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise
     }
   } else {
     // Check if running in production environment
-    if (process.env.NODE_ENV === 'production') {
+    if (env.NODE_ENV === 'production') {
       console.error('[SMS OTP] Error: SMS_OTP_API_KEY environment variable is not configured in production.');
       throw new Error('سرویس پیامک در سرور پیکربندی نشده است. لطفاً متغیر محیطی SMS_OTP_API_KEY را تنظیم فرمایید.');
     }
@@ -521,7 +453,7 @@ export async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise
 /**
  * Verify SMS OTP Code and Login or Register
  */
-export function verifySmsOtpAndAuthenticate(
+function verifySmsOtpAndAuthenticate(
   mobile: string,
   code: string,
   displayName?: string
@@ -602,7 +534,7 @@ export function verifySmsOtpAndAuthenticate(
   };
 }
 
-export interface VerifiedGoogleUser {
+interface VerifiedGoogleUser {
   uid: string;
   email: string;
   displayName?: string;
@@ -614,7 +546,7 @@ export interface VerifiedGoogleUser {
  * Cryptographically verify Firebase ID token or Google OAuth ID token on server.
  * Ensures the client cannot forge user identities, use tokens from other apps, or bypass email verification.
  */
-export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<VerifiedGoogleUser> {
+async function verifyGoogleOrFirebaseToken(idToken: string): Promise<VerifiedGoogleUser> {
   const token = (idToken || '').trim();
   if (!token || token.length < 20) {
     throw new Error('توکن امنیتی گوگل یا فایربیس ارائه نشده یا نامعتبر است.');
@@ -678,7 +610,7 @@ export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<Veri
         const validAudiences = [
           FIREBASE_PROJECT_ID,
           FIREBASE_APP_ID,
-          process.env.GOOGLE_CLIENT_ID,
+          env.GOOGLE_CLIENT_ID,
         ].filter(Boolean) as string[];
 
         const isAudValid = validAudiences.some((aud) => tokenAud === aud);
@@ -716,7 +648,7 @@ export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<Veri
  * Sync Google Authenticated User with Server Session
  * Strictly enforces email verification before linking to or creating any account.
  */
-export function syncGoogleUser(googleUser: {
+function syncGoogleUser(googleUser: {
   uid: string;
   email: string;
   displayName?: string;
@@ -769,7 +701,7 @@ export function syncGoogleUser(googleUser: {
 /**
  * Request OTP to change phone number
  */
-export async function requestPhoneChangeOtp(
+async function requestPhoneChangeOtp(
   userId: string,
   newMobile: string
 ): Promise<{ expiresInSeconds: number; isDevelopmentSimulation?: boolean }> {
@@ -815,7 +747,7 @@ export async function requestPhoneChangeOtp(
 /**
  * Verify OTP to complete phone number change
  */
-export function verifyPhoneChangeOtp(userId: string, code: string): UserProfile {
+function verifyPhoneChangeOtp(userId: string, code: string): UserProfile {
   let targetUser: StoredUser | undefined;
   for (const u of usersCache.values()) {
     if (u.uid === userId) {
@@ -854,3 +786,6 @@ export function verifyPhoneChangeOtp(userId: string, code: string): UserProfile 
   return sanitizeUser(targetUser);
 }
 
+
+return { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, registerUser, loginUser, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, verifyGoogleOrFirebaseToken, syncGoogleUser, requestPhoneChangeOtp, verifyPhoneChangeOtp };
+}

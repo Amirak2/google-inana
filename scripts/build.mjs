@@ -1,0 +1,10 @@
+import { build } from 'esbuild-wasm';
+import { build as viteBuild } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import { mkdir, copyFile, cp } from 'node:fs/promises';
+await viteBuild({ configFile: false, plugins: [react(), tailwindcss()], build: { outDir: 'dist/client' } });
+await build({ entryPoints: ['worker.ts'], bundle: true, platform: 'neutral', format: 'esm', target: 'es2022', outfile: 'dist/server/index.js', external: ['cloudflare:workers', 'node:*'], alias: { crypto: 'node:crypto' }, minify: true });
+await mkdir('dist/.openai', { recursive: true });
+await copyFile('.openai/hosting.json', 'dist/.openai/hosting.json');
+await cp('drizzle', 'dist/.openai/drizzle', { recursive: true });

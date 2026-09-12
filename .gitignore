@@ -9,3 +9,7 @@ coverage/
 *_db.json
 *.tmp
 .session_secret
+
+.wrangler/
+.dev.vars
+.sites-runtime/

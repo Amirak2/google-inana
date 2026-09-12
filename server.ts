@@ -1,26 +1,15 @@
-import express, { Request, Response } from 'express';
-import path from 'path';
-import fs from 'fs';
+import express from './server/router';
+import type { Request, Response, NextFunction } from 'express';
+import type { Store } from './server/storage';
+
+
 import crypto from 'crypto';
-import { createServer as createViteServer } from 'vite';
+
 import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS } from './src/data/seedData';
 import { GoldHistoryPoint, GoldPriceData, Order, OtherMarketsData, PricingSettings, Product, SystemLogModule } from './src/types';
 import { calculateProductPrice, DEFAULT_SETTINGS } from './src/utils/pricingEngine';
 import { formatJalaliDateTime } from './src/utils/persianFormatter';
-import {
-  registerUser,
-  loginUser,
-  updateUser,
-  verifySessionToken,
-  revokeSessionToken,
-  sendSmsOtpCode,
-  verifySmsOtpAndAuthenticate,
-  syncGoogleUser,
-  verifyGoogleOrFirebaseToken,
-  requestPhoneChangeOtp,
-  verifyPhoneChangeOtp,
-  checkRateLimit,
-} from './server/authStore';
+import { createAuthStore } from './server/authStore';
 import {
   validateString,
   validatePositiveNumber,
@@ -30,10 +19,13 @@ import {
   validateEmail,
   validatePassword,
 } from './server/validation';
-import { logger, requestLoggerMiddleware } from './server/logger';
-import {
-  db,
-  runDbTransaction,
+import { createLogger } from './server/logger';
+import { createDb } from './server/db';
+
+export function createApp(store: Store, env: Record<string, any>) {
+const { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, registerUser, loginUser, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, verifyGoogleOrFirebaseToken, syncGoogleUser, requestPhoneChangeOtp, verifyPhoneChangeOtp } = createAuthStore(store, env);
+const { logger, requestLoggerMiddleware } = createLogger(store);
+const { runDbTransaction,
   getAllProductsFromDb,
   getProductByIdFromDb,
   saveProductToDb,
@@ -46,9 +38,7 @@ import {
   deleteOrdersBulkFromDb,
   getIdempotentOrderFromDb,
   saveIdempotencyKeyToDb,
-  seedDatabaseIfEmpty,
-} from './server/db';
-
+  seedDatabaseIfEmpty, } = createDb(store);
 const app = express();
 const PORT = 3000;
 
@@ -57,7 +47,7 @@ app.use(express.urlencoded({ extended: true, limit: '4mb' }));
 app.use(requestLoggerMiddleware);
 
 // --- Auth Utilities & Middlewares ---
-export interface AuthenticatedRequest extends Request {
+interface AuthenticatedRequest extends Request {
   user?: import('./src/types').UserProfile;
 }
 
@@ -127,19 +117,19 @@ function extractAndVerifyUser(req: Request): import('./src/types').UserProfile |
 }
 
 function setAuthCookie(res: Response, token: string): void {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = env.NODE_ENV === 'production';
   const maxAgeSeconds = 30 * 24 * 60 * 60; // 30 days
   const cookieVal = `token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${isProd ? '; Secure' : ''}`;
   res.setHeader('Set-Cookie', cookieVal);
 }
 
 function clearAuthCookie(res: Response): void {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = env.NODE_ENV === 'production';
   const cookieVal = `token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isProd ? '; Secure' : ''}`;
   res.setHeader('Set-Cookie', cookieVal);
 }
 
-const authenticateUser = (req: AuthenticatedRequest, _res: Response, next: express.NextFunction) => {
+const authenticateUser = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
   const verified = extractAndVerifyUser(req);
   if (verified) {
     req.user = verified;
@@ -147,7 +137,7 @@ const authenticateUser = (req: AuthenticatedRequest, _res: Response, next: expre
   next();
 };
 
-const requireAuth = (req: AuthenticatedRequest, res: Response, next: express.NextFunction) => {
+const requireAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const verified = extractAndVerifyUser(req);
   if (!verified) {
     res.status(401).json({ error: 'لطفاً برای دسترسی به این بخش وارد حساب کاربری خود شوید.' });
@@ -157,7 +147,7 @@ const requireAuth = (req: AuthenticatedRequest, res: Response, next: express.Nex
   next();
 };
 
-const requireAdminAuth = (req: AuthenticatedRequest, res: Response, next: express.NextFunction) => {
+const requireAdminAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const verified = extractAndVerifyUser(req);
   if (!verified) {
     res.status(401).json({ error: 'دسترسی غیرمجاز: لطفاً وارد حساب مدیریت سیستم شوید.' });
@@ -195,9 +185,6 @@ let currentGoldState: GoldPriceData = {
   },
 };
 
-const SETTINGS_DB_FILE = path.join(process.cwd(), 'settings_db.json');
-const PRODUCTS_DB_FILE = path.join(process.cwd(), 'products_db.json');
-const ORDERS_DB_FILE = path.join(process.cwd(), 'orders_db.json');
 
 const DEFAULT_SEED_ORDERS: Order[] = [
   {
@@ -295,86 +282,13 @@ const DEFAULT_SEED_ORDERS: Order[] = [
 ];
 
 // --- Settings Persistence ---
-function loadSettingsFromDb(): PricingSettings {
-  try {
-    if (fs.existsSync(SETTINGS_DB_FILE)) {
-      const data = fs.readFileSync(SETTINGS_DB_FILE, 'utf-8');
-      const saved = JSON.parse(data);
-      if (saved && typeof saved === 'object') {
-        return { ...DEFAULT_SETTINGS, ...saved };
-      }
-    }
-  } catch (err) {
-    console.error('[SETTINGS DB] Error reading settings_db.json:', err);
-  }
-  saveSettingsToDb(DEFAULT_SETTINGS);
-  return { ...DEFAULT_SETTINGS };
-}
-
-let isSavingSettings = false;
-let needsReSaveSettings = false;
-
-async function saveSettingsToDbAsync(settings: PricingSettings): Promise<void> {
-  if (isSavingSettings) {
-    needsReSaveSettings = true;
-    return;
-  }
-  isSavingSettings = true;
-  try {
-    const tmpFile = `${SETTINGS_DB_FILE}.tmp`;
-    const jsonStr = JSON.stringify(settings, null, 2);
-    await fs.promises.writeFile(tmpFile, jsonStr, 'utf-8');
-    await fs.promises.rename(tmpFile, SETTINGS_DB_FILE);
-  } catch (err) {
-    console.error('[SETTINGS DB] Error async writing settings_db.json:', err);
-  } finally {
-    isSavingSettings = false;
-    if (needsReSaveSettings) {
-      needsReSaveSettings = false;
-      saveSettingsToDbAsync(pricingSettings).catch(() => {});
-    }
-  }
-}
-
-function saveSettingsToDb(settings: PricingSettings): void {
-  saveSettingsToDbAsync(settings).catch((err) =>
-    console.error('[SETTINGS DB] Background saveSettingsToDb error:', err)
-  );
-}
-
-// --- SQLite Database Backed Storage & Mutex Transactions ---
-// Seed SQLite database on boot if tables are empty
-seedDatabaseIfEmpty(INITIAL_PRODUCTS, DEFAULT_SEED_ORDERS);
-
-// Synchronized state loaded from SQLite database
-let pricingSettings: PricingSettings = loadSettingsFromDb();
+function saveSettingsToDb(settings: PricingSettings): void { store.set('settings', 'pricing', settings); }
+seedDatabaseIfEmpty(INITIAL_PRODUCTS, []);
+let pricingSettings: PricingSettings = store.get('settings', 'pricing') || { ...DEFAULT_SETTINGS };
 let productsList: Product[] = getAllProductsFromDb();
 let ordersList: Order[] = getAllOrdersFromDb();
-
-// Save products both to SQLite DB and keep JSON file synced for backward compatibility
-function saveProductsToDb(products: Product[]): void {
-  try {
-    saveAllProductsToDb(products);
-    fs.promises.writeFile(PRODUCTS_DB_FILE, JSON.stringify(products, null, 2), 'utf-8').catch(() => {});
-  } catch (err) {
-    console.error('[PRODUCTS DB] Error writing products:', err);
-  }
-}
-
-// Save orders both to SQLite DB and keep JSON file synced for backward compatibility
-function saveOrdersToDb(orders: Order[]): void {
-  try {
-    for (const o of orders) {
-      saveOrderToDb(o);
-    }
-    fs.promises.writeFile(ORDERS_DB_FILE, JSON.stringify(orders, null, 2), 'utf-8').catch(() => {});
-  } catch (err) {
-    console.error('[ORDERS DB] Error writing orders:', err);
-  }
-}
-
-export const runInDbTransaction = runDbTransaction;
-
+function saveProductsToDb(products: Product[]): void { saveAllProductsToDb(products); }
+function saveOrdersToDb(orders: Order[]): void { store.replaceMap('orders', new Map(orders.map(o => [o.id, o]))); }
 // -------------------------------------------------------------
 // Real-time Stock Lock & Concurrency Reservation Engine
 // Prevents overselling & race conditions for unique jewelry pieces
@@ -385,7 +299,7 @@ interface StockReservation {
   userId: string;
   expiresAt: number;
 }
-const stockReservations: Map<string, StockReservation[]> = new Map();
+const stockReservations: Map<string, StockReservation[]> = store.map('reservations');
 
 function cleanExpiredReservations(): void {
   const now = Date.now();
@@ -431,8 +345,9 @@ function parsePercent(val: any): number {
 }
 
 // In-memory cache for TGJU indicator summary table (historical daily records)
-let cachedTgjuData: any[][] = [];
-let lastFetchTimestamp = 0;
+currentGoldState = store.get('market', 'gold') || currentGoldState;
+let cachedTgjuData: any[][] = store.get('market', 'history') || [];
+let lastFetchTimestamp = store.get<number>('market', 'fetchedAt') || 0;
 const CACHE_LIFETIME_MS = 60 * 60 * 1000; // 1 hour cache (scheduled updates every 1 hour)
 
 async function ensureTgjuHistory(): Promise<any[][]> {
@@ -516,7 +431,7 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
   }
 
   // 1. Primary Source: Navasan Tech API (item: 18ayar) if configured
-  const navasanKey = process.env.GOLD_API_KEY ? process.env.GOLD_API_KEY.trim() : '';
+  const navasanKey = env.GOLD_API_KEY ? env.GOLD_API_KEY.trim() : '';
   if (navasanKey) {
     const navasanUrl = `http://api.navasan.tech/latest/?api_key=${encodeURIComponent(navasanKey)}`;
 
@@ -1345,7 +1260,7 @@ interface ServerPriceQuote {
   userId?: string;
 }
 
-const quotesMap: Map<string, ServerPriceQuote> = new Map();
+const quotesMap: Map<string, ServerPriceQuote> = store.map('quotes');
 
 app.get('/api/orders', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   // If user is admin, allow viewing all orders or querying specific customer
@@ -1901,15 +1816,15 @@ async function handleOrderStatusUpdate(
 }
 
 app.patch('/api/admin/orders/:id', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
-  handleOrderStatusUpdate(req.params.id, req.body, req.user, res);
+  return handleOrderStatusUpdate(req.params.id, req.body, req.user, res);
 });
 
 app.patch('/api/orders/:id/status', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
-  handleOrderStatusUpdate(req.params.id, req.body, req.user, res);
+  return handleOrderStatusUpdate(req.params.id, req.body, req.user, res);
 });
 
 app.put('/api/orders/:id/status', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
-  handleOrderStatusUpdate(req.params.id, req.body, req.user, res);
+  return handleOrderStatusUpdate(req.params.id, req.body, req.user, res);
 });
 
 async function handleDeleteOrder(orderId: string, adminUser: any, res: Response): Promise<void> {
@@ -1961,11 +1876,11 @@ async function handleDeleteOrder(orderId: string, adminUser: any, res: Response)
 }
 
 app.delete('/api/orders/:id', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
-  handleDeleteOrder(req.params.id, req.user, res);
+  return handleDeleteOrder(req.params.id, req.user, res);
 });
 
 app.delete('/api/admin/orders/:id', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
-  handleDeleteOrder(req.params.id, req.user, res);
+  return handleDeleteOrder(req.params.id, req.user, res);
 });
 
 // Bulk delete or clear orders from database and memory
@@ -2424,43 +2339,16 @@ app.get('/api/admin/logs/export', requireAdminAuth, (req: AuthenticatedRequest, 
 });
 
 // ----------------------------------------------------
-// VITE / STATIC INTEGRATION
-// ----------------------------------------------------
-async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+// Persist market cache with the same atomic request commit as the business data.
+return { async fetch(request: globalThis.Request) {
+  const pathname = new URL(request.url).pathname;
+  if (request.method === 'POST' && (pathname === '/api/orders/quote' || pathname === '/api/orders')) {
+    await getOrUpdateGoldPrice();
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[INANA GOLD] Server listening on http://0.0.0.0:${PORT}`);
-
-    // Initial fetch on server start
-    getOrUpdateGoldPrice(true).catch((err) => {
-      console.warn('[INANA GOLD] Initial gold price fetch error:', err);
-    });
-
-    // Background scheduled fetch: query official live gold price every 1 hour (3600000 ms)
-    const ONE_HOUR_MS = 60 * 60 * 1000;
-    setInterval(async () => {
-      console.log(`[INANA GOLD] Scheduled 1-hour price query triggered at: ${new Date().toISOString()}`);
-      try {
-        await getOrUpdateGoldPrice(true);
-        console.log(`[INANA GOLD] 1-hour price update completed: ${currentGoldState.pricePerGram} Toman`);
-      } catch (err) {
-        console.error('[INANA GOLD] Scheduled hourly price query failed:', err);
-      }
-    }, ONE_HOUR_MS);
-  });
+  const response = await app.fetch(request);
+  store.set('market', 'gold', currentGoldState);
+  store.set('market', 'fetchedAt', lastFetchTimestamp);
+  store.set('market', 'history', cachedTgjuData);
+  return response;
+}, authenticate: verifySessionToken };
 }
-
-startServer();
