@@ -1249,6 +1249,17 @@ app.delete('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedReque
   res.json({ success: true, deleted: deleted[0] });
 });
 
+// Non-admin customers cannot modify, create or delete products (Protected)
+app.post('/api/products', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+  res.status(403).json({ error: 'دسترسی غیرمجاز: ایجاد محصول صرفاً مختص مدیر است.' });
+});
+app.put('/api/products/:id', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+  res.status(403).json({ error: 'دسترسی غیرمجاز: ویرایش محصول صرفاً مختص مدیر است.' });
+});
+app.delete('/api/products/:id', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+  res.status(403).json({ error: 'دسترسی غیرمجاز: حذف محصول صرفاً مختص مدیر است.' });
+});
+
 // 4. Collections & Categories
 app.get('/api/collections', (_req: Request, res: Response) => {
   res.json(INITIAL_COLLECTIONS);
@@ -1353,6 +1364,21 @@ app.get('/api/orders', requireAuth, (req: AuthenticatedRequest, res: Response) =
   const currentUid = req.user?.uid;
   const customerOrders = ordersList.filter((o) => currentUid && o.userId === currentUid);
   res.json(customerOrders);
+});
+
+// Single order detail view: Owner or Admin only (Prevents IDOR and unauthorized receipt/PII leakage)
+app.get('/api/orders/:id', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  const orderId = req.params.id;
+  const order = ordersList.find((o) => o.id === orderId || o.trackingCode === orderId);
+  if (!order) {
+    res.status(404).json({ error: 'سفارش یافت نشد.' });
+    return;
+  }
+  if (req.user?.role !== 'admin' && order.userId !== req.user?.uid) {
+    res.status(403).json({ error: 'دسترسی غیرمجاز: شما اجازه مشاهده اطلاعات یا فیش این سفارش را ندارید.' });
+    return;
+  }
+  res.json({ success: true, order });
 });
 
 // Safe public order status tracking by tracking code (No sensitive customer PII leaked)
