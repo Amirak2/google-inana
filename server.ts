@@ -16,6 +16,7 @@ import {
   sendSmsOtpCode,
   verifySmsOtpAndAuthenticate,
   syncGoogleUser,
+  verifyGoogleOrFirebaseToken,
   requestPhoneChangeOtp,
   verifyPhoneChangeOtp,
   checkRateLimit,
@@ -370,6 +371,109 @@ function saveProductsToDb(products: Product[]): void {
   saveProductsToDbAsync(products).catch((err) =>
     console.error('[PRODUCTS DB] Background saveProductsToDb error:', err)
   );
+}
+
+/**
+ * Sequential Mutex Queue for Database Transactions
+ * Guarantees serial execution of state mutations so concurrent requests cannot
+ * interleave between memory mutation, file writes, and rollbacks.
+ */
+let dbTransactionLock: Promise<any> = Promise.resolve();
+
+export async function runInDbTransaction<T>(action: () => Promise<T>): Promise<T> {
+  let releaseLock: () => void;
+  const nextLock = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+  const currentLock = dbTransactionLock;
+  dbTransactionLock = dbTransactionLock.then(() => nextLock);
+
+  await currentLock;
+  try {
+    return await action();
+  } finally {
+    releaseLock!();
+  }
+}
+
+/**
+ * Truly atomic two-file commit for Products and Orders database (Issue #5 Fix).
+ * Prevents partial writes:
+ * 1. Writes changes to unique temporary files first.
+ * 2. Creates backups of existing databases on disk.
+ * 3. Commits renames atomically.
+ * 4. If any rename or write fails, rolls back the disk files from backups.
+ */
+async function commitProductsAndOrdersTransaction(
+  newProducts: Product[],
+  newOrders: Order[]
+): Promise<void> {
+  const nonce = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const tmpProducts = `${PRODUCTS_DB_FILE}.${nonce}.tmp`;
+  const tmpOrders = `${ORDERS_DB_FILE}.${nonce}.tmp`;
+  const bakProducts = `${PRODUCTS_DB_FILE}.${nonce}.bak`;
+  const bakOrders = `${ORDERS_DB_FILE}.${nonce}.bak`;
+
+  const productsJson = JSON.stringify(newProducts, null, 2);
+  const ordersJson = JSON.stringify(newOrders, null, 2);
+
+  let productsBackedUp = false;
+  let ordersBackedUp = false;
+  let productsRenamed = false;
+
+  try {
+    // 1. Stage writes to temporary files first
+    await fs.promises.writeFile(tmpProducts, productsJson, 'utf-8');
+    await fs.promises.writeFile(tmpOrders, ordersJson, 'utf-8');
+
+    // 2. Backup current existing database files for disk rollback capability
+    if (fs.existsSync(PRODUCTS_DB_FILE)) {
+      await fs.promises.copyFile(PRODUCTS_DB_FILE, bakProducts);
+      productsBackedUp = true;
+    }
+    if (fs.existsSync(ORDERS_DB_FILE)) {
+      await fs.promises.copyFile(ORDERS_DB_FILE, bakOrders);
+      ordersBackedUp = true;
+    }
+
+    // 3. Atomically commit products
+    await fs.promises.rename(tmpProducts, PRODUCTS_DB_FILE);
+    productsRenamed = true;
+
+    // 4. Atomically commit orders
+    await fs.promises.rename(tmpOrders, ORDERS_DB_FILE);
+
+    // 5. Success: Clean up backup files
+    if (productsBackedUp && fs.existsSync(bakProducts)) {
+      await fs.promises.unlink(bakProducts).catch(() => {});
+    }
+    if (ordersBackedUp && fs.existsSync(bakOrders)) {
+      await fs.promises.unlink(bakOrders).catch(() => {});
+    }
+  } catch (err) {
+    // Clean up temporary files
+    if (fs.existsSync(tmpProducts)) await fs.promises.unlink(tmpProducts).catch(() => {});
+    if (fs.existsSync(tmpOrders)) await fs.promises.unlink(tmpOrders).catch(() => {});
+
+    // If products was renamed but orders failed, restore products to previous disk state!
+    if (productsRenamed && productsBackedUp && fs.existsSync(bakProducts)) {
+      try {
+        await fs.promises.copyFile(bakProducts, PRODUCTS_DB_FILE);
+      } catch (restoreErr) {
+        console.error('[DB TRANSACTION] Failed to restore products backup after failed orders commit:', restoreErr);
+      }
+    }
+
+    // Clean up backups on failure
+    if (productsBackedUp && fs.existsSync(bakProducts)) {
+      await fs.promises.unlink(bakProducts).catch(() => {});
+    }
+    if (ordersBackedUp && fs.existsSync(bakOrders)) {
+      await fs.promises.unlink(bakOrders).catch(() => {});
+    }
+
+    throw err;
+  }
 }
 
 /**
@@ -1609,28 +1713,124 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
     return;
   }
 
-  // 2. Validate integers and aggregate quantities by productId (prevent duplicate row bypass)
-  const aggregatedQuantities = new Map<string, number>();
-  for (const item of items) {
-    if (!item || !item.productId) {
-      res.status(400).json({ error: 'اطلاعات ردیف‌های سفارش ناقص است.' });
-      return;
-    }
-    const qty = Number(item.quantity);
-    if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
-      res.status(400).json({ error: 'تعداد هر قلم در سفارش باید یک عدد صحیح بین ۱ تا ۲۰ باشد.' });
-      return;
-    }
-    const pId = String(item.productId);
-    aggregatedQuantities.set(pId, (aggregatedQuantities.get(pId) || 0) + qty);
-  }
-
-  // 3. User identity: strictly verified from authenticated session
+  // 2. User identity: strictly verified from authenticated session
   const orderUserId = req.user!.uid;
   const orderUserEmail = req.user!.email;
   const uId = `usr_${orderUserId}`;
 
-  // 4. Verify stock availability
+  // 3. Authoritative Quote & Inventory Matching (Issue #2 Fix)
+  let effectiveGoldPrice = currentGoldState.pricePerGram;
+  let validatedItems: Order['items'] = [];
+  let computedTotalWeight = 0;
+  let computedTotalPrice = 0;
+  let itemsToProcess: { productId: string; quantity: number }[] = [];
+
+  if (quoteId && typeof quoteId === 'string') {
+    const activeQuote = quotesMap.get(quoteId.trim());
+    if (!activeQuote || Date.now() > activeQuote.expiresAt) {
+      res.status(400).json({
+        error: 'پیش‌فاکتور قیمت طلا منقضی گردیده است. لطفاً مجدداً پیش‌فاکتور دریافت نمایید.',
+        quoteExpired: true,
+      });
+      return;
+    }
+
+    // Strict ownership verification: A user cannot submit or steal another user's quote
+    if (activeQuote.userId && activeQuote.userId !== orderUserId) {
+      res.status(403).json({
+        error: 'دسترسی غیرمجاز: این پیش‌فاکتور متعلق به حساب کاربری شما نمی‌باشد.',
+      });
+      return;
+    }
+
+    // Verify consistency: If client also sent items in body, verify 1-to-1 match with quote items
+    if (items && Array.isArray(items)) {
+      const quoteMap = new Map<string, number>();
+      for (const qi of activeQuote.items) {
+        quoteMap.set(qi.productId, (quoteMap.get(qi.productId) || 0) + qi.quantity);
+      }
+      const reqMap = new Map<string, number>();
+      for (const ri of items) {
+        if (ri && ri.productId) {
+          reqMap.set(String(ri.productId), (reqMap.get(String(ri.productId)) || 0) + Number(ri.quantity));
+        }
+      }
+      if (quoteMap.size !== reqMap.size) {
+        res.status(400).json({ error: 'اقلام ارسالی با اقلام پیش‌فاکتور معتبر مطابقت ندارند.' });
+        return;
+      }
+      for (const [pId, qQty] of quoteMap.entries()) {
+        if (reqMap.get(pId) !== qQty) {
+          res.status(400).json({ error: `تعداد یا قلم کالای ${pId} با پیش‌فاکتور همخوانی ندارد.` });
+          return;
+        }
+      }
+    }
+
+    // Derive all calculation AND inventory deduction strictly from the validated quote
+    effectiveGoldPrice = activeQuote.goldPriceAtQuote;
+    computedTotalWeight = activeQuote.totalWeight;
+    computedTotalPrice = activeQuote.totalPrice;
+    validatedItems = activeQuote.items;
+    itemsToProcess = activeQuote.items.map((qi) => ({
+      productId: qi.productId,
+      quantity: qi.quantity,
+    }));
+  } else {
+    // Dynamic recalculation when no quote is used
+    if (!items || !Array.isArray(items) || items.length === 0 || items.length > 50) {
+      res.status(400).json({ error: 'لیست اقلام سفارش نامعتبر است (حداقل ۱ و حداکثر ۵۰ قلم کالا).' });
+      return;
+    }
+
+    for (const item of items) {
+      if (!item || !item.productId) {
+        res.status(400).json({ error: 'اطلاعات ردیف‌های سفارش ناقص است.' });
+        return;
+      }
+      const qty = Number(item.quantity);
+      if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
+        res.status(400).json({ error: 'تعداد هر قلم در سفارش باید یک عدد صحیح بین ۱ تا ۲۰ باشد.' });
+        return;
+      }
+      itemsToProcess.push({ productId: String(item.productId), quantity: qty });
+    }
+
+    for (const itm of itemsToProcess) {
+      const product = productsList.find((p) => p.id === itm.productId);
+      if (!product) {
+        res.status(404).json({ error: `محصول با شناسه ${itm.productId} یافت نشد.` });
+        return;
+      }
+      const priceBreakdown = calculateProductPrice(product, effectiveGoldPrice, pricingSettings);
+      const unitPrice = priceBreakdown.finalPrice;
+      const itemTotal = unitPrice * itm.quantity;
+
+      computedTotalWeight += product.weight * itm.quantity;
+      computedTotalPrice += itemTotal;
+
+      validatedItems.push({
+        productId: product.id,
+        productTitle: product.title,
+        productImage: product.images[0] || '',
+        weight: product.weight,
+        unitPrice,
+        quantity: itm.quantity,
+        totalPrice: itemTotal,
+        goldPriceAtOrder: effectiveGoldPrice,
+        makingChargePercent: priceBreakdown.effectiveMakingChargePercent,
+      });
+    }
+  }
+
+  // 4. Aggregate quantities strictly from authoritative items (Issue #2 Fix)
+  const aggregatedQuantities = new Map<string, number>();
+  for (const item of itemsToProcess) {
+    const pId = String(item.productId);
+    aggregatedQuantities.set(pId, (aggregatedQuantities.get(pId) || 0) + item.quantity);
+  }
+
+  // 5. Verify stock availability
   for (const [pId, totalRequestedQty] of aggregatedQuantities.entries()) {
     const product = productsList.find((p) => p.id === pId);
     if (!product) {
@@ -1649,56 +1849,6 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
       return;
     }
   }
-
-  // 5. Price calculation / Quote price locking
-  let effectiveGoldPrice = currentGoldState.pricePerGram;
-  let validatedItems: Order['items'] = [];
-  let computedTotalWeight = 0;
-  let computedTotalPrice = 0;
-
-  if (quoteId && typeof quoteId === 'string') {
-    const activeQuote = quotesMap.get(quoteId.trim());
-    if (!activeQuote || Date.now() > activeQuote.expiresAt) {
-      res.status(400).json({
-        error: 'پیش‌فاکتور قیمت طلا منقضی گردیده است. لطفاً پیش‌فاکتور جدید دریافت نمایید.',
-        quoteExpired: true,
-      });
-      return;
-    }
-    effectiveGoldPrice = activeQuote.goldPriceAtQuote;
-    computedTotalWeight = activeQuote.totalWeight;
-    computedTotalPrice = activeQuote.totalPrice;
-    validatedItems = activeQuote.items;
-    // Invalidate quote so it cannot be reused
-    quotesMap.delete(quoteId.trim());
-  } else {
-    // Dynamic recalculation at current live gold price
-    for (const [pId, totalQty] of aggregatedQuantities.entries()) {
-      const product = productsList.find((p) => p.id === pId)!;
-      const priceBreakdown = calculateProductPrice(product, effectiveGoldPrice, pricingSettings);
-      const unitPrice = priceBreakdown.finalPrice;
-      const itemTotal = unitPrice * totalQty;
-
-      computedTotalWeight += product.weight * totalQty;
-      computedTotalPrice += itemTotal;
-
-      validatedItems.push({
-        productId: product.id,
-        productTitle: product.title,
-        productImage: product.images[0] || '',
-        weight: product.weight,
-        unitPrice,
-        quantity: totalQty,
-        totalPrice: itemTotal,
-        goldPriceAtOrder: effectiveGoldPrice,
-        makingChargePercent: priceBreakdown.effectiveMakingChargePercent,
-      });
-    }
-  }
-
-  // 6. Transactional Execution with In-Memory Snapshot & Rollback
-  const productsSnapshot = JSON.stringify(productsList);
-  const ordersSnapshot = JSON.stringify(ordersList);
 
   const newOrder: Order = {
     id: `ord-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
@@ -1725,35 +1875,50 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
     quoteId: quoteId || undefined,
   };
 
+  // 6. Real Transactional Execution (Issue #5 Fix)
+  // Uses sequential mutex lock (runInDbTransaction) and atomic two-file commit with disk rollback
   try {
-    // Atomically decrement stock and clear reservation
-    for (const [pId, totalQty] of aggregatedQuantities.entries()) {
-      const product = productsList.find((p) => p.id === pId);
-      if (product && product.stock !== undefined) {
-        product.stock = Math.max(0, product.stock - totalQty);
+    await runInDbTransaction(async () => {
+      const productsSnapshot = JSON.parse(JSON.stringify(productsList));
+      const ordersSnapshot = JSON.parse(JSON.stringify(ordersList));
+
+      try {
+        // Atomically decrement stock and clear reservations in memory
+        for (const [pId, totalQty] of aggregatedQuantities.entries()) {
+          const product = productsList.find((p) => p.id === pId);
+          if (product && product.stock !== undefined) {
+            product.stock = Math.max(0, product.stock - totalQty);
+          }
+          if (product && stockReservations.has(product.id)) {
+            const remaining = (stockReservations.get(product.id) || []).filter((r) => r.userId !== uId);
+            if (remaining.length > 0) stockReservations.set(product.id, remaining);
+            else stockReservations.delete(product.id);
+          }
+        }
+
+        ordersList.unshift(newOrder);
+
+        // Commit both files atomically to disk; rolls back disk files if any write/rename fails
+        await commitProductsAndOrdersTransaction(productsList, ordersList);
+
+        // Successfully committed: Invalidate used quote
+        if (quoteId && typeof quoteId === 'string') {
+          quotesMap.delete(quoteId.trim());
+        }
+
+        if (idempotencyKey) {
+          idempotencyOrdersMap.set(idempotencyKey, newOrder);
+        }
+      } catch (transErr) {
+        // Rollback memory to snapshot
+        productsList = productsSnapshot;
+        ordersList = ordersSnapshot;
+        throw transErr;
       }
-      if (product && stockReservations.has(product.id)) {
-        const remaining = (stockReservations.get(product.id) || []).filter((r) => r.userId !== uId);
-        if (remaining.length > 0) stockReservations.set(product.id, remaining);
-        else stockReservations.delete(product.id);
-      }
-    }
-
-    ordersList.unshift(newOrder);
-
-    // Atomic awaitable persistence
-    await persistProducts();
-    await persistOrders();
-
-    if (idempotencyKey) {
-      idempotencyOrdersMap.set(idempotencyKey, newOrder);
-    }
-  } catch (persistErr) {
-    // Rollback
-    productsList = JSON.parse(productsSnapshot);
-    ordersList = JSON.parse(ordersSnapshot);
+    });
+  } catch (persistErr: any) {
     console.error('[ORDERS DB] Transaction rollback due to error:', persistErr);
-    res.status(500).json({ error: 'خطای سیستمی در ذخیره‌سازی تراکنش سفارش. لطفاً مجدداً تلاش فرمایید.' });
+    res.status(500).json({ error: 'خطای سیستمی در پردازش و ذخیره‌سازی تراکنش سفارش. لطفاً مجدداً تلاش فرمایید.' });
     return;
   }
 
@@ -1855,8 +2020,9 @@ async function handleOrderStatusUpdate(
     }
     order.updatedAt = new Date().toISOString();
 
-    await persistProducts();
-    await persistOrders();
+    await runInDbTransaction(async () => {
+      await commitProductsAndOrdersTransaction(productsList, ordersList);
+    });
 
     logger.order('ORDERS', `بروزرسانی وضعیت سفارش ${order.trackingCode} به «${order.status}» توسط مدیر`, {
       admin: adminUser?.email,
@@ -1912,8 +2078,9 @@ async function handleDeleteOrder(orderId: string, adminUser: any, res: Response)
       deletedOrder.inventoryReleased = true;
     }
 
-    await persistProducts();
-    await persistOrders();
+    await runInDbTransaction(async () => {
+      await commitProductsAndOrdersTransaction(productsList, ordersList);
+    });
 
     logger.security('ADMIN', `حذف سفارش توسط مدیر: کد ${deletedOrder.trackingCode}`, {
       admin: adminUser?.email,
@@ -2055,8 +2222,8 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
   res.json({ success: true, message: 'خروج موفقیت‌آمیز بود.' });
 });
 
-// Google Firebase auth integration & account synchronization
-app.post('/api/auth/google-sync', (req: Request, res: Response) => {
+// Google Firebase auth integration & account synchronization with cryptographic identity verification
+app.post('/api/auth/google-sync', async (req: Request, res: Response) => {
   const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
   const rl = checkRateLimit(`auth_google_${clientIp}`, 15, 60 * 1000);
   if (!rl.allowed) {
@@ -2065,15 +2232,28 @@ app.post('/api/auth/google-sync', (req: Request, res: Response) => {
   }
 
   try {
-    const { uid, email, displayName, photoURL } = req.body;
-    if (!email || typeof email !== 'string' || !email.includes('@')) {
-      res.status(400).json({ success: false, error: 'ایمیل گوگل نامعتبر است.' });
+    const { idToken } = req.body;
+    if (!idToken || typeof idToken !== 'string' || idToken.trim().length < 20) {
+      res.status(400).json({
+        success: false,
+        error: 'ارائه توکن معتبر گوگل یا فایربیس (idToken) جهت اثبات هویت الزامی است.',
+      });
       return;
     }
 
-    const result = syncGoogleUser({ uid, email, displayName, photoURL });
+    // Issue #1 Fix: Cryptographically verify identity token directly with Google / Firebase
+    // This strictly extracts verified user claims; NEVER trusts client-submitted email/uid
+    const verifiedGoogleUser = await verifyGoogleOrFirebaseToken(idToken);
+
+    const result = syncGoogleUser({
+      uid: verifiedGoogleUser.uid,
+      email: verifiedGoogleUser.email,
+      displayName: verifiedGoogleUser.displayName,
+      photoURL: verifiedGoogleUser.photoURL,
+    });
+
     setAuthCookie(res, result.token);
-    logger.security('AUTH', `همگام‌سازی و ورود موفق حساب گوگل: ${result.user.email} (${result.user.role})`, {
+    logger.security('AUTH', `همگام‌سازی و ورود موفق حساب گوگل با اثبات هویت معتبر: ${result.user.email} (${result.user.role})`, {
       email: result.user.email,
       role: result.user.role,
       uid: result.user.uid,
@@ -2081,7 +2261,8 @@ app.post('/api/auth/google-sync', (req: Request, res: Response) => {
 
     res.json({ success: true, ...result });
   } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message || 'خطا در همگام‌سازی حساب گوگل.' });
+    logger.warn('AUTH', `تلاش ناموفق برای ورود با گوگل (توکن نامعتبر یا اثبات هویت رد شد): ${err.message}`);
+    res.status(401).json({ success: false, error: err.message || 'خطا در اعتبارسنجی هویت حساب گوگل.' });
   }
 });
 
@@ -2220,7 +2401,17 @@ app.get('/api/auth/me', requireAuth, (req: AuthenticatedRequest, res: Response) 
 
 app.put('/api/auth/profile', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   try {
-    const updated = updateUser(req.user!.uid, req.body);
+    const { displayName, address, phoneNumber } = req.body;
+    
+    // Issue #6 Fix: Prevent bypassing SMS OTP for phone number change
+    if (phoneNumber !== undefined && phoneNumber.trim() !== (req.user!.phoneNumber || '')) {
+      res.status(400).json({
+        error: 'تغییر شماره همراه صرفاً از طریق تایید پیامکی (OTP) در بخش تغییر شماره موبایل امکان‌پذیر است.',
+      });
+      return;
+    }
+
+    const updated = updateUser(req.user!.uid, { displayName, address });
     res.json({ success: true, user: updated });
   } catch (err: any) {
     res.status(400).json({ error: err?.message || 'خطا در بروزرسانی اطلاعات' });

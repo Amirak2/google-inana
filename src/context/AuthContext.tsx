@@ -276,17 +276,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await signInWithPopup(auth, googleProvider);
     await syncProfile(res.user);
 
-    // Sync Google user with server auth store to obtain verified session token for server APIs
+    // Obtain cryptographically signed Firebase ID token to prove identity to the server
+    const idToken = await res.user.getIdToken(true);
+
+    // Sync Google user with server auth store by providing verified cryptographic ID token
     try {
       const syncRes = await fetch('/api/auth/google-sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uid: res.user.uid,
-          email: res.user.email,
-          displayName: res.user.displayName,
-          photoURL: res.user.photoURL,
-        }),
+        body: JSON.stringify({ idToken }),
       });
       if (syncRes.ok) {
         const syncData = await syncRes.json();
@@ -298,6 +296,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUserProfile(syncData.user);
           setIsAdmin(checkIsAdmin(syncData.user.email, syncData.user.role));
         }
+      } else {
+        const errJson = await syncRes.json().catch(() => ({}));
+        console.error('[AUTH] Google server-sync error:', errJson);
       }
     } catch (syncErr) {
       console.warn('[AUTH] Google server-sync notice:', syncErr);

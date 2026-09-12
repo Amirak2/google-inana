@@ -46,9 +46,24 @@ function getOrCreateSessionSecret(): string {
 }
 
 const SECRET_KEY = getOrCreateSessionSecret();
-const PRIMARY_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@inanagold.ir').toLowerCase().trim();
+const PRIMARY_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'amirbiashad@gmail.com').toLowerCase().trim();
 const PRIMARY_ADMIN_PHONE = process.env.ADMIN_PHONE || '09120000000';
 const PRIMARY_ADMIN_INIT_PASS = process.env.ADMIN_DEFAULT_PASSWORD || '';
+
+// Load Firebase Web API Key for cryptographically verifying Google/Firebase ID tokens
+let FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || '';
+try {
+  const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(cfgPath)) {
+    const raw = fs.readFileSync(cfgPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed.apiKey) {
+      FIREBASE_WEB_API_KEY = parsed.apiKey;
+    }
+  }
+} catch (err) {
+  console.warn('[AUTH] Could not load firebase-applet-config.json:', err);
+}
 
 // SMS OTP Provider Config
 const SMS_OTP_URL = process.env.SMS_OTP_URL || 'https://s.api.ir/api/sw1/SmsOTP';
@@ -383,25 +398,13 @@ export function updateUser(
   }
 
   if (updates.displayName !== undefined) targetUser.displayName = updates.displayName.trim();
-  if (updates.phoneNumber !== undefined) {
-    const rawPhone = updates.phoneNumber.trim();
-    if (rawPhone) {
-      const normPhone = normalizeIranianMobile(rawPhone);
-      if (!isValidIranianMobile(normPhone)) {
-        throw new Error('شماره همراه وارد شده نامعتبر است. فرمت صحیح: ۰۹۱۲۳۴۵۶۷۸۹');
-      }
-      const existingUser = findUserByMobile(normPhone);
-      if (existingUser && existingUser.uid !== targetUser.uid) {
-        throw new Error('این شماره همراه قبلاً در سیستم برای کاربر دیگری ثبت شده است.');
-      }
-      if (normPhone === normalizeIranianMobile(PRIMARY_ADMIN_PHONE) && targetUser.uid !== 'ina_admin_master') {
-        throw new Error('این شماره همراه متعلق به مدیریت سیستم است.');
-      }
-      targetUser.phoneNumber = normPhone;
-    } else {
-      targetUser.phoneNumber = '';
-    }
+  
+  // Issue #6 Fix: Bypassing SMS OTP for phone change is strictly prevented.
+  // Direct modification of phoneNumber is prohibited.
+  if (updates.phoneNumber !== undefined && updates.phoneNumber.trim() !== (targetUser.phoneNumber || '')) {
+    throw new Error('تغییر شماره همراه صرفاً از طریق تایید پیامکی (OTP) در بخش تغییر شماره امکان‌پذیر است و امکان تغییر مستقیم آن وجود ندارد.');
   }
+
   if (updates.address !== undefined) targetUser.address = updates.address.trim();
   targetUser.updatedAt = new Date().toISOString();
 
@@ -593,6 +596,82 @@ export function verifySmsOtpAndAuthenticate(
     token,
     isNewUser,
   };
+}
+
+export interface VerifiedGoogleUser {
+  uid: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string;
+  emailVerified: boolean;
+}
+
+/**
+ * Cryptographically verify Firebase ID token or Google OAuth ID token on server.
+ * Ensures the client cannot forge user identities or impersonate admins.
+ */
+export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<VerifiedGoogleUser> {
+  const token = (idToken || '').trim();
+  if (!token || token.length < 20) {
+    throw new Error('توکن امنیتی گوگل یا فایربیس ارائه نشده یا نامعتبر است.');
+  }
+
+  // 1. Verify via Firebase Identity Toolkit (official verification with API Key)
+  if (FIREBASE_WEB_API_KEY) {
+    try {
+      const lookupEndpoint = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_WEB_API_KEY}`;
+      const resp = await fetch(lookupEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: token }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+          const u = data.users[0];
+          if (!u.email) {
+            throw new Error('حساب کاربری گوگل فاقد ایمیل معتبر می‌باشد.');
+          }
+          return {
+            uid: u.localId,
+            email: String(u.email).toLowerCase().trim(),
+            displayName: u.displayName || '',
+            photoURL: u.photoUrl || '',
+            emailVerified: Boolean(u.emailVerified),
+          };
+        }
+      }
+    } catch (err: any) {
+      console.warn('[AUTH] Firebase accounts:lookup verification notice:', err?.message || err);
+    }
+  }
+
+  // 2. Fallback: Google OAuth2 tokeninfo endpoint
+  try {
+    const googleTokenInfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`;
+    const gResp = await fetch(googleTokenInfoUrl, {
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (gResp.ok) {
+      const gData = await gResp.json();
+      if (gData.email) {
+        return {
+          uid: gData.sub || `g_${Date.now()}`,
+          email: String(gData.email).toLowerCase().trim(),
+          displayName: gData.name || '',
+          photoURL: gData.picture || '',
+          emailVerified: gData.email_verified === 'true' || gData.email_verified === true,
+        };
+      }
+    }
+  } catch (err: any) {
+    console.warn('[AUTH] Google oauth2:tokeninfo check notice:', err?.message || err);
+  }
+
+  throw new Error('اعتبارسنجی توکن گوگل با شکست مواجه شد. توکن نامعتبر، جعلی یا منقضی شده است.');
 }
 
 /**

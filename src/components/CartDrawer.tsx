@@ -38,6 +38,9 @@ import { db } from '../lib/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { getAuthHeaders } from '../utils/authHelper';
 
+const generateIdempotencyKey = () =>
+  `idemp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
 export const CartDrawer: React.FC = () => {
   const { cart, isCartOpen, setIsCartOpen, removeFromCart, updateCartQuantity, clearCart, goldPrice, settings, refreshProducts } =
     useGoldStore();
@@ -58,6 +61,7 @@ export const CartDrawer: React.FC = () => {
   const [isReserving, setIsReserving] = useState(false);
   const [copiedCard, setCopiedCard] = useState(false);
   const [copiedSheba, setCopiedSheba] = useState(false);
+  const [copiedAmount, setCopiedAmount] = useState(false);
   const [previewReceiptModal, setPreviewReceiptModal] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -72,10 +76,15 @@ export const CartDrawer: React.FC = () => {
     goldPriceAtOrder: number;
   } | null>(null);
   const [quoteSecondsLeft, setQuoteSecondsLeft] = useState<number | null>(null);
-  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => `idemp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => generateIdempotencyKey());
   const [networkErrorOccurred, setNetworkErrorOccurred] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Invalidate price quote whenever items or quantities in cart change
+  useEffect(() => {
+    setActiveQuote(null);
+  }, [cart]);
 
   // Countdown timer for 15-minute locked price quote
   useEffect(() => {
@@ -263,6 +272,9 @@ export const CartDrawer: React.FC = () => {
       return;
     }
 
+    // Issue #4 Fix: Generate fresh idempotency key for this checkout session
+    setIdempotencyKey(generateIdempotencyKey());
+
     // Concurrency Lock: Pre-reserve cart items on server to prevent race conditions during payment
     setIsReserving(true);
     setFormError(null);
@@ -387,6 +399,9 @@ export const CartDrawer: React.FC = () => {
         clearCart();
         refreshProducts();
         setNetworkErrorOccurred(false);
+        setActiveQuote(null);
+        // Issue #4 Fix: Generate fresh new idempotency key for any future orders
+        setIdempotencyKey(generateIdempotencyKey());
 
         // Also mirror in cloud Firestore database for redundancy
         try {
@@ -1026,9 +1041,25 @@ export const CartDrawer: React.FC = () => {
                       </div>
                       <div className="flex justify-between pt-1.5 border-t border-slate-700/60 font-bold items-center">
                         <span className="text-[#D4AF37]">مبلغ دقیق قابل انتقال:</span>
-                        <span className="text-white text-sm sm:text-base gold-gradient-text">
-                          {formatToman(subtotalPrice)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-white text-sm sm:text-base gold-gradient-text">
+                            {formatToman(activeQuote ? activeQuote.totalPrice : subtotalPrice)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const amount = (activeQuote ? activeQuote.totalPrice : subtotalPrice).toString();
+                              navigator.clipboard?.writeText(amount);
+                              setCopiedAmount(true);
+                              setTimeout(() => setCopiedAmount(false), 2000);
+                            }}
+                            className="text-[#D4AF37] hover:text-white p-1 text-[10px] bg-slate-800/80 rounded border border-[#D4AF37]/30 flex items-center gap-1 cursor-pointer"
+                            title="کپی مبلغ جهت واریز"
+                          >
+                            {copiedAmount ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedAmount ? 'کپی شد' : 'کپی مبلغ'}</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1260,6 +1291,20 @@ export const CartDrawer: React.FC = () => {
                     <Send className="w-3.5 h-3.5" />
                     <span>عضویت در کانال تلگرام گالری اینانا (@Inana_gold)</span>
                   </a>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCartOpen(false);
+                      setCheckoutStep('cart');
+                      setConfirmedOrder(null);
+                      setActiveQuote(null);
+                      setIdempotencyKey(generateIdempotencyKey());
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
+                  >
+                    بازگشت به گالری و ثبت سفارش جدید
+                  </button>
                 </div>
               </div>
             )}
@@ -1277,7 +1322,7 @@ export const CartDrawer: React.FC = () => {
                 <div className="flex justify-between items-baseline pt-2 border-t border-slate-700/80">
                   <span className="text-sm font-bold text-white">مبلغ قابل پرداخت:</span>
                   <span className="text-lg sm:text-xl font-extrabold text-white gold-gradient-text">
-                    {formatToman(subtotalPrice)}
+                    {formatToman(checkoutStep === 'payment' && activeQuote ? activeQuote.totalPrice : subtotalPrice)}
                   </span>
                 </div>
               </div>
