@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0",
+  "entities": {
+    "users": {
+      "description": "User profiles and role management",
+      "fields": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "Full name or brand alias" },
+        "phoneNumber": { "type": "string", "description": "Contact mobile number", "optional": true },
+        "role": { "type": "string", "description": "Role: 'admin' or 'customer'" },
+        "address": { "type": "string", "description": "Shipping or contact address", "optional": true },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update", "optional": true }
+      }
+    },
+    "products": {
+      "description": "Jewelry and gold catalog products",
+      "fields": {
+        "id": { "type": "string", "description": "Product ID" },
+        "title": { "type": "string", "description": "Persian title" },
+        "titleEn": { "type": "string", "description": "English title", "optional": true },
+        "slug": { "type": "string", "description": "URL slug" },
+        "category": { "type": "string", "description": "Product category" },
+        "collection": { "type": "string", "description": "Collection name" },
+        "weight": { "type": "number", "description": "Weight in grams" },
+        "purity": { "type": "string", "description": "Gold purity, e.g., 18 عیار" },
+        "customMakingChargePercent": { "type": "number", "description": "Custom making charge percent", "optional": true },
+        "customProfitPercent": { "type": "number", "description": "Custom profit percent", "optional": true },
+        "additionalCost": { "type": "number", "description": "Additional cost in Toman" },
+        "stoneCost": { "type": "number", "description": "Stone or gems cost in Toman" },
+        "discountPercent": { "type": "number", "description": "Discount percent" },
+        "images": { "type": "array", "description": "Array of image URLs" },
+        "description": { "type": "string", "description": "Description text" },
+        "features": { "type": "array", "description": "List of key features" },
+        "dimensions": { "type": "string", "description": "Physical dimensions", "optional": true },
+        "sku": { "type": "string", "description": "SKU identifier" },
+        "stock": { "type": "number", "description": "Inventory stock count" },
+        "isNewArrival": { "type": "boolean", "description": "Whether item is new" },
+        "isBestSeller": { "type": "boolean", "description": "Whether item is best seller" },
+        "isFeatured": { "type": "boolean", "description": "Whether item is featured" },
+        "letter": { "type": "string", "description": "English letter if applicable", "optional": true },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      }
+    },
+    "settings": {
+      "description": "Store settings, bank card info, and global pricing variables",
+      "fields": {
+        "globalMakingChargePercent": { "type": "number" },
+        "profitPercent": { "type": "number" },
+        "taxPercent": { "type": "number" },
+        "fixedCost": { "type": "number" },
+        "autoSyncIntervalMinutes": { "type": "number" },
+        "bankCardNumber": { "type": "string", "optional": true },
+        "bankCardHolder": { "type": "string", "optional": true },
+        "bankName": { "type": "string", "optional": true },
+        "bankSheba": { "type": "string", "optional": true }
+      }
+    },
+    "orders": {
+      "description": "Customer purchase orders with card-to-card payment verification",
+      "fields": {
+        "id": { "type": "string" },
+        "trackingCode": { "type": "string" },
+        "userId": { "type": "string", "optional": true },
+        "userEmail": { "type": "string", "optional": true },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "customerAddress": { "type": "string" },
+        "contactMethod": { "type": "string" },
+        "paymentMethod": { "type": "string", "optional": true },
+        "paymentTrackingNumber": { "type": "string", "optional": true },
+        "paymentReceiptImage": { "type": "string", "optional": true },
+        "rejectionReason": { "type": "string", "optional": true },
+        "reviewedAt": { "type": "string", "optional": true },
+        "items": { "type": "array" },
+        "totalWeight": { "type": "number" },
+        "totalPrice": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string", "optional": true }
+      }
+    }
+  }
+}

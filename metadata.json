@@ -1,0 +1,8 @@
+{
+  "name": "INANA GOLD | زیورآلات و طلای لوکس ۱۸ عیار",
+  "description": "فروشگاه آنلاین لوکس طلا و جواهرات  اینانا گلد، ماشین‌حساب طلا و پنل مدیریت سفارشات",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
