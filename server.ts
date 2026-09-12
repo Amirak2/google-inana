@@ -1950,6 +1950,21 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
       if (clearAll === true) {
         const prevCount = ordersList.length;
         const allIds = ordersList.map((o) => o.id);
+
+        // Release inventory for all active, non-released orders being cleared
+        for (const order of ordersList) {
+          if (!order.inventoryReleased && order.status !== 'رد شده' && order.status !== 'لغو شده') {
+            for (const itm of order.items) {
+              const prod = productsList.find((p) => p.id === itm.productId);
+              if (prod && prod.stock !== undefined) {
+                prod.stock += itm.quantity;
+                saveProductToDb(prod); // Persisted to SQLite inside transaction
+              }
+            }
+            order.inventoryReleased = true;
+          }
+        }
+
         ordersList = [];
         deleteOrdersBulkFromDb(allIds);
         saveOrdersToDb([]);
@@ -1959,12 +1974,28 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
         const idSet = new Set(ids.map(String));
         const prevCount = ordersList.length;
         const toDeleteIds: string[] = [];
+        const keptOrders: Order[] = [];
+
         for (const o of ordersList) {
           if (idSet.has(o.id) || idSet.has(o.trackingCode)) {
             toDeleteIds.push(o.id);
+            // Release inventory for active, non-released order being deleted
+            if (!o.inventoryReleased && o.status !== 'رد شده' && o.status !== 'لغو شده') {
+              for (const itm of o.items) {
+                const prod = productsList.find((p) => p.id === itm.productId);
+                if (prod && prod.stock !== undefined) {
+                  prod.stock += itm.quantity;
+                  saveProductToDb(prod); // Persisted to SQLite inside transaction
+                }
+              }
+              o.inventoryReleased = true;
+            }
+          } else {
+            keptOrders.push(o);
           }
         }
-        ordersList = ordersList.filter((o) => !idSet.has(o.id) && !idSet.has(o.trackingCode));
+
+        ordersList = keptOrders;
         deleteOrdersBulkFromDb(toDeleteIds);
         return { clearAll: false, deletedCount: prevCount - ordersList.length, remainingCount: ordersList.length };
       }

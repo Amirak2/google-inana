@@ -672,7 +672,8 @@ export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<Veri
     if (gResp.ok) {
       const gData = await gResp.json();
       if (gData.email) {
-        // Strict Requirement 1: Match aud against this specific application/project IDs
+        // Strict Requirement: Exact equality matching against allowed application/project client IDs
+        // Loose substring matching (like .includes) is strictly prohibited to prevent cross-app token spoofing
         const tokenAud = String(gData.aud || '').trim();
         const validAudiences = [
           FIREBASE_PROJECT_ID,
@@ -680,10 +681,7 @@ export async function verifyGoogleOrFirebaseToken(idToken: string): Promise<Veri
           process.env.GOOGLE_CLIENT_ID,
         ].filter(Boolean) as string[];
 
-        const isAudValid =
-          validAudiences.some((aud) => tokenAud === aud) ||
-          (FIREBASE_MESSAGING_SENDER_ID && tokenAud.includes(FIREBASE_MESSAGING_SENDER_ID)) ||
-          (FIREBASE_PROJECT_ID && tokenAud.includes(FIREBASE_PROJECT_ID));
+        const isAudValid = validAudiences.some((aud) => tokenAud === aud);
 
         if (!isAudValid) {
           throw new Error('مخاطب توکن گوگل (aud) با شناسه این برنامه مطابقت ندارد و توکن برای برنامه دیگری صادر شده است.');

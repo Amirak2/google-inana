@@ -13,15 +13,21 @@ const SQLITE_DB_PATH = path.join(DATA_DIR, 'inana_gold.sqlite');
 // Open SQLite database connection
 export const db = new DatabaseSync(SQLITE_DB_PATH);
 
-// Configure SQLite for high performance, WAL journaling (crash recovery), and concurrency
+// Configure SQLite for durability, crash recovery, and concurrency
+// PRAGMA synchronous = FULL guarantees write commits are safely flushed to disk, preventing data loss on sudden power outage.
 db.exec(`
   PRAGMA journal_mode = WAL;
-  PRAGMA synchronous = NORMAL;
+  PRAGMA synchronous = FULL;
   PRAGMA foreign_keys = ON;
 `);
 
 // Create persistent schema
 db.exec(`
+  CREATE TABLE IF NOT EXISTS system_migrations (
+    name TEXT PRIMARY KEY,
+    executed_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
     stock INTEGER NOT NULL,
@@ -210,46 +216,69 @@ export function saveIdempotencyKeyToDb(userId: string, key: string, orderId: str
   stmtInsertIdempotency.run(userId, key, orderId, JSON.stringify(order), new Date().toISOString());
 }
 
-// Initial Seeding & Backward Compatibility Migration
+// One-time Migration & Seeding Control
+// Ensures initial seed data or legacy JSON imports run strictly ONCE.
+// If an admin or user deletes all orders, restarting the server will NOT resurrect deleted orders!
+const stmtCheckMigration = db.prepare('SELECT name FROM system_migrations WHERE name = ?');
+const stmtRecordMigration = db.prepare('INSERT INTO system_migrations (name, executed_at) VALUES (?, ?)');
+
+export function isMigrationExecuted(name: string): boolean {
+  const row = stmtCheckMigration.get(name);
+  return Boolean(row);
+}
+
+export function recordMigrationExecuted(name: string): void {
+  stmtRecordMigration.run(name, new Date().toISOString());
+}
+
+// Initial Seeding & Backward Compatibility Migration (Controlled by Migration Flag)
 export function seedDatabaseIfEmpty(initialProducts: Product[], initialOrders: Order[]): void {
-  const productCount = db.prepare('SELECT COUNT(*) as cnt FROM products').get() as { cnt: number };
-  if (productCount.cnt === 0) {
-    console.log('[DB] Seeding products into SQLite database...');
-    // Check if legacy products_db.json exists
-    const legacyPath = path.join(process.cwd(), 'products_db.json');
-    let prodsToSeed = initialProducts;
-    try {
-      if (fs.existsSync(legacyPath)) {
-        const raw = fs.readFileSync(legacyPath, 'utf-8');
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          prodsToSeed = parsed;
+  // 1. Products Migration Flag
+  if (!isMigrationExecuted('initial_products_seed')) {
+    const productCount = db.prepare('SELECT COUNT(*) as cnt FROM products').get() as { cnt: number };
+    if (productCount.cnt === 0) {
+      console.log('[DB] Running one-time initial products seeding into SQLite database...');
+      const legacyPath = path.join(process.cwd(), 'products_db.json');
+      let prodsToSeed = initialProducts;
+      try {
+        if (fs.existsSync(legacyPath)) {
+          const raw = fs.readFileSync(legacyPath, 'utf-8');
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            prodsToSeed = parsed;
+          }
         }
+      } catch (e) {
+        console.warn('[DB] Failed reading legacy products_db.json, using defaults:', e);
       }
-    } catch (e) {
-      console.warn('[DB] Failed reading legacy products_db.json, using defaults:', e);
+      saveAllProductsToDb(prodsToSeed);
     }
-    saveAllProductsToDb(prodsToSeed);
+    recordMigrationExecuted('initial_products_seed');
   }
 
-  const orderCount = db.prepare('SELECT COUNT(*) as cnt FROM orders').get() as { cnt: number };
-  if (orderCount.cnt === 0) {
-    console.log('[DB] Seeding orders into SQLite database...');
-    const legacyOrdersPath = path.join(process.cwd(), 'orders_db.json');
-    let ordersToSeed = initialOrders;
-    try {
-      if (fs.existsSync(legacyOrdersPath)) {
-        const raw = fs.readFileSync(legacyOrdersPath, 'utf-8');
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          ordersToSeed = parsed;
+  // 2. Orders Migration Flag: Controlled strictly once!
+  // If orders table is empty because orders were deleted by admin, they will NOT be resurrected.
+  if (!isMigrationExecuted('initial_orders_seed')) {
+    const orderCount = db.prepare('SELECT COUNT(*) as cnt FROM orders').get() as { cnt: number };
+    if (orderCount.cnt === 0) {
+      console.log('[DB] Running one-time initial orders seeding into SQLite database...');
+      const legacyOrdersPath = path.join(process.cwd(), 'orders_db.json');
+      let ordersToSeed = initialOrders;
+      try {
+        if (fs.existsSync(legacyOrdersPath)) {
+          const raw = fs.readFileSync(legacyOrdersPath, 'utf-8');
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            ordersToSeed = parsed;
+          }
         }
+      } catch (e) {
+        console.warn('[DB] Failed reading legacy orders_db.json, using defaults:', e);
       }
-    } catch (e) {
-      console.warn('[DB] Failed reading legacy orders_db.json, using defaults:', e);
+      for (const o of ordersToSeed) {
+        saveOrderToDb(o);
+      }
     }
-    for (const o of ordersToSeed) {
-      saveOrderToDb(o);
-    }
+    recordMigrationExecuted('initial_orders_seed');
   }
 }
