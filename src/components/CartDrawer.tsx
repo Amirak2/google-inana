@@ -34,8 +34,6 @@ import { useAuth } from '../context/AuthContext';
 import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
 import { calculateProductPrice } from '../utils/pricingEngine';
 import { Order } from '../types';
-import { db } from '../lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
 import { getAuthHeaders } from '../utils/authHelper';
 
 const generateIdempotencyKey = () =>
@@ -402,20 +400,6 @@ export const CartDrawer: React.FC = () => {
         setActiveQuote(null);
         // Issue #4 Fix: Generate fresh new idempotency key for any future orders
         setIdempotencyKey(generateIdempotencyKey());
-
-        // Also mirror in cloud Firestore database for redundancy
-        try {
-          if (createdOrder?.id) {
-            await setDoc(doc(db, 'orders', createdOrder.id), {
-              ...createdOrder,
-              userId: currentUser?.uid || userProfile?.uid || 'authenticated_user',
-              userEmail: currentUser?.email || userProfile?.email || '',
-              updatedAt: new Date().toISOString(),
-            });
-          }
-        } catch (firestoreErr) {
-          console.warn('[FIRESTORE] Cloud sync notice (order is safely persisted in server DB):', firestoreErr);
-        }
 
         try {
           confetti({

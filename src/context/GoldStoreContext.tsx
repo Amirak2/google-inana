@@ -1,14 +1,4 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import {
-  collection,
-  doc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  onSnapshot,
-  writeBatch,
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS } from '../data/seedData';
 import {
   CartItem,
@@ -155,7 +145,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsLoading(true);
       const res = await fetch('/api/admin/gold-price/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       });
       if (res.ok) {
         const result = await res.json();
@@ -200,56 +190,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     refreshGoldPrice();
-
-    // 1. Live synchronization with Firebase Firestore 'products' collection
-    const productsCol = collection(db, 'products');
-    const unsubscribe = onSnapshot(
-      productsCol,
-      async (snapshot) => {
-        if (!snapshot.empty) {
-          const prods: Product[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as Product;
-            prods.push({
-              ...data,
-              id: docSnap.id || data.id,
-            });
-          });
-          // Preserve newest first
-          prods.sort((a, b) => {
-            const timeA = new Date(a.createdAt || 0).getTime();
-            const timeB = new Date(b.createdAt || 0).getTime();
-            return timeB - timeA;
-          });
-          setProducts(prods);
-        } else {
-          // Seed Firestore with INITIAL_PRODUCTS if empty
-          try {
-            const batch = writeBatch(db);
-            INITIAL_PRODUCTS.forEach((p) => {
-              const pRef = doc(db, 'products', p.id);
-              batch.set(pRef, p);
-            });
-            await batch.commit();
-            setProducts(INITIAL_PRODUCTS);
-          } catch (err) {
-            console.warn('Could not seed initial products into Firestore:', err);
-            setProducts(INITIAL_PRODUCTS);
-          }
-        }
-      },
-      (error) => {
-        console.warn('Firestore snapshot error, falling back to local/backend:', error);
-        refreshProducts();
-      }
-    );
+    refreshProducts();
 
     // Auto-poll gold price every 1 hour (3600000 ms)
     const ONE_HOUR_MS = 60 * 60 * 1000;
     const interval = setInterval(refreshGoldPrice, ONE_HOUR_MS);
 
     return () => {
-      unsubscribe();
       clearInterval(interval);
     };
   }, []);
@@ -350,43 +297,23 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       id: product.id || `ina-prod-${Date.now()}`,
       createdAt: product.createdAt || new Date().toISOString(),
     };
-    try {
-      // 1. Direct cloud persistence in Firestore
-      const prodRef = doc(db, 'products', prodWithId.id);
-      await setDoc(prodRef, prodWithId);
-
-      // 2. Also notify server
-      fetch('/api/admin/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(prodWithId),
-      }).catch(() => {});
-
-      setProducts((prev) => [prodWithId, ...prev.filter((p) => p.id !== prodWithId.id)]);
-    } catch (e) {
-      console.error('Error saving product to Firestore:', e);
-      setProducts((prev) => [prodWithId, ...prev]);
-    }
+    const res = await fetch('/api/admin/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(prodWithId),
+    });
+    if (!res.ok) throw new Error('ذخیره محصول در سرور انجام نشد.');
+    setProducts((prev) => [prodWithId, ...prev.filter((p) => p.id !== prodWithId.id)]);
   };
 
   const updateProduct = async (id: string, updates: Partial<Product>) => {
-    try {
-      // 1. Direct update in Firestore
-      const prodRef = doc(db, 'products', id);
-      await updateDoc(prodRef, updates);
-
-      // 2. Also notify server
-      fetch(`/api/admin/products/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(updates),
-      }).catch(() => {});
-
-      setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
-    } catch (e) {
-      console.error('Error updating product in Firestore:', e);
-      setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
-    }
+    const res = await fetch(`/api/admin/products/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('ویرایش محصول در سرور انجام نشد.');
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
   };
 
   const updateSingleProductPricing = async (
@@ -400,60 +327,24 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       customProfitPercent: profitPercent,
       ...(discountPercent !== undefined ? { discountPercent } : {}),
     };
-    try {
-      // 1. Direct update in Firestore
-      const prodRef = doc(db, 'products', productId);
-      await updateDoc(prodRef, updates);
-
-      // 2. Also notify server
-      fetch(`/api/admin/products/${productId}/pricing`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(updates),
-      }).catch(() => {});
-
-      setProducts((prev) =>
-        prev.map((p) =>
-            p.id === productId
-            ? {
-                ...p,
-                ...updates,
-              }
-            : p
-        )
-      );
-    } catch (e) {
-      console.error('Error updating pricing in Firestore:', e);
-      setProducts((prev) =>
-        prev.map((p) =>
-          p.id === productId
-            ? {
-                ...p,
-                ...updates,
-              }
-            : p
-        )
-      );
-    }
+    const res = await fetch(`/api/admin/products/${productId}/pricing`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error('ذخیره قیمت‌گذاری محصول در سرور انجام نشد.');
+    setProducts((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, ...updates } : p))
+    );
   };
 
   const deleteProduct = async (id: string) => {
-    try {
-      // 1. Direct delete in Firestore
-      const prodRef = doc(db, 'products', id);
-      await deleteDoc(prodRef);
-
-      // 2. Also notify server
-      fetch(`/api/admin/products/${id}`, {
-        method: 'DELETE',
-        headers: { ...getAuthHeaders() },
-      }).catch(() => {});
-
-      setProducts((prev) => prev.filter((p) => p.id !== id));
-    } catch (e) {
-      console.error('Error deleting product in Firestore:', e);
-      setProducts((prev) => prev.filter((p) => p.id !== id));
-    }
+    const res = await fetch(`/api/admin/products/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) throw new Error('حذف محصول از سرور انجام نشد.');
+    setProducts((prev) => prev.filter((p) => p.id !== id));
   };
 
   return (

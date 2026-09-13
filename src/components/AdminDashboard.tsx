@@ -46,9 +46,7 @@ import { CATEGORIES_LIST } from '../data/seedData';
 import { Product, Order } from '../types';
 import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
 import { calculateProductPrice, calculateCustomGoldQuotation } from '../utils/pricingEngine';
-import { db } from '../lib/firebase';
 import { SystemLogsViewer } from './SystemLogsViewer';
-import { doc, deleteDoc, collection, getDocs, onSnapshot, setDoc } from 'firebase/firestore';
 import { getAuthHeaders } from '../utils/authHelper';
 
 export const AdminDashboard: React.FC = () => {
@@ -219,55 +217,15 @@ export const AdminDashboard: React.FC = () => {
   const fetchOrders = async () => {
     setLoadingOrders(true);
     try {
-      // 1. Fetch from server endpoint
-      let serverOrders: Order[] = [];
-      try {
-        const res = await fetch('/api/orders', {
-          headers: { ...getAuthHeaders() },
-        });
-        if (res.ok) {
-          serverOrders = await res.json();
-        }
-      } catch (err) {
-        console.warn('[ORDERS] Local server fetch fallback:', err);
-      }
-
-      // 2. Fetch from cloud Firestore for multi-instance redundancy across Cloud Run containers
-      let firestoreOrders: Order[] = [];
-      try {
-        const snap = await getDocs(collection(db, 'orders'));
-        firestoreOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order));
-      } catch (err) {
-        console.warn('[ORDERS] Cloud Firestore fetch fallback:', err);
-      }
-
-      // 3. Smart merge by id and trackingCode, retaining newest state
-      const mergedMap = new Map<string, Order>();
-      for (const ord of [...firestoreOrders, ...serverOrders]) {
-        const key = ord.id || ord.trackingCode;
-        if (!key) continue;
-        const existing = mergedMap.get(key);
-        if (!existing) {
-          mergedMap.set(key, ord);
-        } else {
-          const existingTime = new Date(
-            existing.updatedAt || existing.reviewedAt || existing.createdAt || 0
-          ).getTime();
-          const ordTime = new Date(
-            ord.updatedAt || ord.reviewedAt || ord.createdAt || 0
-          ).getTime();
-          if (ordTime >= existingTime) {
-            mergedMap.set(key, ord);
-          }
-        }
-      }
-
-      const combined = Array.from(mergedMap.values()).sort(
+      const res = await fetch('/api/orders', { headers: { ...getAuthHeaders() } });
+      if (!res.ok) throw new Error('دریافت سفارش‌ها از سرور انجام نشد.');
+      const serverOrders: Order[] = await res.json();
+      const sortedOrders = serverOrders.sort(
         (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
-      setOrders(combined);
+      setOrders(sortedOrders);
     } catch (err) {
-      console.error('[ORDERS] Error in merged orders fetch:', err);
+      console.error('[ORDERS] Server fetch failed:', err);
     } finally {
       setLoadingOrders(false);
     }
@@ -276,56 +234,8 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     if (activeAdminTab === 'orders') {
       fetchOrders();
-
-      // Real-time synchronization across instances via Firestore snapshot listener
-      let unsub = () => {};
-      try {
-        unsub = onSnapshot(
-          collection(db, 'orders'),
-          (snapshot) => {
-            if (!snapshot.empty) {
-              const cloudOrders: Order[] = snapshot.docs.map(
-                (d) => ({ id: d.id, ...d.data() } as Order)
-              );
-              setOrders((prev) => {
-                const map = new Map<string, Order>();
-                for (const ord of [...cloudOrders, ...prev]) {
-                  const k = ord.id || ord.trackingCode;
-                  if (k) {
-                    const ex = map.get(k);
-                    if (!ex) {
-                      map.set(k, ord);
-                    } else {
-                      const exTime = new Date(
-                        ex.updatedAt || ex.reviewedAt || ex.createdAt || 0
-                      ).getTime();
-                      const ordTime = new Date(
-                        ord.updatedAt || ord.reviewedAt || ord.createdAt || 0
-                      ).getTime();
-                      if (ordTime >= exTime) {
-                        map.set(k, ord);
-                      }
-                    }
-                  }
-                }
-                return Array.from(map.values()).sort(
-                  (a, b) =>
-                    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-                );
-              });
-            }
-          },
-          (err) => {
-            console.warn('[ORDERS] Realtime orders snapshot notice:', err);
-          }
-        );
-      } catch (err) {
-        console.warn('[ORDERS] Snapshot registration error:', err);
-      }
-
-      return () => {
-        unsub();
-      };
+      const interval = window.setInterval(fetchOrders, 15000);
+      return () => window.clearInterval(interval);
     }
   }, [activeAdminTab]);
 
@@ -453,21 +363,6 @@ export const AdminDashboard: React.FC = () => {
         }),
       });
 
-      // Mirror to Firestore for cross-container consistency
-      try {
-        await setDoc(
-          doc(db, 'orders', orderId),
-          {
-            status: newStatus,
-            reviewedAt: nowIso,
-            updatedAt: nowIso,
-          },
-          { merge: true }
-        );
-      } catch (fErr) {
-        console.warn('[FIRESTORE] Notice on order status sync:', fErr);
-      }
-
       if (res.ok) {
         setOrders((prev) =>
           prev.map((o) =>
@@ -506,21 +401,6 @@ export const AdminDashboard: React.FC = () => {
           reviewedAt: nowIso,
         }),
       });
-
-      // Mirror approval to Firestore
-      try {
-        await setDoc(
-          doc(db, 'orders', order.id),
-          {
-            status: 'تأیید شده',
-            reviewedAt: nowIso,
-            updatedAt: nowIso,
-          },
-          { merge: true }
-        );
-      } catch (fErr) {
-        console.warn('[FIRESTORE] Notice on order approve sync:', fErr);
-      }
 
       if (res.ok) {
         setOrders((prev) =>
@@ -569,22 +449,6 @@ export const AdminDashboard: React.FC = () => {
         }),
       });
 
-      // Mirror rejection to Firestore
-      try {
-        await setDoc(
-          doc(db, 'orders', orderId),
-          {
-            status: 'رد شده',
-            rejectionReason: reason,
-            reviewedAt: nowIso,
-            updatedAt: nowIso,
-          },
-          { merge: true }
-        );
-      } catch (fErr) {
-        console.warn('[FIRESTORE] Notice on order reject sync:', fErr);
-      }
-
       if (res.ok) {
         setOrders((prev) =>
           prev.map((o) =>
@@ -630,13 +494,6 @@ export const AdminDashboard: React.FC = () => {
       });
 
       if (res.ok) {
-        // Also attempt direct Firestore document deletion if existing
-        try {
-          await deleteDoc(doc(db, 'orders', targetId));
-        } catch (firestoreErr) {
-          console.warn('[FIRESTORE] Notice on deleteDoc:', firestoreErr);
-        }
-
         setOrders((prev) => prev.filter((o) => o.id !== targetId));
         setOrderActionNotification({
           message: `سفارش کد ${tracking} با موفقیت از پایگاه داده و حافظه حذف گردید.`,
@@ -821,7 +678,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 mt-0.5">
-                تغییرات محصولات، اجرت، سود و نرخ‌ها به صورت خودکار در پایگاه داده ابری فایربیس (Firestore) ذخیره می‌شوند.
+                تغییرات محصولات، اجرت، سود و نرخ‌ها به صورت امن در پایگاه داده اصلی سایت ذخیره می‌شوند.
               </p>
             </div>
           </div>

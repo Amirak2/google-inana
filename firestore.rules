@@ -1,60 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Default deny all unknown collections
+    // Firebase is used only for authentication. Application data is stored by
+    // the site's authenticated server API, so no browser may access Firestore.
     match /{document=**} {
       allow read, write: if false;
-    }
-
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    // Secure Admin definition: only verified admin email or admin-authorized claim
-    function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.email == 'amirbiashad@gmail.com'
-      );
-    }
-
-    // User profiles:
-    // - Creation: role must be 'customer' unless creating by admin email
-    // - Update: role cannot be escalated by regular user
-    match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && (
-        request.resource.data.role == 'customer' ||
-        (request.resource.data.role == 'admin' && isAdmin())
-      );
-      allow update: if (isOwner(userId) && (
-        // A regular user cannot modify their role field
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
-      )) || isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    // Products catalog: read by everyone, write/create/delete strictly by admin
-    match /products/{productId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // Store settings & global pricing: read by everyone, write strictly by admin
-    match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    // Orders: create by authenticated user or admin, read by customer owner or admin, manage by admin
-    match /orders/{orderId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
-      allow update, delete: if isAdmin();
     }
   }
 }

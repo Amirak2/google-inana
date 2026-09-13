@@ -6,9 +6,8 @@ import {
   signOut,
   updateProfile as firebaseUpdateProfile,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db, googleProvider, PRIMARY_ADMIN_EMAIL, checkIsAdmin } from '../lib/firebase';
-import { UserProfile, UserRole } from '../types';
+import { auth, googleProvider, checkIsAdmin } from '../lib/firebase';
+import { UserProfile } from '../types';
 
 export interface AuthUser {
   uid: string;
@@ -82,60 +81,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   };
 
-  // Sync profile from Firestore for Google Auth
+  // Exchange the Firebase identity proof for the site's own server session.
   const syncProfile = async (user: User) => {
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userRef);
-
-      const isPrimaryAdmin = user.email?.toLowerCase().trim() === PRIMARY_ADMIN_EMAIL.toLowerCase().trim();
-
-      if (userSnap.exists()) {
-        const data = userSnap.data() as UserProfile;
-        const effectiveRole: UserRole = isPrimaryAdmin || data.role === 'admin' ? 'admin' : 'customer';
-        const profile: UserProfile = {
-          ...data,
-          role: effectiveRole,
-        };
-        setUserProfile(profile);
-        setIsAdmin(checkIsAdmin(user.email, profile.role));
-      } else {
-        const newRole: UserRole = isPrimaryAdmin ? 'admin' : 'customer';
-        const initialProfile: UserProfile = {
-          uid: user.uid,
-          email: user.email || '',
-          displayName: user.displayName || 'کاربر گالری اینانا',
-          phoneNumber: user.phoneNumber || '',
-          role: newRole,
-          address: '',
-          createdAt: new Date().toISOString(),
-        };
-        await setDoc(userRef, initialProfile);
-        setUserProfile(initialProfile);
-        setIsAdmin(checkIsAdmin(user.email, newRole));
-      }
-    } catch (error) {
-      console.error('Error syncing user profile from Firestore:', error);
-      const isPrimary = user.email?.toLowerCase().trim() === PRIMARY_ADMIN_EMAIL.toLowerCase().trim();
-      const fallbackProfile: UserProfile = {
-        uid: user.uid,
-        email: user.email || '',
-        displayName: user.displayName || 'کاربر گالری اینانا',
-        role: isPrimary ? 'admin' : 'customer',
-        createdAt: new Date().toISOString(),
-      };
-      setUserProfile(fallbackProfile);
-      setIsAdmin(isPrimary);
+    const idToken = await user.getIdToken(true);
+    const response = await fetch('/api/auth/google-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.token || !data.user) {
+      localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
+      setUserProfile(null);
+      setIsAdmin(false);
+      throw new Error(data.error || 'ورود با گوگل در سرور تایید نشد.');
     }
+
+    const profile = data.user as UserProfile;
+    localStorage.setItem(
+      LOCAL_STORAGE_SESSION_KEY,
+      JSON.stringify({ user: profile, token: data.token })
+    );
+    setCurrentUser(user);
+    setUserProfile(profile);
+    setIsAdmin(checkIsAdmin(profile.email, profile.role));
   };
 
   useEffect(() => {
     // 1. Listen for Firebase Auth changes (e.g. Google Sign In)
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        setCurrentUser(firebaseUser);
-        await syncProfile(firebaseUser);
-        setLoading(false);
+        try {
+          await syncProfile(firebaseUser);
+        } catch (error) {
+          console.error('Google session verification failed:', error);
+          setCurrentUser(null);
+          setUserProfile(null);
+          setIsAdmin(false);
+        } finally {
+          setLoading(false);
+        }
       } else {
         // 2. If no Firebase user, check if we have a persistent email/password session
         const hasSession = restoreLocalSession();
@@ -275,35 +260,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
     const res = await signInWithPopup(auth, googleProvider);
     await syncProfile(res.user);
-
-    // Obtain cryptographically signed Firebase ID token to prove identity to the server
-    const idToken = await res.user.getIdToken(true);
-
-    // Sync Google user with server auth store by providing verified cryptographic ID token
-    try {
-      const syncRes = await fetch('/api/auth/google-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      });
-      if (syncRes.ok) {
-        const syncData = await syncRes.json();
-        if (syncData.token && syncData.user) {
-          localStorage.setItem(
-            LOCAL_STORAGE_SESSION_KEY,
-            JSON.stringify({ user: syncData.user, token: syncData.token })
-          );
-          setUserProfile(syncData.user);
-          setIsAdmin(checkIsAdmin(syncData.user.email, syncData.user.role));
-        }
-      } else {
-        const errJson = await syncRes.json().catch(() => ({}));
-        console.error('[AUTH] Google server-sync error:', errJson);
-      }
-    } catch (syncErr) {
-      console.warn('[AUTH] Google server-sync notice:', syncErr);
-    }
-
     closeAuthModal();
   };
 
@@ -340,58 +296,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateUserProfileData = async (data: Partial<UserProfile>) => {
     if (!currentUser || !userProfile) return;
 
-    // Check if user is an email/token session user
     const localSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
-    if (localSession) {
-      try {
-        const { token } = JSON.parse(localSession);
-        const res = await fetch('/api/auth/profile', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(data),
-        });
+    if (!localSession) throw new Error('نشست کاربری معتبر نیست. لطفاً دوباره وارد شوید.');
 
-        if (res.ok) {
-          const resData = await res.json();
-          if (resData.success && resData.user) {
-            const updatedProfile = resData.user as UserProfile;
-            localStorage.setItem(
-              LOCAL_STORAGE_SESSION_KEY,
-              JSON.stringify({ user: updatedProfile, token })
-            );
-            setUserProfile(updatedProfile);
-            setCurrentUser({
-              uid: updatedProfile.uid,
-              email: updatedProfile.email,
-              displayName: updatedProfile.displayName,
-              phoneNumber: updatedProfile.phoneNumber,
-            });
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn('Could not update profile via server:', err);
-      }
+    const { token } = JSON.parse(localSession);
+    const res = await fetch('/api/auth/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+    const resData = await res.json().catch(() => ({}));
+    if (!res.ok || !resData.success || !resData.user) {
+      throw new Error(resData.error || 'ذخیره اطلاعات حساب انجام نشد.');
     }
 
-    // Fallback: If Firebase user
-    try {
-      const userRef = doc(db, 'users', currentUser.uid);
-      const updated = {
-        ...data,
-        updatedAt: new Date().toISOString(),
-      };
-      await updateDoc(userRef, updated);
-      setUserProfile((prev) => (prev ? { ...prev, ...updated } : null));
+    const updatedProfile = resData.user as UserProfile;
+    localStorage.setItem(
+      LOCAL_STORAGE_SESSION_KEY,
+      JSON.stringify({ user: updatedProfile, token })
+    );
+    setUserProfile(updatedProfile);
+    setCurrentUser({
+      uid: updatedProfile.uid,
+      email: updatedProfile.email,
+      displayName: updatedProfile.displayName,
+      phoneNumber: updatedProfile.phoneNumber,
+    });
 
-      if ('updateProfile' in currentUser && data.displayName && data.displayName !== currentUser.displayName) {
-        await firebaseUpdateProfile(currentUser as User, { displayName: data.displayName });
-      }
-    } catch (err) {
-      console.warn('Could not update Firestore profile:', err);
+    if ('getIdToken' in currentUser && data.displayName && data.displayName !== currentUser.displayName) {
+      await firebaseUpdateProfile(currentUser as User, { displayName: data.displayName });
     }
   };
 
