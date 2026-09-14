@@ -10,7 +10,10 @@ coverage/
 *_db.json
 *.tmp
 .session_secret
-
 .wrangler/
 .dev.vars
 .sites-runtime/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+data/*.sqlite*

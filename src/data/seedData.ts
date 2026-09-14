@@ -79,6 +79,33 @@ export const CATEGORIES_LIST = [
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
+    id: 'inana-test-ring-2qty',
+    title: 'انگشتر طلای ۱۸ عیار اینانا (موجودی ۲ عدد)',
+    slug: 'inana-test-ring-2qty',
+    category: 'انگشتر',
+    collection: 'کالکشن تست و ارزیابی سیستم',
+    weight: 1.25,
+    purity: '18 عیار',
+    customMakingChargePercent: 14,
+    customProfitPercent: 7,
+    additionalCost: 0,
+    stoneCost: 0,
+    discountPercent: 0,
+    images: [
+      'https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=800&q=85',
+      'https://images.unsplash.com/photo-1603561591411-07134e71a2a9?auto=format&fit=crop&w=800&q=85',
+    ],
+    description: 'انگشتر اختصاصی طلای ۱۸ عیار استاندارد با طراحی ارگونومیک جهت آزمون و ارزیابی رفتار انبارداری، قفل نرخ و تراکنش‌های اتمیک سیستم.',
+    features: ['موجودی دقیقاً ۲ عدد برای تست همزمانی و کسر انبار', 'طلای زرد ۱۸ عیار استاندارد (۷۵۰)', 'فاکتور رسمی و تضمین اصالت اتحادیه'],
+    dimensions: 'قطر ۱۸ میلی‌متر (سایز ۵۴)',
+    sku: 'INA-TEST-RING-002',
+    stock: 2,
+    isNewArrival: true,
+    isBestSeller: true,
+    isFeatured: true,
+    createdAt: '2026-09-12T00:00:00Z',
+  },
+  {
     id: 'inana-letter-f',
     title: 'پلاک طلا حرف F اینانا',
     slug: 'pendant-letter-f',
