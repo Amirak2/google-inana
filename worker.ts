@@ -47,7 +47,9 @@ export default {
         const origin = request.headers.get('origin');
         if (origin && origin !== url.origin) return Response.json({ error: 'مبدأ درخواست معتبر نیست.' }, { status: 403 });
       }
-      store = await Store.load(bindings, !['GET','HEAD'].includes(request.method));
+      const publicRead = ['GET','HEAD'].includes(request.method) &&
+        ['/api/products', '/api/collections', '/api/settings', '/api/gold-price', '/api/gold-history'].includes(url.pathname);
+      store = await Store.load(bindings, !['GET','HEAD'].includes(request.method), publicRead);
       const app = createApp(store, { ...bindings, NODE_ENV: 'production' });
       if (url.pathname.startsWith('/api/receipts/') || url.pathname.startsWith('/media/products/')) {
         const id = url.pathname.split('/').pop()!;

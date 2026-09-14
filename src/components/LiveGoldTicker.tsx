@@ -151,14 +151,13 @@ export const LiveGoldTicker: React.FC = () => {
           <div>
             <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#E6CA65] uppercase tracking-widest mb-3 px-3.5 py-1.5 rounded-full bg-[#0B152B] border border-[#D4AF37]/35 shadow-sm">
               <Activity className="w-3.5 h-3.5 text-[#D4AF37]" />
-              <span>تابلو رسمی و لحظه‌ای نرخ طلا</span>
+              <span>{goldPrice.status === 'live' ? 'نرخ زندهٔ طلا' : goldPrice.status === 'manual' ? 'نرخ تعیین‌شده توسط مدیر' : 'نرخ زنده در دسترس نیست؛ آخرین نرخ دریافتی'}</span>
             </div>
             <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold gold-gradient-text tracking-wide">
               قیمت روز طلای ۱۸ عیار ایران
             </h2>
             <p className="text-slate-300 text-xs sm:text-sm mt-1.5 max-w-xl font-light">
-              تمامی قیمت‌های زیورآلات اینانا گلد به صورت خودکار و زنده بر مبنای این نرخ محاسبه
-              می‌شوند.
+              قیمت نهایی سفارش پیش از پرداخت توسط سرور تأیید می‌شود.
             </p>
           </div>
 
@@ -183,7 +182,7 @@ export const LiveGoldTicker: React.FC = () => {
               <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
             </div>
             <div className="text-2xl sm:text-3xl font-extrabold text-white mb-2 truncate">
-              {formatToman(goldPrice.pricePerGram)}
+              {goldPrice.pricePerGram > 0 ? formatToman(goldPrice.pricePerGram) : 'در دسترس نیست'}
             </div>
             <div className="flex items-center gap-1.5 text-xs">
               <span

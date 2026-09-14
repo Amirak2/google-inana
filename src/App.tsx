@@ -19,7 +19,7 @@ import { FavoritesView } from './components/FavoritesView';
 import { DynamicBackgroundMotion } from './components/DynamicBackgroundMotion';
 
 const MainLayout: React.FC = () => {
-  const { activeTab, setActiveTab, quickViewProduct, setQuickViewProduct } = useGoldStore();
+  const { activeTab, setActiveTab, quickViewProduct, setQuickViewProduct, goldPrice } = useGoldStore();
   const { isAdmin } = useAuth();
 
   // Strict guard: Ordinary users are never shown the admin panel and are routed to home
@@ -33,6 +33,11 @@ const MainLayout: React.FC = () => {
     <div className="min-h-screen bg-[#060B15] text-slate-100 flex flex-col font-sans selection:bg-[#D4AF37] selection:text-slate-950 w-full max-w-full overflow-x-hidden relative">
       {/* Top Navbar */}
       <Navbar />
+      {goldPrice.status === 'cached' && (
+        <div role="status" className="fixed bottom-20 inset-x-4 z-[70] rounded-xl bg-amber-950 p-3 text-center text-sm text-amber-100">
+          نرخ زندهٔ طلا در دسترس نیست. قیمت‌های نمایشی قطعی نیستند؛ مبلغ سفارش پیش از پرداخت تأیید می‌شود.
+        </div>
+      )}
 
       {/* Main Content Router based on activeTab */}
       <main className="flex-1 relative w-full max-w-full overflow-x-hidden">

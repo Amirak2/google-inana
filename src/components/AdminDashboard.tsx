@@ -260,6 +260,8 @@ export const AdminDashboard: React.FC = () => {
   // Handle global gold rate and bank account settings save
   const handleSaveRateAndGlobalSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    setRateSaveSuccess(false);
+    try {
     await updateGoldPriceManual(overridePrice);
     await updateStoreSettings({
       profitPercent: profitPct,
@@ -272,6 +274,9 @@ export const AdminDashboard: React.FC = () => {
     });
     setRateSaveSuccess(true);
     setTimeout(() => setRateSaveSuccess(false), 3000);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'ذخیره انجام نشد.');
+    }
   };
 
   // Handle full product save (create or full edit)

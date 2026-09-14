@@ -23,6 +23,18 @@ try {
   const registration = await call('/api/auth/register', 'POST', { email: 'customer@example.com', password: 'Test-customer-12345!', displayName: 'کاربر آزمایشی', phoneNumber: '09123456789' });
   assert.equal(registration.status, 201, JSON.stringify(registration));
   const token = registration.data.token;
+  // A phone claimed after a change request must not become shared at confirmation.
+  const newPhone = '09123334444';
+  const second = await call('/api/auth/register', 'POST', { email: 'second@example.com', password: 'Test-second-12345!', displayName: 'کاربر دوم', phoneNumber: newPhone });
+  assert.equal(second.status, 201);
+  await db.prepare('INSERT OR REPLACE INTO site_records (bucket, record_key, value_json) VALUES (?, ?, ?)').bind('phoneOtp', registration.data.user.uid, JSON.stringify({ newMobile: newPhone, code: '12345', expiresAt: Date.now() + 180000, attempts: 0 })).run();
+  assert.equal((await call('/api/auth/phone/change-verify', 'POST', { code: '12345' }, token)).status, 400);
+  assert.equal((await call('/api/auth/me', 'GET', undefined, token)).data.user.phoneNumber, '09123456789');
+  // Read traffic must neither lose unloaded records nor modify the admin timestamp.
+  const beforeAdmin = await db.prepare("SELECT value_json FROM site_records WHERE bucket = 'users' AND record_key = 'admin@example.com'").first();
+  await call('/api/products');
+  const afterAdmin = await db.prepare("SELECT value_json FROM site_records WHERE bucket = 'users' AND record_key = 'admin@example.com'").first();
+  assert.equal(afterAdmin.value_json, beforeAdmin.value_json);
   await db.prepare('INSERT OR REPLACE INTO site_records (bucket, record_key, value_json) VALUES (?, ?, ?)').bind('market', 'gold', JSON.stringify({ pricePerGram: 23000000, isManualOverride: true, status: 'manual', timestamp: new Date().toISOString() })).run();
   assert.equal((await call('/api/auth/me', 'GET', undefined, token)).status, 200);
   assert.equal((await call('/api/admin/logs', 'GET', undefined, token)).status, 403);
@@ -37,6 +49,8 @@ try {
   assert.equal(repeat.status, 200, JSON.stringify(repeat));
   assert.equal(repeat.data.order.id, order.data.order.id);
   const orders = await call('/api/orders', 'GET', undefined, token);
+  await call('/api/products');
+  assert.ok(JSON.stringify((await call('/api/orders', 'GET', undefined, token)).data).includes(order.data.order.id));
   assert.equal(orders.status, 200); assert.ok(JSON.stringify(orders.data).includes(order.data.order.id));
   const receiptPath = order.data.order.paymentReceiptImage;
   assert.equal((await mf.dispatchFetch('http://localhost' + receiptPath)).status, 403);

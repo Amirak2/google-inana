@@ -55,18 +55,18 @@ interface GoldStoreContextType {
 }
 
 const initialGoldPrice: GoldPriceData = {
-  pricePerGram: 22835100,
+  pricePerGram: 0,
   currency: 'تومان',
   purity: '18 عیار (750)',
-  timestamp: new Date().toISOString(),
+  timestamp: '2026-09-02T16:12:00Z',
   jalaliTimestamp: '۱۴۰۵/۰۶/۱۱ - ۱۹:۴۲',
-  source: 'سامانه آنلاین اتحادیه طلا و جواهر (TGJU Live API)',
+  source: 'نرخ طلا هنوز دریافت نشده است',
   changePercent: 2.88,
   dailyHigh: 22924400,
   dailyLow: 22197000,
   previousPrice: 22197000,
   isManualOverride: false,
-  status: 'live',
+  status: 'cached',
   otherMarkets: {
     gold24k: 30446500,
     mesghal: 98916000,
@@ -131,11 +131,13 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       const url = force ? '/api/gold-price?force=true' : '/api/gold-price';
       const res = await fetch(url);
+      if (!res.ok) throw new Error('دریافت نرخ طلا انجام نشد.');
       if (res.ok) {
         const data = await res.json();
         setGoldPrice(data);
       }
     } catch (err) {
+      setGoldPrice(prev => ({ ...prev, status: 'cached' }));
       console.warn('Using local gold price state', err);
     }
   };
@@ -253,6 +255,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(newSettings),
       });
+      if (!res.ok) throw new Error('تنظیمات ذخیره نشد. دوباره تلاش کنید.');
       if (res.ok) {
         const data = await res.json();
         setSettings(data.settings);
@@ -260,7 +263,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     } catch (e) {
       console.error(e);
-      setSettings((prev) => ({ ...prev, ...newSettings }));
+      throw e;
     }
   };
 
@@ -273,6 +276,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(priceData),
       });
+      if (!res.ok) throw new Error('نرخ طلا ذخیره نشد. دوباره تلاش کنید.');
       if (res.ok) {
         const data = await res.json();
         setGoldPrice(data.goldPrice);
@@ -280,7 +284,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     } catch (e) {
       console.error(e);
-      setGoldPrice((prev) => ({ ...prev, ...priceData }));
+      throw e;
     }
   };
 

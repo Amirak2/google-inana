@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   User,
   onAuthStateChanged,
@@ -40,6 +40,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const LOCAL_STORAGE_SESSION_KEY = 'inana_user_session';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const googlePopupActive = useRef(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -110,6 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     // 1. Listen for Firebase Auth changes (e.g. Google Sign In)
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (googlePopupActive.current) return;
       if (firebaseUser) {
         try {
           await syncProfile(firebaseUser);
@@ -256,11 +258,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithGoogle = async () => {
-    // Clear any previous email session before Google login
-    localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
-    const res = await signInWithPopup(auth, googleProvider);
-    await syncProfile(res.user);
-    closeAuthModal();
+    if (googlePopupActive.current) return;
+    googlePopupActive.current = true;
+    try {
+      const res = await signInWithPopup(auth, googleProvider);
+      await syncProfile(res.user);
+      closeAuthModal();
+    } finally {
+      googlePopupActive.current = false;
+      setLoading(false);
+    }
   };
 
   const logout = async () => {

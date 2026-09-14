@@ -16,18 +16,25 @@ export class Store {
   private revision = 0;
   private lease = '';
   constructor(private env: Bindings) {}
-  static async load(env: Bindings, exclusive = false) {
+  static async load(env: Bindings, exclusive = false, publicRead = false) {
     const store = new Store(env);
     await env.DB.prepare('INSERT OR IGNORE INTO site_revision (id, revision, lease_until, lease_token) VALUES (1, 0, 0, ?)').bind('').run();
     if (exclusive) {
       store.lease = crypto.randomUUID();
-      const result = await env.DB.prepare('UPDATE site_revision SET lease_until = ?, lease_token = ? WHERE id = 1 AND lease_until < ?').bind(Date.now() + 60000, store.lease, Date.now()).run();
-      if (!result.meta.changes) throw new BusyError();
+      const deadline = Date.now() + 2500;
+      while (true) {
+        const result = await env.DB.prepare('UPDATE site_revision SET lease_until = ?, lease_token = ? WHERE id = 1 AND lease_until < ?').bind(Date.now() + 60000, store.lease, Date.now()).run();
+        if (result.meta.changes) break;
+        if (Date.now() >= deadline) throw new BusyError();
+        await new Promise(resolve => setTimeout(resolve, 80 + Math.floor(Math.random() * 120)));
+      }
     }
     try {
       const [version, records] = await env.DB.batch([
         env.DB.prepare('SELECT revision FROM site_revision WHERE id = 1'),
-        env.DB.prepare('SELECT bucket, record_key, value_json FROM site_records'),
+        env.DB.prepare(publicRead
+          ? "SELECT bucket, record_key, value_json FROM site_records WHERE bucket NOT IN ('orders', 'idempotency', 'media', 'logs', 'quotes')"
+          : 'SELECT bucket, record_key, value_json FROM site_records'),
       ]);
       store.revision = Number((version.results[0] as any).revision);
       for (const row of records.results as any[]) {

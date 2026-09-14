@@ -144,9 +144,11 @@ function loadUsers(): void {
       user.updatedAt = new Date().toISOString();
     }
   }
-  adminUser.role = 'admin';
-  adminUser.phoneNumber = normalizedAdminPhone;
-  adminUser.updatedAt = new Date().toISOString();
+  if (adminUser.role !== 'admin' || adminUser.phoneNumber !== normalizedAdminPhone) {
+    adminUser.role = 'admin';
+    adminUser.phoneNumber = normalizedAdminPhone;
+    adminUser.updatedAt = new Date().toISOString();
+  }
   saveUsers();
 }
 
@@ -808,6 +810,14 @@ function verifyPhoneChangeOtp(userId: string, code: string): UserProfile {
   }
 
   // Code is verified: update user phone number
+  const owner = findUserByMobile(pending.newMobile);
+  if ((owner && owner.uid !== targetUser.uid) ||
+      (pending.newMobile === normalizeIranianMobile(PRIMARY_ADMIN_PHONE) &&
+       targetUser.email.toLowerCase().trim() !== PRIMARY_ADMIN_EMAIL)) {
+    phoneChangeOtpCache.delete(userId);
+    throw new Error('این شماره همراه به حساب دیگری متصل است.');
+  }
+  otpCache.delete(pending.newMobile);
   targetUser.phoneNumber = pending.newMobile;
   targetUser.updatedAt = new Date().toISOString();
   saveUsers();

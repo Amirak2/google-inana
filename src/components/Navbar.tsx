@@ -92,9 +92,9 @@ export const Navbar: React.FC = () => {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#D4AF37] opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#D4AF37]"></span>
               </span>
-              <span>نرخ لحظه‌ای ۱۸ عیار:</span>
+              <span>{goldPrice.status === 'live' ? 'نرخ لحظه‌ای ۱۸ عیار:' : 'نرخ تأییدنشده / آخرین نرخ:'}</span>
               <span className="font-bold text-white font-sans">
-                {formatToman(goldPrice.pricePerGram)}
+                {goldPrice.pricePerGram > 0 ? formatToman(goldPrice.pricePerGram) : 'در دسترس نیست'}
               </span>
               <TrendingUp className="w-3 h-3 text-[#D4AF37] mr-0.5 opacity-80 group-hover:opacity-100 transition-opacity" />
             </button>
