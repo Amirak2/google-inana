@@ -433,7 +433,7 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
   // 1. Primary Source: Navasan Tech API (item: 18ayar) if configured
   const navasanKey = env.GOLD_API_KEY ? env.GOLD_API_KEY.trim() : '';
   if (navasanKey) {
-    const navasanUrl = `http://api.navasan.tech/latest/?api_key=${encodeURIComponent(navasanKey)}`;
+    const navasanUrl = `https://api.navasan.tech/latest/?api_key=${encodeURIComponent(navasanKey)}`;
 
     try {
       const navResponse = await fetch(navasanUrl, {
