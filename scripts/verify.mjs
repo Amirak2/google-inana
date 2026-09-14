@@ -8,9 +8,9 @@ const db = await mf.getD1Database('DB');
 const migration = await readFile(new URL('drizzle/0000_greedy_trauma.sql', root), 'utf8');
 for (const sql of migration.split('--> statement-breakpoint')) await db.prepare(sql.trim()).run();
 async function call(path, method = 'GET', body, token, headers = {}) {
-  const response = await mf.dispatchFetch('http://localhost' + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  const response = await mf.dispatchFetch('http://localhost' + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Cookie: 'token=' + encodeURIComponent(token) } : {}), ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const data = await response.json();
-  return { status: response.status, data };
+  return { status: response.status, data, token: decodeURIComponent(response.headers.get('set-cookie')?.match(/^token=([^;]+)/)?.[1] || '') };
 }
 try {
   assert.equal((await mf.dispatchFetch('http://localhost/')).status, 200);
@@ -22,14 +22,21 @@ try {
   assert.equal(admin.status, 200, JSON.stringify(admin));
   const registration = await call('/api/auth/register', 'POST', { email: 'customer@example.com', password: 'Test-customer-12345!', displayName: 'کاربر آزمایشی', phoneNumber: '09123456789' });
   assert.equal(registration.status, 201, JSON.stringify(registration));
-  const token = registration.data.token;
+  const token = registration.token;
+  assert.ok(token);
+  assert.equal(registration.data.token, undefined);
+  assert.equal(registration.data.user.phoneNumber, '');
+  assert.equal((await call('/api/gold-price/refresh', 'POST')).status, 401);
+  assert.equal((await call('/api/admin/gold-price/sync', 'POST', {}, token)).status, 403);
   // A phone claimed after a change request must not become shared at confirmation.
   const newPhone = '09123334444';
   const second = await call('/api/auth/register', 'POST', { email: 'second@example.com', password: 'Test-second-12345!', displayName: 'کاربر دوم', phoneNumber: newPhone });
   assert.equal(second.status, 201);
+  const secondRow = await db.prepare("SELECT value_json FROM site_records WHERE bucket = 'users' AND record_key = 'second@example.com'").first();
+  await db.prepare("UPDATE site_records SET value_json = ? WHERE bucket = 'users' AND record_key = 'second@example.com'").bind(JSON.stringify({...JSON.parse(secondRow.value_json), phoneNumber: newPhone, phoneVerified: true})).run();
   await db.prepare('INSERT OR REPLACE INTO site_records (bucket, record_key, value_json) VALUES (?, ?, ?)').bind('phoneOtp', registration.data.user.uid, JSON.stringify({ newMobile: newPhone, code: '12345', expiresAt: Date.now() + 180000, attempts: 0 })).run();
   assert.equal((await call('/api/auth/phone/change-verify', 'POST', { code: '12345' }, token)).status, 400);
-  assert.equal((await call('/api/auth/me', 'GET', undefined, token)).data.user.phoneNumber, '09123456789');
+  assert.equal((await call('/api/auth/me', 'GET', undefined, token)).data.user.phoneNumber, '');
   // Read traffic must neither lose unloaded records nor modify the admin timestamp.
   const beforeAdmin = await db.prepare("SELECT value_json FROM site_records WHERE bucket = 'users' AND record_key = 'admin@example.com'").first();
   await call('/api/products');

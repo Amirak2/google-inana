@@ -8,6 +8,8 @@ export interface StoredUser {
   uid: string;
   email: string;
   passwordHash?: string;
+  phoneVerified?: boolean;
+  googleUid?: string;
   salt?: string;
   displayName: string;
   phoneNumber?: string;
@@ -160,6 +162,7 @@ loadUsers();
 function createSessionToken(user: StoredUser): string {
   const payload = Buffer.from(
     JSON.stringify({
+      sessionVersion: 2,
       uid: user.uid,
       email: user.email,
       role: user.role,
@@ -198,10 +201,11 @@ function verifySessionToken(token: string): UserProfile | null {
     }
 
     const data = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'));
+    if (data.sessionVersion !== 2) return null;
     if (typeof data.exp !== 'number' || data.exp < Date.now()) return null;
 
     const user = usersCache.get(data.email?.toLowerCase().trim());
-    if (!user) return null;
+    if (!user || user.uid !== data.uid) return null;
 
     return sanitizeUser(user);
   } catch {
@@ -283,7 +287,8 @@ function registerUser(
     passwordHash,
     salt,
     displayName: displayName.trim(),
-    phoneNumber: normPhone || phoneNumber?.trim() || '',
+    phoneNumber: '',
+    phoneVerified: false,
     role: 'customer',
     address: '',
     createdAt: new Date().toISOString(),
@@ -521,19 +526,20 @@ function verifySmsOtpAndAuthenticate(
   // The designated admin phone always resolves to the same email-backed account.
   let user = isMasterAdmin
     ? usersCache.get(PRIMARY_ADMIN_EMAIL.toLowerCase().trim())
-    : findUserByMobile(cleanMobile);
+    : [...usersCache.values()].find(u => u.phoneNumber && normalizeIranianMobile(u.phoneNumber) === cleanMobile && (u.phoneVerified === true || (!u.passwordHash && !u.googleUid)));
   let isNewUser = false;
 
   if (!user) {
     // Register new user with this mobile
     isNewUser = true;
-    const defaultEmail = `${cleanMobile}@inanagold.ir`;
+    const defaultEmail = `sms-${crypto.randomUUID()}@users.inanagold.invalid`;
 
     user = {
       uid: isMasterAdmin ? 'ina_admin_master' : `ina_usr_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
       email: isMasterAdmin ? PRIMARY_ADMIN_EMAIL : defaultEmail,
       displayName: displayName?.trim() || `کاربر ${cleanMobile.slice(-4)}`,
       phoneNumber: cleanMobile,
+      phoneVerified: true,
       role: isMasterAdmin ? 'admin' : 'customer',
       address: '',
       createdAt: new Date().toISOString(),
@@ -556,6 +562,7 @@ function verifySmsOtpAndAuthenticate(
     }
   }
 
+  user.phoneVerified = true;
   const token = createSessionToken(user);
   return {
     user: sanitizeUser(user),
@@ -696,6 +703,10 @@ function syncGoogleUser(googleUser: {
 
   let user = usersCache.get(cleanEmail);
   const isPrimaryAdmin = cleanEmail === PRIMARY_ADMIN_EMAIL.toLowerCase().trim();
+  // Never merge verified Google identity into an unverified password account.
+  if (user && !isPrimaryAdmin && ((user.googleUid && user.googleUid !== googleUser.uid) || (!user.googleUid && user.passwordHash))) {
+    throw new Error('این ایمیل قبلاً با رمز عبور ثبت شده است. برای اتصال گوگل ابتدا مالکیت حساب قبلی باید تأیید شود.');
+  }
 
   if (!user) {
     user = {
@@ -723,6 +734,7 @@ function syncGoogleUser(googleUser: {
     }
   }
 
+  user.googleUid = googleUser.uid;
   const token = createSessionToken(user);
   return {
     user: sanitizeUser(user),
@@ -819,6 +831,7 @@ function verifyPhoneChangeOtp(userId: string, code: string): UserProfile {
   }
   otpCache.delete(pending.newMobile);
   targetUser.phoneNumber = pending.newMobile;
+  targetUser.phoneVerified = true;
   targetUser.updatedAt = new Date().toISOString();
   saveUsers();
 

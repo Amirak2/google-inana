@@ -626,8 +626,7 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
 // 1. Gold Price Endpoint
 app.get('/api/gold-price', async (req: Request, res: Response) => {
   try {
-    const force = req.query.force === 'true';
-    const goldPrice = await getOrUpdateGoldPrice(force);
+    const goldPrice = await getOrUpdateGoldPrice(false);
     res.json(goldPrice);
   } catch (error) {
     // Graceful fallback to prevent client crash
@@ -635,7 +634,10 @@ app.get('/api/gold-price', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/gold-price/refresh', async (_req: Request, res: Response) => {
+app.post('/api/gold-price/refresh', requireAdminAuth, async (_req: Request, res: Response) => {
+  if (!checkRateLimit('admin_gold_sync', 1, 60 * 60 * 1000).allowed) {
+    res.status(429).json({ error: 'بروزرسانی اجباری قیمت هر ساعت یک بار مجاز است.' }); return;
+  }
   try {
     const goldPrice = await getOrUpdateGoldPrice(true);
     res.json(goldPrice);
@@ -690,6 +692,9 @@ app.post('/api/admin/gold-price', requireAdminAuth, (req: AuthenticatedRequest, 
 
 // Admin force sync with official API
 app.post('/api/admin/gold-price/sync', requireAdminAuth, async (_req: AuthenticatedRequest, res: Response) => {
+  if (!checkRateLimit('admin_gold_sync', 1, 60 * 60 * 1000).allowed) {
+    res.status(429).json({ error: 'بروزرسانی اجباری قیمت هر ساعت یک بار مجاز است.' }); return;
+  }
   try {
     currentGoldState.isManualOverride = false;
     const updated = await getOrUpdateGoldPrice(true);
@@ -2001,7 +2006,7 @@ app.post('/api/auth/register', (req: Request, res: Response) => {
       displayName,
       role: result.user.role,
     });
-    res.status(201).json({ success: true, ...result });
+    res.status(201).json({ success: true, user: result.user });
   } catch (err: any) {
     logger.warn('AUTH', `تلاش ناموفق برای ثبت‌نام کاربر: ${req.body?.email || 'نامشخص'} - ${err?.message}`, {
       email: req.body?.email,
@@ -2033,7 +2038,7 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
       email: emailVal.value,
       role: result.user.role,
     });
-    res.json({ success: true, ...result });
+    res.json({ success: true, user: result.user });
   } catch (err: any) {
     logger.warn('AUTH', `تلاش ناموفق برای ورود به سیستم: ${req.body?.email || 'نامشخص'}`, {
       email: req.body?.email,
@@ -2090,7 +2095,7 @@ app.post('/api/auth/google-sync', async (req: Request, res: Response) => {
       uid: result.user.uid,
     });
 
-    res.json({ success: true, ...result });
+    res.json({ success: true, user: result.user });
   } catch (err: any) {
     logger.warn('AUTH', `تلاش ناموفق برای ورود با گوگل (توکن نامعتبر یا اثبات هویت رد شد): ${err.message}`);
     res.status(401).json({ success: false, error: err.message || 'خطا در اعتبارسنجی هویت حساب گوگل.' });
@@ -2168,7 +2173,7 @@ app.post('/api/auth/otp/verify', (req: Request, res: Response) => {
       message: result.isNewUser
         ? 'حساب کاربری شما با موفقیت ایجاد و فعال گردید.'
         : 'با موفقیت وارد حساب کاربری خود شدید.',
-      ...result,
+      user: result.user, isNewUser: result.isNewUser,
     });
   } catch (err: any) {
     logger.warn('AUTH', `تلاش ناموفق برای تایید OTP شماره ${req.body?.mobile}: ${err.message}`);

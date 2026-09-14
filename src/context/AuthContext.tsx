@@ -58,28 +58,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Restore stored session from server auth if available
-  const restoreLocalSession = (): boolean => {
+  const restoreLocalSession = async (): Promise<boolean> => {
+    localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
-      if (!saved) return false;
-      const parsed = JSON.parse(saved);
-      if (parsed && parsed.user && parsed.user.uid) {
-        const u = parsed.user as UserProfile;
-        const authUser: AuthUser = {
-          uid: u.uid,
-          email: u.email,
-          displayName: u.displayName,
-          phoneNumber: u.phoneNumber,
-        };
-        setCurrentUser(authUser);
-        setUserProfile(u);
-        setIsAdmin(checkIsAdmin(u.email, u.role));
-        return true;
-      }
-    } catch (e) {
-      console.warn('Failed to parse local session:', e);
-    }
-    return false;
+      const response = await fetch('/api/auth/me');
+      const data = await response.json();
+      if (!response.ok || !data.user) return false;
+      setCurrentUser(data.user);
+      setUserProfile(data.user);
+      setIsAdmin(data.user.role === 'admin');
+      return true;
+    } catch { return false; }
   };
 
   // Exchange the Firebase identity proof for the site's own server session.
@@ -91,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       body: JSON.stringify({ idToken }),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.token || !data.user) {
+    if (!response.ok || !data.user) {
       localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
       setUserProfile(null);
       setIsAdmin(false);
@@ -101,7 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const profile = data.user as UserProfile;
     localStorage.setItem(
       LOCAL_STORAGE_SESSION_KEY,
-      JSON.stringify({ user: profile, token: data.token })
+      JSON.stringify({ user: profile })
     );
     setCurrentUser(user);
     setUserProfile(profile);
@@ -125,7 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         // 2. If no Firebase user, check if we have a persistent email/password session
-        const hasSession = restoreLocalSession();
+        const hasSession = await restoreLocalSession();
         if (!hasSession) {
           setCurrentUser(null);
           setUserProfile(null);
@@ -151,7 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const u: UserProfile = data.user;
-    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user: u, token: data.token }));
+    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user: u }));
 
     const authUser: AuthUser = {
       uid: u.uid,
@@ -188,7 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const u: UserProfile = data.user;
-    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user: u, token: data.token }));
+    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user: u }));
 
     const authUser: AuthUser = {
       uid: u.uid,
@@ -241,7 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const u: UserProfile = data.user;
-    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user: u, token: data.token }));
+    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user: u }));
 
     const authUser: AuthUser = {
       uid: u.uid,
@@ -271,22 +260,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    // Invalidate session on server
-    const localSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
-    if (localSession) {
-      try {
-        const { token } = JSON.parse(localSession);
-        if (token) {
-          await fetch('/api/auth/logout', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-          }).catch(() => {});
-        }
-      } catch {}
-    }
+    const response = await fetch('/api/auth/logout', { method: 'POST' });
+    if (!response.ok) throw new Error('خروج از حساب انجام نشد. دوباره تلاش کنید.');
 
     try {
       await signOut(auth);
@@ -306,12 +281,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const localSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
     if (!localSession) throw new Error('نشست کاربری معتبر نیست. لطفاً دوباره وارد شوید.');
 
-    const { token } = JSON.parse(localSession);
     const res = await fetch('/api/auth/profile', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(data),
     });
@@ -323,7 +296,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatedProfile = resData.user as UserProfile;
     localStorage.setItem(
       LOCAL_STORAGE_SESSION_KEY,
-      JSON.stringify({ user: updatedProfile, token })
+      JSON.stringify({ user: updatedProfile })
     );
     setUserProfile(updatedProfile);
     setCurrentUser({
