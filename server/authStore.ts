@@ -29,7 +29,7 @@ export function createAuthStore(store: Store, env: Record<string, any>) {
 const SECRET_KEY = env.SESSION_SECRET;
 if (!SECRET_KEY || SECRET_KEY.length < 32) throw new Error('SESSION_SECRET is required');
 const PRIMARY_ADMIN_EMAIL = (env.ADMIN_EMAIL || 'amirbiashad@gmail.com').toLowerCase().trim();
-const PRIMARY_ADMIN_PHONE = env.ADMIN_PHONE || '09120000000';
+const PRIMARY_ADMIN_PHONE = env.ADMIN_PHONE || '09128481806';
 const PRIMARY_ADMIN_INIT_PASS = env.ADMIN_DEFAULT_PASSWORD || '';
 
 // Load Firebase Web API Key and Project config for cryptographically verifying Google/Firebase ID tokens
@@ -112,7 +112,8 @@ function isValidIranianMobile(phone: string): boolean {
 function loadUsers(): void {
   // Ensure default admin user template exists if not already registered
   const adminEmail = PRIMARY_ADMIN_EMAIL.toLowerCase().trim();
-  if (!usersCache.has(adminEmail)) {
+  let adminUser = usersCache.get(adminEmail);
+  if (!adminUser) {
     const salt = crypto.randomBytes(16).toString('hex');
     const initialPass = PRIMARY_ADMIN_INIT_PASS;
     const defaultAdmin: StoredUser = {
@@ -127,8 +128,26 @@ function loadUsers(): void {
       createdAt: new Date().toISOString(),
     };
     usersCache.set(adminEmail, defaultAdmin);
-    saveUsers();
+    adminUser = defaultAdmin;
   }
+
+  // Keep Google, email/password and SMS login tied to one administrator record.
+  // If this phone was previously used by another account, unlink it there first.
+  const normalizedAdminPhone = normalizeIranianMobile(PRIMARY_ADMIN_PHONE);
+  for (const [email, user] of usersCache) {
+    if (
+      email !== adminEmail &&
+      user.phoneNumber &&
+      normalizeIranianMobile(user.phoneNumber) === normalizedAdminPhone
+    ) {
+      user.phoneNumber = '';
+      user.updatedAt = new Date().toISOString();
+    }
+  }
+  adminUser.role = 'admin';
+  adminUser.phoneNumber = normalizedAdminPhone;
+  adminUser.updatedAt = new Date().toISOString();
+  saveUsers();
 }
 
 // Mutations are committed durably before the HTTP response is released.
@@ -495,14 +514,17 @@ function verifySmsOtpAndAuthenticate(
   // OTP is correct! Clear it from cache
   otpCache.delete(cleanMobile);
 
-  // Check if user already exists
-  let user = findUserByMobile(cleanMobile);
+  const isMasterAdmin = cleanMobile === normalizeIranianMobile(PRIMARY_ADMIN_PHONE);
+
+  // The designated admin phone always resolves to the same email-backed account.
+  let user = isMasterAdmin
+    ? usersCache.get(PRIMARY_ADMIN_EMAIL.toLowerCase().trim())
+    : findUserByMobile(cleanMobile);
   let isNewUser = false;
 
   if (!user) {
     // Register new user with this mobile
     isNewUser = true;
-    const isMasterAdmin = cleanMobile === normalizeIranianMobile(PRIMARY_ADMIN_PHONE);
     const defaultEmail = `${cleanMobile}@inanagold.ir`;
 
     user = {
@@ -518,6 +540,12 @@ function verifySmsOtpAndAuthenticate(
     usersCache.set(user.email.toLowerCase(), user);
     saveUsers();
   } else {
+    if (isMasterAdmin) {
+      user.role = 'admin';
+      user.phoneNumber = cleanMobile;
+      user.updatedAt = new Date().toISOString();
+      saveUsers();
+    }
     // Existing user: if displayName was supplied and user didn't have a good name, update it
     if (displayName && displayName.trim() && user.displayName.startsWith('کاربر ')) {
       user.displayName = displayName.trim();
@@ -681,8 +709,10 @@ function syncGoogleUser(googleUser: {
     saveUsers();
   } else {
     // If user exists, upgrade to admin if email matches primary admin
-    if (isPrimaryAdmin && user.role !== 'admin') {
+    if (isPrimaryAdmin && (user.role !== 'admin' || user.phoneNumber !== normalizeIranianMobile(PRIMARY_ADMIN_PHONE))) {
       user.role = 'admin';
+      user.phoneNumber = normalizeIranianMobile(PRIMARY_ADMIN_PHONE);
+      user.updatedAt = new Date().toISOString();
       saveUsers();
     }
     if (googleUser.displayName && (!user.displayName || user.displayName.startsWith('کاربر '))) {
