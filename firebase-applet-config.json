@@ -1,12 +1,12 @@
 {
-  "projectId": "apt-base-3cjpc",
-  "appId": "1:858372006570:web:6286d1f30038df4279a6d3",
-  "apiKey": "AIzaSyBQuJW0ECD9ujdcbDLC6wcN6jS_aQSlV54",
-  "authDomain": "apt-base-3cjpc.firebaseapp.com",
+  "projectId": "inanagold",
+  "appId": "1:302698012167:web:a076df008f79b7825814a2",
+  "apiKey": "AIzaSyDZVV4QaBvuT9_Ndxxkpn_SvJDeEt2uxBY",
+  "authDomain": "inanagold.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-inanagold-a36e8fca-360f-4a35-8f2f-e81a0e508a30",
-  "storageBucket": "apt-base-3cjpc.firebasestorage.app",
-  "messagingSenderId": "858372006570",
+  "storageBucket": "inanagold.firebasestorage.app",
+  "messagingSenderId": "302698012167",
   "measurementId": "",
-  "oAuthClientId": "858372006570-3blrc2sq8lafukncqio52mo78kdl3vfe.apps.googleusercontent.com",
+  "oAuthClientId": "302698012167-k6p1ivkijr85vsdibdh739temtnt9vov.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

@@ -18,7 +18,8 @@ service cloud.firestore {
     // Secure Admin definition: only verified admin email or admin-authorized claim
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email == 'amirbiashad@gmail.com'
+        request.auth.token.email == 'amirbiashad@gmail.com' ||
+        request.auth.token.email == 'admin@inanagold.ir'
       );
     }
 

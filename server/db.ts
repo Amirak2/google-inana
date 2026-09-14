@@ -55,8 +55,17 @@ db.exec(`
     PRIMARY KEY (user_id, key)
   );
 
+  CREATE TABLE IF NOT EXISTS users (
+    uid TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    data_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
   CREATE INDEX IF NOT EXISTS idx_orders_tracking_code ON orders(tracking_code);
+  CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 `);
 
 // Prepared Statements
@@ -71,6 +80,18 @@ const stmtUpsertProduct = db.prepare(`
     updated_at = excluded.updated_at
 `);
 const stmtDeleteProduct = db.prepare('DELETE FROM products WHERE id = ?');
+
+const stmtGetAllUsers = db.prepare('SELECT data_json FROM users ORDER BY rowid ASC');
+const stmtGetUserByEmail = db.prepare('SELECT data_json FROM users WHERE email = ?');
+const stmtUpsertUser = db.prepare(`
+  INSERT INTO users (uid, email, data_json, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(uid) DO UPDATE SET
+    email = excluded.email,
+    data_json = excluded.data_json,
+    updated_at = excluded.updated_at
+`);
+const stmtDeleteUser = db.prepare('DELETE FROM users WHERE uid = ? OR email = ?');
 
 const stmtGetAllOrders = db.prepare('SELECT order_json FROM orders ORDER BY rowid DESC');
 const stmtGetOrderById = db.prepare('SELECT order_json FROM orders WHERE id = ?');
@@ -214,6 +235,49 @@ export function getIdempotentOrderFromDb(userId: string, key: string): Order | n
 
 export function saveIdempotencyKeyToDb(userId: string, key: string, orderId: string, order: Order): void {
   stmtInsertIdempotency.run(userId, key, orderId, JSON.stringify(order), new Date().toISOString());
+}
+
+// User Persistence in SQLite
+export function getAllUsersFromDb(): any[] {
+  try {
+    const rows = stmtGetAllUsers.all() as { data_json: string }[];
+    return rows.map((r) => JSON.parse(r.data_json));
+  } catch (err) {
+    console.error('[DB] Error getting users from SQLite:', err);
+    return [];
+  }
+}
+
+export function getUserByEmailFromDb(email: string): any | null {
+  try {
+    const row = stmtGetUserByEmail.get(email.toLowerCase().trim()) as { data_json: string } | undefined;
+    if (!row) return null;
+    return JSON.parse(row.data_json);
+  } catch {
+    return null;
+  }
+}
+
+export function saveUserToDb(user: any): void {
+  try {
+    stmtUpsertUser.run(
+      user.uid,
+      user.email.toLowerCase().trim(),
+      JSON.stringify(user),
+      user.createdAt || new Date().toISOString(),
+      new Date().toISOString()
+    );
+  } catch (err) {
+    console.error('[DB] Error saving user to SQLite:', err);
+  }
+}
+
+export function deleteUserFromDb(uidOrEmail: string): void {
+  try {
+    stmtDeleteUser.run(uidOrEmail, uidOrEmail.toLowerCase().trim());
+  } catch (err) {
+    console.error('[DB] Error deleting user from SQLite:', err);
+  }
 }
 
 // One-time Migration & Seeding Control

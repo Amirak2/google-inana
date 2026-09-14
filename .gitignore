@@ -9,3 +9,8 @@ coverage/
 *_db.json
 *.tmp
 .session_secret
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+data/*.sqlite*
+

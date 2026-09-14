@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { UserProfile, UserRole } from '../src/types';
+import { getAllUsersFromDb, saveUserToDb } from './db';
 
 export interface StoredUser {
   uid: string;
@@ -138,38 +139,77 @@ export function isValidIranianMobile(phone: string): boolean {
 }
 
 function loadUsers(): void {
+  // 1. Load from SQLite database
+  try {
+    const sqliteUsers = getAllUsersFromDb();
+    if (Array.isArray(sqliteUsers) && sqliteUsers.length > 0) {
+      usersCache.clear();
+      for (const u of sqliteUsers) {
+        if (u && u.email) {
+          usersCache.set(u.email.toLowerCase().trim(), u);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[AUTH STORE] Error loading users from SQLite:', err);
+  }
+
+  // 2. Fallback / merge from users_db.json if it exists
   try {
     if (fs.existsSync(USERS_FILE)) {
       const data = fs.readFileSync(USERS_FILE, 'utf-8');
       const list: StoredUser[] = JSON.parse(data);
-      usersCache.clear();
       for (const u of list) {
-        usersCache.set(u.email.toLowerCase().trim(), u);
+        if (u && u.email && !usersCache.has(u.email.toLowerCase().trim())) {
+          usersCache.set(u.email.toLowerCase().trim(), u);
+        }
       }
     }
   } catch (err) {
     console.error('[AUTH STORE] Error loading users_db.json:', err);
   }
 
-  // Ensure default admin user template exists if not already registered
-  const adminEmail = PRIMARY_ADMIN_EMAIL.toLowerCase().trim();
-  if (!usersCache.has(adminEmail)) {
-    const salt = crypto.randomBytes(16).toString('hex');
-    const initialPass = PRIMARY_ADMIN_INIT_PASS;
-    const defaultAdmin: StoredUser = {
-      uid: 'ina_admin_master',
-      email: adminEmail,
-      passwordHash: initialPass ? hashPassword(initialPass, salt, CURRENT_ITERATIONS) : '',
-      salt: initialPass ? salt : '',
-      displayName: 'مدیریت ارشد اینانا گلد',
-      role: 'admin',
-      phoneNumber: PRIMARY_ADMIN_PHONE,
-      address: 'دفتر مرکزی اینانا گلد',
-      createdAt: new Date().toISOString(),
-    };
-    usersCache.set(adminEmail, defaultAdmin);
-    saveUsers();
+  // Helper to create or ensure a user exists
+  const ensureUser = (email: string, role: UserRole, name: string, phone: string, rawPass: string, uidPrefix: string) => {
+    const normEmail = email.toLowerCase().trim();
+    if (!usersCache.has(normEmail)) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const newUser: StoredUser = {
+        uid: `${uidPrefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        email: normEmail,
+        passwordHash: hashPassword(rawPass, salt, CURRENT_ITERATIONS),
+        salt,
+        displayName: name,
+        role,
+        phoneNumber: phone,
+        address: 'تهران، خیابان کریمخان زند، پلاک ۱۱۰',
+        createdAt: new Date().toISOString(),
+      };
+      usersCache.set(normEmail, newUser);
+    }
+  };
+
+  // 3. Ensure 1 Admin Account: admin@inanagold.ir
+  ensureUser('admin@inanagold.ir', 'admin', 'مدیریت ارشد اینانا گلد', '09120000000', 'Admin123456!', 'ina_admin');
+
+  // Also primary admin if specified differently
+  const primaryAdminEmail = PRIMARY_ADMIN_EMAIL.toLowerCase().trim();
+  if (!usersCache.has(primaryAdminEmail)) {
+    ensureUser(primaryAdminEmail, 'admin', 'مدیر سیستم اینانا', PRIMARY_ADMIN_PHONE, PRIMARY_ADMIN_INIT_PASS || 'Admin123456!', 'ina_admin');
   }
+
+  // 4. Ensure 2 Customer Accounts:
+  // Customer 1: customer1@inanagold.ir
+  ensureUser('customer1@inanagold.ir', 'customer', 'مشتری اول اینانا', '09121111111', 'Customer123456!', 'ina_cust1');
+
+  // Customer 2: customer2@inanagold.ir
+  ensureUser('customer2@inanagold.ir', 'customer', 'مشتری دوم اینانا', '09122222222', 'Customer123456!', 'ina_cust2');
+
+  // Persist all users to SQLite and file
+  for (const u of usersCache.values()) {
+    saveUserToDb(u);
+  }
+  saveUsers();
 }
 
 let isSavingUsers = false;
@@ -183,11 +223,14 @@ async function saveUsersAsync(): Promise<void> {
   isSavingUsers = true;
   try {
     const list = Array.from(usersCache.values());
+    for (const u of list) {
+      saveUserToDb(u);
+    }
     const tmpFile = `${USERS_FILE}.tmp`;
     await fs.promises.writeFile(tmpFile, JSON.stringify(list, null, 2), 'utf-8');
     await fs.promises.rename(tmpFile, USERS_FILE);
   } catch (err) {
-    console.error('[AUTH STORE] Error saving users_db.json:', err);
+    console.error('[AUTH STORE] Error saving users:', err);
   } finally {
     isSavingUsers = false;
     if (needsReSaveUsers) {
