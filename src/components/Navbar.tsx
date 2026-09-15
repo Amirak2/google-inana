@@ -81,25 +81,26 @@ export const Navbar: React.FC = () => {
     >
       {/* Top Gold Ticker Strip */}
       <div className="w-full bg-[#040810] border-b border-[#D4AF37]/20 py-1.5 px-3 sm:px-4 text-xs overflow-hidden">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto no-scrollbar min-w-0">
+        <div className="max-w-7xl mx-auto flex items-center justify-center lg:justify-between gap-2">
+          <div className="flex min-w-0 max-w-full items-center justify-center gap-2 xl:gap-4 overflow-hidden">
             <button
               onClick={() => handleNavClick('gold-price')}
-              className="flex items-center gap-1.5 text-[#E6CA65] hover:text-white whitespace-nowrap font-medium text-[11px] sm:text-xs bg-[#0B152B] hover:bg-[#112040] border border-[#D4AF37]/35 hover:border-[#D4AF37]/60 px-2.5 py-0.5 rounded-full transition-all cursor-pointer group"
+              className="flex min-w-0 max-w-full items-center justify-center gap-1 sm:gap-1.5 text-[#E6CA65] hover:text-white whitespace-nowrap font-medium text-[10px] sm:text-xs bg-[#0B152B] hover:bg-[#112040] border border-[#D4AF37]/35 hover:border-[#D4AF37]/60 px-2 sm:px-2.5 py-0.5 rounded-full transition-all cursor-pointer group"
               title="مشاهده نمودار و جزئیات لحظه‌ای نرخ طلا"
             >
               <span className="relative flex h-2 w-2 flex-shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#D4AF37] opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#D4AF37]"></span>
               </span>
-              <span>{goldPrice.status === 'live' ? 'نرخ لحظه‌ای ۱۸ عیار:' : 'نرخ تأییدنشده / آخرین نرخ:'}</span>
-              <span className="font-bold text-white font-sans">
+              <span className="hidden sm:inline">{goldPrice.status === 'live' ? 'نرخ لحظه‌ای ۱۸ عیار:' : 'نرخ تأییدنشده / آخرین نرخ:'}</span>
+              <span className="sm:hidden">{goldPrice.status === 'live' ? 'طلای ۱۸ عیار:' : 'آخرین نرخ:'}</span>
+              <span className="min-w-0 truncate font-bold text-white font-sans">
                 {goldPrice.pricePerGram > 0 ? formatToman(goldPrice.pricePerGram) : 'در دسترس نیست'}
               </span>
               <TrendingUp className="w-3 h-3 text-[#D4AF37] mr-0.5 opacity-80 group-hover:opacity-100 transition-opacity" />
             </button>
 
-            <div className="hidden sm:flex items-center gap-1 text-slate-300 whitespace-nowrap">
+            <div className="hidden xl:flex items-center gap-1 text-slate-300 whitespace-nowrap">
               <span>تغییر روزانه:</span>
               <span
                 className={`font-semibold ${
@@ -110,13 +111,13 @@ export const Navbar: React.FC = () => {
               </span>
             </div>
 
-            <div className="hidden md:flex items-center gap-1 text-slate-400 text-[11px] whitespace-nowrap">
+            <div className="hidden 2xl:flex items-center gap-1 text-slate-400 text-[11px] whitespace-nowrap">
               <span>بروزرسانی:</span>
               <span>{goldPrice.jalaliTimestamp || 'لحظه‌ای'}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 text-slate-300 text-xs flex-shrink-0">
+          <div className="hidden lg:flex items-center gap-2 xl:gap-3 text-slate-300 text-xs flex-shrink-0">
             {/* Admin Dashboard Button - ONLY visible to verified admins */}
             {isAdmin && (
               <button
