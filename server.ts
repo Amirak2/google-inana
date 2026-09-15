@@ -284,7 +284,10 @@ const DEFAULT_SEED_ORDERS: Order[] = [
 // --- Settings Persistence ---
 function saveSettingsToDb(settings: PricingSettings): void { store.set('settings', 'pricing', settings); }
 seedDatabaseIfEmpty(INITIAL_PRODUCTS, []);
-let pricingSettings: PricingSettings = store.get('settings', 'pricing') || { ...DEFAULT_SETTINGS };
+let pricingSettings: PricingSettings = {
+  ...(store.get('settings', 'pricing') || DEFAULT_SETTINGS),
+  taxPercent: 0,
+};
 let productsList: Product[] = getAllProductsFromDb();
 let ordersList: Order[] = getAllOrdersFromDb();
 function saveProductsToDb(products: Product[]): void { saveAllProductsToDb(products); }
@@ -1193,11 +1196,10 @@ app.get('/api/settings', (_req: Request, res: Response) => {
 app.put('/api/admin/settings', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
   const makingVal = validatePositiveNumber(req.body.globalMakingChargePercent ?? pricingSettings.globalMakingChargePercent, 'اجرت ساخت پایه', 0, 100);
   const profitVal = validatePositiveNumber(req.body.profitPercent ?? pricingSettings.profitPercent, 'درصد سود پایه', 0, 50);
-  const taxVal = validatePositiveNumber(req.body.taxPercent ?? pricingSettings.taxPercent, 'درصد مالیات ارزش افزوده', 0, 30);
   const fixedVal = validatePositiveNumber(req.body.fixedCost ?? pricingSettings.fixedCost, 'هزینه بسته‌بندی و ارسال', 0, 100_000_000);
 
-  if (!makingVal.isValid || !profitVal.isValid || !taxVal.isValid || !fixedVal.isValid) {
-    res.status(400).json({ error: makingVal.error || profitVal.error || taxVal.error || fixedVal.error });
+  if (!makingVal.isValid || !profitVal.isValid || !fixedVal.isValid) {
+    res.status(400).json({ error: makingVal.error || profitVal.error || fixedVal.error });
     return;
   }
 
@@ -1206,7 +1208,7 @@ app.put('/api/admin/settings', requireAdminAuth, (req: AuthenticatedRequest, res
     ...req.body,
     globalMakingChargePercent: Number(makingVal.value),
     profitPercent: Number(profitVal.value),
-    taxPercent: Number(taxVal.value),
+    taxPercent: 0,
     fixedCost: Math.round(Number(fixedVal.value)),
     bankCardNumber: req.body.bankCardNumber !== undefined ? String(req.body.bankCardNumber).trim().slice(0, 30) : pricingSettings.bankCardNumber,
     bankCardHolder: req.body.bankCardHolder !== undefined ? String(req.body.bankCardHolder).trim().slice(0, 100) : pricingSettings.bankCardHolder,
@@ -1219,7 +1221,6 @@ app.put('/api/admin/settings', requireAdminAuth, (req: AuthenticatedRequest, res
     settings: {
       globalMakingChargePercent: pricingSettings.globalMakingChargePercent,
       profitPercent: pricingSettings.profitPercent,
-      taxPercent: pricingSettings.taxPercent,
     },
   });
   res.json({ success: true, settings: pricingSettings });

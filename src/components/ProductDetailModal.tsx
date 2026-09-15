@@ -267,10 +267,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                       <span>سود فروشنده ({priceBreakdown.profitPercent}٪):</span>
                       <span className="font-bold">{formatToman(priceBreakdown.profitAmount)}</span>
                     </div>
-                    <div className="flex justify-between text-slate-200">
-                      <span>مالیات بر ارزش افزوده ({priceBreakdown.taxPercent}٪):</span>
-                      <span className="font-bold">{formatToman(priceBreakdown.taxAmount)}</span>
-                    </div>
                     {priceBreakdown.discountPercent > 0 && (
                       <div className="flex justify-between text-emerald-400 bg-emerald-500/15 p-2 rounded-lg border border-emerald-500/30">
                         <span>تخفیف ویژه گالری ({priceBreakdown.discountPercent}٪):</span>

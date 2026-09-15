@@ -3,7 +3,7 @@ import { CalculatedPriceBreakdown, PricingSettings, Product } from '../types';
 export const DEFAULT_SETTINGS: PricingSettings = {
   globalMakingChargePercent: 20, // 20%
   profitPercent: 7, // 7%
-  taxPercent: 9, // 9%
+  taxPercent: 0,
   fixedCost: 0,
   autoSyncIntervalMinutes: 5,
   storePhone: '09909622895',
@@ -54,11 +54,9 @@ export function calculateProductPrice(
   // Standard Iran Gold Union calculation: Profit applies to (Base Gold + Making Charge)
   const profitAmount = (baseGoldValue + makingChargeAmount) * (profitPercent / 100);
 
-  // 4. Tax (مالیات بر ارزش افزوده):
-  // According to Iranian gold tax law, VAT applies to (Making Charge + Seller Profit)
-  // Supports 0% tax if tax-exempt
-  const taxPercent = settings.taxPercent ?? 9;
-  const taxAmount = (makingChargeAmount + profitAmount) * (taxPercent / 100);
+  // Tax is intentionally disabled for every storefront and checkout calculation.
+  const taxPercent = 0;
+  const taxAmount = 0;
 
   // 5. Additional Costs & Stone/Gem value:
   const stoneCost = product.stoneCost ?? 0;
@@ -103,15 +101,15 @@ export function calculateCustomGoldQuotation(
   goldPricePerGram: number,
   makingChargePercent: number,
   profitPercent: number = 7,
-  taxPercent: number = 9,
+  _taxPercent: number = 0,
   discountPercent: number = 0,
   additionalCost: number = 0
 ) {
   const baseGoldValue = goldPricePerGram * (weightGrams || 0);
   const makingChargeAmount = baseGoldValue * ((makingChargePercent || 0) / 100);
   const profitAmount = (baseGoldValue + makingChargeAmount) * ((profitPercent || 0) / 100);
-  const taxAmount = (makingChargeAmount + profitAmount) * ((taxPercent || 0) / 100);
-  const subtotal = baseGoldValue + makingChargeAmount + profitAmount + taxAmount + (additionalCost || 0);
+  const taxAmount = 0;
+  const subtotal = baseGoldValue + makingChargeAmount + profitAmount + (additionalCost || 0);
   const discountAmount = subtotal * ((discountPercent || 0) / 100);
   const finalPrice = Math.round((subtotal - discountAmount) / 1000) * 1000;
 

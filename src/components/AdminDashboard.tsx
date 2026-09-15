@@ -89,7 +89,6 @@ export const AdminDashboard: React.FC = () => {
   // Pricing inputs for Tab: gold-rate
   const [overridePrice, setOverridePrice] = useState<number>(goldPrice.pricePerGram);
   const [profitPct, setProfitPct] = useState<number>(settings.profitPercent || 7);
-  const [taxPct, setTaxPct] = useState<number>(settings.taxPercent || 9);
   const [globalMakingChargePct, setGlobalMakingChargePct] = useState<number>(
     settings.globalMakingChargePercent || 20
   );
@@ -111,7 +110,6 @@ export const AdminDashboard: React.FC = () => {
   const [calcWeight, setCalcWeight] = useState<number>(2.5);
   const [calcMakingCharge, setCalcMakingCharge] = useState<number>(20);
   const [calcProfit, setCalcProfit] = useState<number>(7);
-  const [calcTax, setCalcTax] = useState<number>(9);
   const [calcDiscount, setCalcDiscount] = useState<number>(0);
   const [copiedQuotation, setCopiedQuotation] = useState(false);
 
@@ -120,7 +118,7 @@ export const AdminDashboard: React.FC = () => {
     goldPrice.pricePerGram,
     calcMakingCharge,
     calcProfit,
-    calcTax,
+    0,
     calcDiscount
   );
 
@@ -265,7 +263,7 @@ export const AdminDashboard: React.FC = () => {
     await updateGoldPriceManual(overridePrice);
     await updateStoreSettings({
       profitPercent: profitPct,
-      taxPercent: taxPct,
+      taxPercent: 0,
       globalMakingChargePercent: globalMakingChargePct,
       bankCardNumber: adminBankCard.trim(),
       bankCardHolder: adminBankHolder.trim(),
@@ -562,7 +560,6 @@ export const AdminDashboard: React.FC = () => {
 نرخ طلای ۱۸ عیار: ${formatToman(goldPrice.pricePerGram)} / گرم
 اجرت ساخت: ${calcMakingCharge}٪
 سود طلافروش: ${calcProfit}٪ (مصوب رسمی اتحادیه)
-مالیات ارزش افزوده: ${calcTax}٪
 ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${formatToman(quotationResult.discountAmount)})\n` : ''}مبلغ نهایی قابل پرداخت: ${formatToman(quotationResult.finalPrice)}
 اعتبار پیش‌فاکتور: تا پایان ساعات کاری روز جاری`;
 
@@ -1129,12 +1126,6 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                             </span>
                             <span className="font-bold text-white mt-0.5 block">
                               {formatToman(previewBreakdown.profitAmount)}
-                            </span>
-                          </div>
-                          <div className="bg-[#060B14] p-2.5 rounded-xl border border-slate-800">
-                            <span className="text-slate-400 block">مالیات (۹٪):</span>
-                            <span className="font-bold text-white mt-0.5 block">
-                              {formatToman(previewBreakdown.taxAmount)}
                             </span>
                           </div>
                         </div>
@@ -1723,8 +1714,8 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   </span>
                 </div>
 
-                {/* Profit % & Tax % & Global Making Charge */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Profit % & Global Making Charge */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-slate-300 block mb-1.5">
                       درصد سود عمومی طلافروش (%):
@@ -1738,20 +1729,6 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <span className="text-[10px] text-slate-500 mt-1 block">استاندارد اتحادیه: ۷٪</span>
                   </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                      مالیات ارزش افزوده (%):
-                    </label>
-                    <input
-                      type="number"
-                      value={taxPct}
-                      onChange={(e) => setTaxPct(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-3 py-2.5 text-sm font-bold text-white outline-none"
-                    />
-                    <span className="text-[10px] text-slate-500 mt-1 block">
-                      بر مجموع اجرت + سود: ۹٪
-                    </span>
-                  </div>
 
                   <div>
                     <label className="text-xs font-semibold text-slate-300 block mb-1.5">
@@ -1863,7 +1840,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
               <div className="space-y-3 text-xs text-slate-300 leading-relaxed font-light">
                 <p className="bg-[#060B14] p-3 rounded-xl border border-slate-800">
                   <strong className="text-white block mb-1">فرمول قیمت طلا:</strong>
-                  <code>قیمت = ارزش خام + اجرت ساخت + سود + مالیات ۹٪ - تخفیف</code>
+                  <code>قیمت = ارزش خام + اجرت ساخت + سود - تخفیف</code>
                 </p>
                 <p>
                   ۱. <strong>ارزش خام طلا:</strong> وزن هر قطعه × نرخ روز هر گرم طلای ۱۸ عیار.
@@ -1873,9 +1850,6 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 </p>
                 <p>
                   ۳. <strong>سود فروشنده (۷٪):</strong> درصد سود تعیین‌شده از مجموع (ارزش خام + اجرت).
-                </p>
-                <p>
-                  ۴. <strong>مالیات بر ارزش افزوده (۹٪):</strong> طبق قانون جدید طلا، ۹٪ صرفاً بر مجموع (اجرت + سود) اعمال می‌شود.
                 </p>
               </div>
             </div>
@@ -1988,15 +1962,11 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     />
                   </div>
 
-                  {/* 4. Profit & Tax */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* 4. Seller Profit */}
+                  <div>
                     <div className="bg-[#060B14] p-3 rounded-xl border border-slate-800 text-xs">
                       <span className="text-slate-400 block mb-1">سود طلافروش:</span>
                       <span className="font-bold text-white">{calcProfit}٪ (مصوب اتحادیه)</span>
-                    </div>
-                    <div className="bg-[#060B14] p-3 rounded-xl border border-slate-800 text-xs">
-                      <span className="text-slate-400 block mb-1">مالیات بر ارزش افزوده:</span>
-                      <span className="font-bold text-white">{calcTax}٪ (بر اجرت + سود)</span>
                     </div>
                   </div>
                 </div>
@@ -2046,13 +2016,6 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <span>سود طلافروش ({toPersianDigits(calcProfit)}٪):</span>
                     <span className="font-semibold text-white">
                       {formatToman(quotationResult.profitAmount)}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-slate-300">
-                    <span>مالیات ارزش افزوده ({toPersianDigits(calcTax)}٪):</span>
-                    <span className="font-semibold text-white">
-                      {formatToman(quotationResult.taxAmount)}
                     </span>
                   </div>
 

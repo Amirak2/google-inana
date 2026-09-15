@@ -26,7 +26,7 @@ export interface GoldPriceData {
 export interface PricingSettings {
   globalMakingChargePercent: number; // e.g. 20%
   profitPercent: number; // e.g. 7%
-  taxPercent: number; // e.g. 9%
+  taxPercent: number; // Legacy compatibility; always zero.
   fixedCost: number; // e.g. 0
   autoSyncIntervalMinutes: number; // e.g. 5
   goldApiUrl?: string;

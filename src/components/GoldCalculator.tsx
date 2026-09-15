@@ -11,7 +11,6 @@ export const GoldCalculator: React.FC = () => {
   const [weightGrams, setWeightGrams] = useState<number>(2.5);
   const [makingChargePercent, setMakingChargePercent] = useState<number>(20);
   const [profitPercent, setProfitPercent] = useState<number>(settings.profitPercent ?? 7);
-  const [taxPercent, setTaxPercent] = useState<number>(settings.taxPercent ?? 9);
   const [discountPercent, setDiscountPercent] = useState<number>(0);
 
   // Quick weight presets
@@ -22,7 +21,7 @@ export const GoldCalculator: React.FC = () => {
     goldPrice.pricePerGram,
     makingChargePercent,
     profitPercent,
-    taxPercent,
+    0,
     discountPercent
   );
 
@@ -30,7 +29,6 @@ export const GoldCalculator: React.FC = () => {
     setWeightGrams(2.5);
     setMakingChargePercent(20);
     setProfitPercent(settings.profitPercent ?? 7);
-    setTaxPercent(settings.taxPercent ?? 9);
     setDiscountPercent(0);
   };
 
@@ -167,8 +165,8 @@ export const GoldCalculator: React.FC = () => {
                 </div>
               </div>
 
-              {/* 3. Profit & Tax Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* 3. Seller Profit */}
+              <div>
                 {/* Seller Profit */}
                 <div className="bg-[#0B152B] p-4 rounded-2xl border border-[#D4AF37]/20">
                   <div className="flex justify-between items-center mb-2">
@@ -191,27 +189,6 @@ export const GoldCalculator: React.FC = () => {
                   </span>
                 </div>
 
-                {/* VAT Tax */}
-                <div className="bg-[#0B152B] p-4 rounded-2xl border border-[#D4AF37]/20">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-slate-300 font-medium">مالیات ارزش افزوده:</span>
-                    <span className="text-xs font-bold text-[#E6CA65]">
-                      {toPersianDigits(taxPercent)}٪
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="15"
-                    step="1"
-                    value={taxPercent}
-                    onChange={(e) => setTaxPercent(parseInt(e.target.value, 10))}
-                    className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]"
-                  />
-                  <span className="text-[10px] text-slate-400 block mt-1">
-                    (اعمال بر اجرت + سود: ۹٪)
-                  </span>
-                </div>
               </div>
 
               {/* 4. Discount */}
@@ -262,13 +239,6 @@ export const GoldCalculator: React.FC = () => {
                 <span className="text-xs">سود طلافروشی ({toPersianDigits(profitPercent)}٪):</span>
                 <span className="font-semibold text-white">
                   {formatToman(result.profitAmount)}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center text-slate-300">
-                <span className="text-xs">مالیات بر ارزش افزوده ({toPersianDigits(taxPercent)}٪):</span>
-                <span className="font-semibold text-white">
-                  {formatToman(result.taxAmount)}
                 </span>
               </div>
 
