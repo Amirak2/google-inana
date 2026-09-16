@@ -696,7 +696,10 @@ export const CartDrawer: React.FC = () => {
                                 onClick={() =>
                                   updateCartQuantity(item.product.id, item.quantity + 1)
                                 }
-                                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white text-xs"
+                                disabled={item.quantity >= (item.product.availableStock ?? item.product.stock ?? 0)}
+                                aria-label={`افزایش تعداد ${item.product.title}`}
+                                title={item.quantity >= (item.product.availableStock ?? item.product.stock ?? 0) ? 'بیشتر از موجودی انبار امکان‌پذیر نیست' : 'افزایش تعداد'}
+                                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white text-xs disabled:opacity-30 disabled:cursor-not-allowed"
                               >
                                 +
                               </button>
@@ -1093,9 +1096,9 @@ export const CartDrawer: React.FC = () => {
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
                         <ImageIcon className="w-3.5 h-3.5 text-[#D4AF37]" />
-                        <span>عکس فیش واریز کارت به کارت:</span>
+                        <span>عکس فیش واریز کارت به کارت (اختیاری):</span>
                       </label>
-                      <span className="text-[10px] text-slate-400">تصویر رسید بانکی</span>
+                      <span className="text-[10px] text-slate-400">برای بررسی سریع‌تر سفارش</span>
                     </div>
 
                     <input
@@ -1166,7 +1169,7 @@ export const CartDrawer: React.FC = () => {
                         </div>
                         <div className="space-y-0.5">
                           <span className="text-xs font-bold text-white block">
-                            {isReadingReceipt ? 'در حال پردازش تصویر فیش...' : 'برای انتخاب و بارگذاری عکس فیش کلیک کنید'}
+                            {isReadingReceipt ? 'در حال پردازش تصویر فیش...' : 'در صورت پرداخت، عکس فیش را بارگذاری کنید'}
                           </span>
                           <span className="text-[10px] text-slate-400 block">
                             فرمت‌های مجاز: JPG، PNG، WEBP (حداکثر ۱۲ مگابایت)
@@ -1409,7 +1412,7 @@ export const CartDrawer: React.FC = () => {
                     disabled={isSubmitting}
                     className="flex-[2] flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3 rounded-xl hover:brightness-110 active:scale-98 transition-all text-xs shadow-md cursor-pointer disabled:opacity-75"
                   >
-                    <span>{isSubmitting ? 'در حال ثبت سفارش...' : 'تأیید نهایی و ارسال فیش واریزی'}</span>
+                    <span>{isSubmitting ? 'در حال ثبت سفارش...' : paymentReceiptImage ? 'تأیید نهایی و ارسال فیش' : 'ثبت سفارش بدون فیش'}</span>
                   </button>
                 </div>
               )}

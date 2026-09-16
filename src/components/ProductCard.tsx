@@ -85,7 +85,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
                 ? 'bg-rose-500 text-white shadow-[0_0_12px_rgba(244,63,94,0.5)]'
                 : 'bg-[#060B15]/70 text-slate-200 hover:text-white hover:bg-[#060B15]'
             }`}
-            title="افزودن به علاقه‌مندی‌ها"
+          title={favorite ? 'حذف از علاقه‌مندی‌ها' : 'افزودن به علاقه‌مندی‌ها'}
+          aria-label={favorite ? `حذف ${product.title} از علاقه‌مندی‌ها` : `افزودن ${product.title} به علاقه‌مندی‌ها`}
+          aria-pressed={favorite}
           >
             <Heart className={`w-4 h-4 ${favorite ? 'fill-current' : ''}`} />
           </motion.button>

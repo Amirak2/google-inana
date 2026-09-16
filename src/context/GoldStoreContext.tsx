@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { DEFAULT_SETTINGS } from '../utils/pricingEngine';
 import { getAuthHeaders } from '../utils/authHelper';
+import { useAuth } from './AuthContext';
 
 interface GoldStoreContextType {
   goldPrice: GoldPriceData;
@@ -58,28 +59,22 @@ const initialGoldPrice: GoldPriceData = {
   pricePerGram: 0,
   currency: 'تومان',
   purity: '18 عیار (750)',
-  timestamp: '2026-09-02T16:12:00Z',
-  jalaliTimestamp: '۱۴۰۵/۰۶/۱۱ - ۱۹:۴۲',
+  timestamp: '',
+  jalaliTimestamp: '',
   source: 'نرخ طلا هنوز دریافت نشده است',
-  changePercent: 2.88,
-  dailyHigh: 22924400,
-  dailyLow: 22197000,
-  previousPrice: 22197000,
+  changePercent: 0,
+  dailyHigh: 0,
+  dailyLow: 0,
+  previousPrice: 0,
   isManualOverride: false,
   status: 'cached',
-  otherMarkets: {
-    gold24k: 30446500,
-    mesghal: 98916000,
-    emamiCoin: 223570000,
-    halfCoin: 116000000,
-    quarterCoin: 64000000,
-    globalOunceUsd: 4387.09,
-  },
+  otherMarkets: {},
 };
 
 const GoldStoreContext = createContext<GoldStoreContextType | undefined>(undefined);
 
 export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser, loading: authLoading } = useAuth();
   const [goldPrice, setGoldPrice] = useState<GoldPriceData>(initialGoldPrice);
   const [settings, setSettings] = useState<PricingSettings>(DEFAULT_SETTINGS);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
@@ -92,14 +87,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return [];
     }
   });
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('inana_favorites');
-      return saved ? JSON.parse(saved) : ['inana-letter-f', 'inana-sig-pendant'];
-    } catch {
-      return ['inana-letter-f', 'inana-sig-pendant'];
-    }
-  });
+  const [favorites, setFavorites] = useState<string[]>([]);
 
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -119,12 +107,28 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [cart]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem('inana_favorites', JSON.stringify(favorites));
-    } catch (e) {
-      console.error(e);
+    if (authLoading) return;
+    if (!currentUser) {
+      try {
+        const saved = localStorage.getItem('inana_favorites_guest');
+        setFavorites(saved ? JSON.parse(saved) : []);
+      } catch { setFavorites([]); }
+      return;
     }
-  }, [favorites]);
+    fetch('/api/user/favorites')
+      .then(async (res) => {
+        if (!res.ok) throw new Error('favorites');
+        const data = await res.json();
+        setFavorites(Array.isArray(data.favorites) ? data.favorites : []);
+      })
+      .catch(() => setFavorites([]));
+  }, [currentUser?.uid, authLoading]);
+
+  useEffect(() => {
+    if (!authLoading && !currentUser) {
+      try { localStorage.setItem('inana_favorites_guest', JSON.stringify(favorites)); } catch {}
+    }
+  }, [favorites, currentUser, authLoading]);
 
   // Fetch initial data from server
   const refreshGoldPrice = async (force: boolean = false) => {
@@ -205,15 +209,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const addToCart = (product: Product, quantity = 1) => {
     setCart((prev) => {
+      const available = Math.max(0, product.availableStock ?? product.stock ?? 0);
+      if (available === 0) return prev;
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
         return prev.map((item) =>
           item.product.id === product.id
-            ? { ...item, quantity: item.quantity + quantity }
+            ? { ...item, quantity: Math.min(available, item.quantity + quantity) }
             : item
         );
       }
-      return [...prev, { product, quantity }];
+      return [...prev, { product, quantity: Math.min(available, Math.max(1, quantity)) }];
     });
     setIsCartOpen(true);
   };
@@ -229,7 +235,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     setCart((prev) =>
       prev.map((item) =>
-        item.product.id === productId ? { ...item, quantity } : item
+        item.product.id === productId
+          ? { ...item, quantity: Math.min(quantity, Math.max(0, item.product.availableStock ?? item.product.stock ?? 0)) }
+          : item
       )
     );
   };
@@ -239,11 +247,19 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const toggleFavorite = (productId: string) => {
-    setFavorites((prev) =>
-      prev.includes(productId)
+    setFavorites((prev) => {
+      const next = prev.includes(productId)
         ? prev.filter((id) => id !== productId)
-        : [...prev, productId]
-    );
+        : [...prev, productId];
+      if (currentUser) {
+        fetch('/api/user/favorites', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ favorites: next }),
+        }).catch(() => {});
+      }
+      return next;
+    });
   };
 
   const isFavorite = (productId: string) => favorites.includes(productId);

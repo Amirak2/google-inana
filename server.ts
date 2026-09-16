@@ -347,6 +347,22 @@ function parsePercent(val: any): number {
   return isNegative ? -Math.abs(num) : Math.abs(num);
 }
 
+function isCurrentJalaliDate(value: unknown): boolean {
+  if (!value) return false;
+  const normalized = String(value)
+    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/-/g, '/');
+  const match = normalized.match(/(1[34]\d{2})\/(\d{1,2})\/(\d{1,2})/);
+  if (!match) return false;
+  const parts = new Intl.DateTimeFormat('en-US-u-ca-persian', {
+    timeZone: 'Asia/Tehran', year: 'numeric', month: 'numeric', day: 'numeric',
+  }).formatToParts(new Date());
+  const current = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return Number(match[1]) === Number(current.year)
+    && Number(match[2]) === Number(current.month)
+    && Number(match[3]) === Number(current.day);
+}
+
 // In-memory cache for TGJU indicator summary table (historical daily records)
 currentGoldState = store.get('market', 'gold') || currentGoldState;
 let cachedTgjuData: any[][] = store.get('market', 'history') || [];
@@ -504,19 +520,22 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
             }
           }
 
+          const providerIsCurrent = isCurrentJalaliDate(item18.date);
           currentGoldState = {
             pricePerGram: Math.round(pricePerGram),
             currency: 'تومان',
             purity: '18 عیار (750)',
             timestamp: new Date().toISOString(),
             jalaliTimestamp: item18.date ? `${item18.date}` : formatJalaliDateTime(new Date()),
-            source: 'سامانه نوسان (Navasan.tech Live API - 18ayar)',
+            source: providerIsCurrent
+              ? 'سامانه نوسان (Navasan.tech Live API - 18ayar)'
+              : 'آخرین نرخ دریافتی از سامانه نوسان',
             changePercent: changePercent,
             dailyHigh: Math.max(currentGoldState.dailyHigh || pricePerGram, pricePerGram),
             dailyLow: Math.min(currentGoldState.dailyLow || pricePerGram, pricePerGram),
             previousPrice: Math.round(prevPrice),
             isManualOverride: false,
-            status: 'live',
+            status: providerIsCurrent ? 'live' : 'cached',
             otherMarkets: other,
           };
 
@@ -558,19 +577,22 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
         // Secondary other markets (24K, Mesghal, Coins)
         const otherMarkets = await fetchOtherMarkets();
 
+        const providerIsCurrent = isCurrentJalaliDate(jalaliDate);
         currentGoldState = {
           pricePerGram: closeToman > 0 ? closeToman : currentGoldState.pricePerGram,
           currency: 'تومان',
           purity: '18 عیار (750)',
           timestamp: new Date().toISOString(),
           jalaliTimestamp: jalaliDate ? `${jalaliDate} - ${new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}` : formatJalaliDateTime(new Date()),
-          source: 'سامانه آنلاین اتحادیه طلا و جواهر (TGJU Live API)',
+          source: providerIsCurrent
+            ? 'سامانه آنلاین اتحادیه طلا و جواهر (TGJU Live API)'
+            : 'آخرین نرخ دریافتی از سامانه اتحادیه طلا و جواهر',
           changePercent: changePercent,
           dailyHigh: highToman > 0 ? highToman : closeToman,
           dailyLow: lowToman > 0 ? lowToman : closeToman,
           previousPrice: openToman > 0 ? openToman : currentGoldState.pricePerGram,
           isManualOverride: false,
-          status: 'live',
+          status: providerIsCurrent ? 'live' : 'cached',
           otherMarkets: {
             ...currentGoldState.otherMarkets,
             ...otherMarkets,
@@ -896,6 +918,25 @@ app.get('/api/products/:id', async (req: Request, res: Response) => {
     calculatedPrice: calc.finalPrice,
     priceBreakdown: calc,
   });
+});
+
+app.get('/api/user/favorites', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  const favorites = store.get<string[]>('favorites', req.user!.uid) || [];
+  res.json({ favorites });
+});
+
+app.put('/api/user/favorites', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  const favorites: string[] | null = Array.isArray(req.body?.favorites)
+    ? [...new Set<string>(req.body.favorites.filter((id: unknown): id is string => typeof id === 'string' && id.length <= 120))].slice(0, 200)
+    : null;
+  if (!favorites) {
+    res.status(400).json({ error: 'فهرست علاقه‌مندی‌ها نامعتبر است.' });
+    return;
+  }
+  const validProductIds = new Set(productsList.map((product) => product.id));
+  const validated = favorites.filter((id) => validProductIds.has(id));
+  store.set('favorites', req.user!.uid, validated);
+  res.json({ favorites: validated });
 });
 
 // Temporary stock reservation endpoint during checkout step (10 minutes TTL)

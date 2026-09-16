@@ -128,6 +128,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                   </span>
                   <input
                     type="range"
+                    aria-label="زاویه نمایش ۳۶۰ درجه محصول"
                     min="0"
                     max="360"
                     value={rotationAngle}
@@ -144,6 +145,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                 {images.map((img, idx) => (
                   <button
                     key={idx}
+                    type="button"
+                    aria-label={`نمایش تصویر ${toPersianDigits(idx + 1)} از ${product.title}`}
+                    aria-pressed={selectedImageIndex === idx && !is360Mode}
                     onClick={() => {
                       setSelectedImageIndex(idx);
                       setIs360Mode(false);
@@ -156,7 +160,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                   >
                     <img
                       src={img}
-                      alt=""
+                      alt={`تصویر ${toPersianDigits(idx + 1)} از ${product.title}`}
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
                     />
@@ -370,6 +374,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
                 <button
                   onClick={() => toggleFavorite(product.id)}
+                  aria-label={favorite ? `حذف ${product.title} از علاقه‌مندی‌ها` : `افزودن ${product.title} به علاقه‌مندی‌ها`}
+                  aria-pressed={favorite}
                   className={`flex items-center gap-1.5 transition-colors ${
                     favorite ? 'text-rose-400 font-semibold' : 'text-slate-300 hover:text-white'
                   }`}
