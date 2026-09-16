@@ -16,6 +16,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
     useGoldStore();
 
   const favorite = isFavorite(product.id);
+  const priceReady = goldPrice.pricePerGram > 0;
 
   // Dynamic live calculation
   const priceBreakdown = calculateProductPrice(product, goldPrice.pricePerGram, settings);
@@ -29,6 +30,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!priceReady) return;
     addToCart(product, 1);
   };
 
@@ -162,7 +164,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
           <div className="flex flex-col">
             <span className="text-[10px] text-slate-300 font-light">قیمت محاسبه‌شده روز:</span>
             <span className="text-sm sm:text-base font-bold text-white gold-gradient-text tracking-tight group-hover:brightness-115 transition-all">
-              {formatToman(finalPrice)}
+              {priceReady ? formatToman(finalPrice) : 'در حال دریافت نرخ...'}
             </span>
           </div>
 
@@ -176,8 +178,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
               whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.92 }}
               onClick={handleAddToCart}
-              className="p-2.5 rounded-xl bg-[#1A315C] hover:bg-[#D4AF37] text-[#D4AF37] hover:text-slate-950 border border-[#D4AF37]/40 hover:border-transparent transition-colors shadow-sm"
-              title="افزودن به سبد خرید"
+              disabled={!priceReady}
+              className="p-2.5 rounded-xl bg-[#1A315C] hover:bg-[#D4AF37] text-[#D4AF37] hover:text-slate-950 border border-[#D4AF37]/40 hover:border-transparent transition-colors shadow-sm disabled:cursor-wait disabled:opacity-50 disabled:hover:bg-[#1A315C] disabled:hover:text-[#D4AF37]"
+              title={priceReady ? 'افزودن به سبد خرید' : 'در حال دریافت نرخ لحظه‌ای طلا'}
             >
               <ShoppingBag className="w-4 h-4" />
             </motion.button>

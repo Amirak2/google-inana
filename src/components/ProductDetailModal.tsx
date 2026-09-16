@@ -36,10 +36,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   if (!product) return null;
 
   const favorite = isFavorite(product.id);
+  const priceReady = goldPrice.pricePerGram > 0;
   const priceBreakdown = calculateProductPrice(product, goldPrice.pricePerGram, settings);
   const finalPrice = priceBreakdown.finalPrice;
 
   const handleAddToCart = () => {
+    if (!priceReady) return;
     addToCart(product, quantity);
     onClose();
   };
@@ -184,7 +186,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                   <span>قیمت این محصول با توجه به قیمت روز طلا محاسبه شده است.</span>
                 </div>
                 <span className="text-[#E6CA65] font-bold">
-                  نرخ ۱۸ عیار: {formatToman(goldPrice.pricePerGram)}
+                  نرخ ۱۸ عیار: {priceReady ? formatToman(goldPrice.pricePerGram) : 'در حال دریافت...'}
                 </span>
               </div>
 
@@ -290,7 +292,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                 <div>
                   <span className="text-xs text-slate-300 block">قیمت تمام‌شده روز:</span>
                   <div className="text-2xl sm:text-3xl font-extrabold text-white gold-gradient-text">
-                    {formatToman(finalPrice * quantity)}
+                    {priceReady ? formatToman(finalPrice * quantity) : 'در حال دریافت نرخ...'}
                   </div>
                 </div>
 
@@ -330,12 +332,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   onClick={handleAddToCart}
-                  disabled={product.availableStock !== undefined && product.availableStock <= 0}
+                  disabled={!priceReady || (product.availableStock !== undefined && product.availableStock <= 0)}
                   className="flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all shadow-[0_4px_20px_rgba(212,175,55,0.3)] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ShoppingBag className="w-4 h-4" />
                   <span>
-                    {product.availableStock !== undefined && product.availableStock <= 0
+                    {!priceReady
+                      ? 'در حال دریافت نرخ طلا'
+                      : product.availableStock !== undefined && product.availableStock <= 0
                       ? 'اتمام موجودی'
                       : 'افزودن به سبد خرید'}
                   </span>

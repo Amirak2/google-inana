@@ -170,6 +170,7 @@ export const CartDrawer: React.FC = () => {
   }, [isAuthenticated, showAuthRequiredModal]);
 
   if (!isCartOpen) return null;
+  const priceReady = goldPrice.pricePerGram > 0;
 
   // Calculate real-time cart summary
   let totalWeight = 0;
@@ -279,6 +280,10 @@ export const CartDrawer: React.FC = () => {
   };
 
   const handleProceedToPayment = async () => {
+    if (!priceReady) {
+      setFormError('نرخ لحظه‌ای طلا هنوز دریافت نشده است. لطفاً چند لحظه صبر کنید.');
+      return;
+    }
     if (!isAuthenticated) {
       setShowAuthRequiredModal(true);
       return;
@@ -577,7 +582,7 @@ export const CartDrawer: React.FC = () => {
               <span>قیمت نهایی بر اساس آخرین قیمت روز طلا محاسبه شده است.</span>
             </span>
             <span className="font-bold text-[#E6CA65]">
-              {formatToman(goldPrice.pricePerGram)} / گ
+              {priceReady ? `${formatToman(goldPrice.pricePerGram)} / گ` : 'در حال دریافت نرخ...'}
             </span>
           </div>
 
@@ -673,7 +678,7 @@ export const CartDrawer: React.FC = () => {
 
                           <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/80">
                             <span className="text-xs font-bold text-white gold-gradient-text">
-                              {formatToman(item.itemTotal)}
+                              {priceReady ? formatToman(item.itemTotal) : 'در حال محاسبه...'}
                             </span>
 
                             {/* Quantity buttons */}
@@ -872,7 +877,9 @@ export const CartDrawer: React.FC = () => {
                   </div>
                   <div className="flex justify-between items-center pt-2 border-t border-slate-800 font-bold text-xs">
                     <span className="text-slate-200">مبلغ قابل پرداخت:</span>
-                    <span className="text-[#D4AF37] text-sm">{formatToman(subtotalPrice)}</span>
+                    <span className="text-[#D4AF37] text-sm">
+                      {priceReady ? formatToman(subtotalPrice) : 'در حال محاسبه...'}
+                    </span>
                   </div>
                 </div>
 
@@ -1354,7 +1361,9 @@ export const CartDrawer: React.FC = () => {
                 <div className="flex justify-between items-baseline pt-2 border-t border-slate-700/80">
                   <span className="text-sm font-bold text-white">مبلغ قابل پرداخت:</span>
                   <span className="text-lg sm:text-xl font-extrabold text-white gold-gradient-text">
-                    {formatToman(checkoutStep === 'payment' && activeQuote ? activeQuote.totalPrice : subtotalPrice)}
+                    {priceReady
+                      ? formatToman(checkoutStep === 'payment' && activeQuote ? activeQuote.totalPrice : subtotalPrice)
+                      : 'در حال محاسبه...'}
                   </span>
                 </div>
               </div>
@@ -1369,7 +1378,7 @@ export const CartDrawer: React.FC = () => {
               {checkoutStep === 'cart' ? (
                 <button
                   onClick={handleProceedToPayment}
-                  disabled={isReserving}
+                  disabled={isReserving || !priceReady}
                   className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all shadow-[0_4px_20px_rgba(212,175,55,0.3)] text-sm cursor-pointer disabled:opacity-75"
                 >
                   {isReserving ? (
