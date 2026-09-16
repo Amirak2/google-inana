@@ -19,7 +19,9 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { toPersianDigits } from '../utils/persianFormatter';
+import { Order } from '../types';
+import { formatToman, toPersianDigits } from '../utils/persianFormatter';
+import { getAuthHeaders } from '../utils/authHelper';
 
 export const AuthModal: React.FC = () => {
   const {
@@ -59,6 +61,8 @@ export const AuthModal: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [userOrders, setUserOrders] = useState<Order[]>([]);
+  const [loadingUserOrders, setLoadingUserOrders] = useState(false);
 
   // Sync state when modal opens
   useEffect(() => {
@@ -75,6 +79,40 @@ export const AuthModal: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
   }, [isAuthModalOpen, authModalMode, currentUser, userProfile]);
+
+  useEffect(() => {
+    if (!isAuthModalOpen || !currentUser || isAdmin) {
+      setUserOrders([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingUserOrders(true);
+    fetch('/api/orders', { headers: { ...getAuthHeaders() } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('دریافت سفارش‌ها انجام نشد.');
+        return response.json() as Promise<Order[]>;
+      })
+      .then((orders) => {
+        if (!cancelled) {
+          setUserOrders(
+            [...orders].sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            )
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setUserOrders([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingUserOrders(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthModalOpen, currentUser, isAdmin]);
 
   // Countdown timer for OTP resend
   useEffect(() => {
@@ -221,7 +259,7 @@ export const AuthModal: React.FC = () => {
       <div
         id="auth-modal-card"
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md bg-[#060B15] border border-[#D4AF37]/40 rounded-3xl overflow-hidden shadow-[0_20px_70px_rgba(0,0,0,0.9)] text-slate-100 my-auto"
+        className="relative w-full max-w-md max-h-[92vh] flex flex-col bg-[#060B15] border border-[#D4AF37]/40 rounded-3xl overflow-hidden shadow-[0_20px_70px_rgba(0,0,0,0.9)] text-slate-100 my-auto"
       >
         {/* Top Header Bar */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#D4AF37]/25 bg-[#0A1224]">
@@ -295,7 +333,7 @@ export const AuthModal: React.FC = () => {
           </div>
         )}
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto">
           {/* Status Messages */}
           {errorMsg && (
             <div className="mb-4 p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-red-200 text-xs flex items-start gap-2 animate-in fade-in duration-200">
@@ -582,6 +620,41 @@ export const AuthModal: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {!isAdmin && <div className="rounded-2xl border border-[#D4AF37]/25 bg-[#0A1120] p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white">سفارش‌های من</span>
+                  <span className="text-[10px] text-slate-400">
+                    {loadingUserOrders ? 'در حال دریافت...' : `${toPersianDigits(userOrders.length)} سفارش`}
+                  </span>
+                </div>
+
+                {!loadingUserOrders && userOrders.length === 0 ? (
+                  <p className="text-[11px] text-slate-500 py-1">هنوز سفارشی با این حساب ثبت نشده است.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {userOrders.slice(0, 3).map((order) => (
+                      <div
+                        key={order.id}
+                        className="rounded-xl border border-slate-800 bg-[#060B15] px-3 py-2.5 text-[11px]"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono font-bold text-[#E6CA65]" dir="ltr">
+                            {order.trackingCode}
+                          </span>
+                          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-slate-200">
+                            {order.status}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-between text-slate-400">
+                          <span>{new Date(order.createdAt).toLocaleDateString('fa-IR')}</span>
+                          <span className="font-semibold text-white">{formatToman(order.totalPrice)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>}
 
               <button
                 type="submit"

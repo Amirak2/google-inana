@@ -1455,6 +1455,17 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
     return;
   }
 
+  const addressVal = validateString(customerAddress, 'آدرس تحویل', 10, 500);
+  if (!addressVal.isValid) {
+    res.status(400).json({ error: addressVal.error });
+    return;
+  }
+
+  const allowedContactMethods = new Set(['telegram', 'phone', 'sms']);
+  const safeContactMethod = allowedContactMethods.has(String(contactMethod))
+    ? String(contactMethod) as 'telegram' | 'phone' | 'sms'
+    : 'phone';
+
   // 1. Prevent OOM: Enforce receipt image length limit (~600KB max base64)
   if (
     paymentReceiptImage &&
@@ -1642,8 +1653,8 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
         userEmail: orderUserEmail,
         customerName: nameVal.value,
         customerPhone: phoneVal.phone,
-        customerAddress: customerAddress || 'ارسال پستی بیمه‌شده',
-        contactMethod: contactMethod || 'telegram',
+        customerAddress: addressVal.value,
+        contactMethod: safeContactMethod,
         notes,
         items: validatedItems,
         totalWeight: Number(computedTotalWeight.toFixed(3)),

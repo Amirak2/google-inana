@@ -39,6 +39,20 @@ import { getAuthHeaders } from '../utils/authHelper';
 const generateIdempotencyKey = () =>
   `idemp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
+const normalizeIranianMobile = (value: string) => {
+  const normalizedDigits = value
+    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+    .replace(/[^\d+]/g, '');
+
+  if (normalizedDigits.startsWith('+98')) return `0${normalizedDigits.slice(3)}`;
+  if (normalizedDigits.startsWith('0098')) return `0${normalizedDigits.slice(4)}`;
+  if (normalizedDigits.startsWith('98') && normalizedDigits.length === 12) {
+    return `0${normalizedDigits.slice(2)}`;
+  }
+  return normalizedDigits;
+};
+
 export const CartDrawer: React.FC = () => {
   const { cart, isCartOpen, setIsCartOpen, removeFromCart, updateCartQuantity, clearCart, goldPrice, settings, refreshProducts } =
     useGoldStore();
@@ -71,7 +85,7 @@ export const CartDrawer: React.FC = () => {
     quoteId: string;
     expiresAt: number;
     totalPrice: number;
-    goldPriceAtOrder: number;
+    goldPriceAtQuote: number;
   } | null>(null);
   const [quoteSecondsLeft, setQuoteSecondsLeft] = useState<number | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => generateIdempotencyKey());
@@ -118,7 +132,7 @@ export const CartDrawer: React.FC = () => {
           quoteId: data.quoteId,
           expiresAt: data.expiresAt,
           totalPrice: data.totalPrice,
-          goldPriceAtOrder: data.goldPriceAtOrder,
+          goldPriceAtQuote: data.goldPriceAtQuote,
         });
         return true;
       } else {
@@ -325,10 +339,18 @@ export const CartDrawer: React.FC = () => {
       return;
     }
 
-    if (!customerPhone.trim()) {
-      setFormError('لطفاً شماره تماس همراه خود را وارد فرمایید.');
+    const normalizedPhone = normalizeIranianMobile(customerPhone);
+    if (!/^09\d{9}$/.test(normalizedPhone)) {
+      setFormError('شماره همراه باید ۱۱ رقم و با ۰۹ شروع شود؛ مثال: 09121234567');
       return;
     }
+
+    if (customerAddress.trim().length < 10) {
+      setFormError('لطفاً آدرس دقیق تحویل، شامل شهر، خیابان، پلاک و کد پستی را وارد فرمایید.');
+      return;
+    }
+
+    setCustomerPhone(normalizedPhone);
 
     // Lock price quote on server (15-min guarantee)
     setIsReserving(true);
@@ -353,8 +375,9 @@ export const CartDrawer: React.FC = () => {
       return;
     }
 
-    if (!customerName.trim() || !customerPhone.trim()) {
-      setFormError('لطفاً ابتدا نام و شماره تماس همراه خود را تکمیل فرمایید.');
+    const normalizedPhone = normalizeIranianMobile(customerPhone);
+    if (!customerName.trim() || !/^09\d{9}$/.test(normalizedPhone) || customerAddress.trim().length < 10) {
+      setFormError('لطفاً نام، شماره همراه معتبر و آدرس کامل تحویل را تکمیل فرمایید.');
       setCheckoutStep('info');
       return;
     }
@@ -364,7 +387,7 @@ export const CartDrawer: React.FC = () => {
     try {
       const orderPayload = {
         customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
+        customerPhone: normalizedPhone,
         customerAddress: customerAddress.trim(),
         contactMethod,
         notes: notes.trim(),
@@ -771,25 +794,58 @@ export const CartDrawer: React.FC = () => {
                   <input
                     type="tel"
                     required
+                    inputMode="numeric"
+                    dir="ltr"
+                    maxLength={14}
                     placeholder="مثال: 09121234567"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
+                    onBlur={() => setCustomerPhone(normalizeIranianMobile(customerPhone))}
                     className="w-full bg-[#13254A] border border-slate-600 focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-white outline-none"
                   />
                 </div>
 
                 <div>
                   <label className="block text-slate-200 font-semibold mb-1">
-                    آدرس دقیق پستی جهت ارسال بیمه‌شده:
+                    آدرس دقیق پستی جهت ارسال بیمه‌شده: *
                   </label>
                   <textarea
                     rows={2}
+                    required
+                    minLength={10}
                     placeholder="استان، شهر، آدرس دقیق، کد پستی و پلاک (ارسال با پست پیشتاز بیمه‌شده)"
                     value={customerAddress}
                     onChange={(e) => setCustomerAddress(e.target.value)}
                     className="w-full bg-[#13254A] border border-slate-600 focus:border-[#D4AF37] rounded-xl px-3.5 py-2 text-white outline-none resize-none"
                   />
                 </div>
+
+                <fieldset>
+                  <legend className="block text-slate-200 font-semibold mb-2">
+                    روش ترجیحی هماهنگی سفارش:
+                  </legend>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      ['phone', 'تماس تلفنی'],
+                      ['sms', 'پیامک'],
+                      ['telegram', 'تلگرام'],
+                    ] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setContactMethod(value)}
+                        className={`rounded-xl border px-2 py-2.5 text-[11px] font-semibold transition-colors ${
+                          contactMethod === value
+                            ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#F5E8C7]'
+                            : 'border-slate-700 bg-[#0A1324] text-slate-400 hover:text-white'
+                        }`}
+                        aria-pressed={contactMethod === value}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
 
                 <div>
                   <label className="block text-slate-200 font-semibold mb-1">
@@ -820,14 +876,6 @@ export const CartDrawer: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Submit button inside form for desktop/mobile accessibility */}
-                <button
-                  type="submit"
-                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all text-xs shadow-md cursor-pointer"
-                >
-                  <span>ثبت اطلاعات و رفتن به صفحه کارت به کارت</span>
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
               </form>
             )}
 
