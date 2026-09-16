@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
-import { Sparkles, Star, ChevronDown, ChevronUp, ShieldCheck, HelpCircle, Quote } from 'lucide-react';
+import { Star, ChevronDown, ChevronUp, HelpCircle, Quote } from 'lucide-react';
 import { TESTIMONIALS_DATA } from '../data/seedData';
 
-export const TestimonialsFAQ: React.FC = () => {
+interface TestimonialsFAQProps {
+  compact?: boolean;
+}
+
+export const TestimonialsFAQ: React.FC<TestimonialsFAQProps> = ({ compact = false }) => {
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
   const faqs = [
@@ -58,8 +62,8 @@ export const TestimonialsFAQ: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {TESTIMONIALS_DATA.map((t) => (
+          <div className={`grid grid-cols-1 gap-6 ${compact ? 'md:grid-cols-2 max-w-4xl mx-auto' : 'md:grid-cols-3'}`}>
+            {TESTIMONIALS_DATA.slice(0, compact ? 2 : TESTIMONIALS_DATA.length).map((t) => (
               <div
                 key={t.id}
                 className="luxury-glass-card rounded-2xl p-6 relative flex flex-col justify-between border border-[#D4AF37]/25 hover:border-[#D4AF37]/55 transition-all duration-300"
@@ -107,7 +111,7 @@ export const TestimonialsFAQ: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            {faqs.map((faq, idx) => {
+            {faqs.slice(0, compact ? 3 : faqs.length).map((faq, idx) => {
               const isOpen = openFaqIndex === idx;
               return (
                 <div

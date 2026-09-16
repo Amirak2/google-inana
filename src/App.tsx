@@ -38,12 +38,10 @@ const MainLayout: React.FC = () => {
         {activeTab === 'home' && (
           <>
             <HeroSection />
-            <CollectionsShowcase />
+            <CollectionsShowcase limit={3} showViewAll />
             <ShopCatalog />
-            <LiveGoldTicker />
-            <InanaStory />
-            <TestimonialsFAQ />
-            <ContactSection />
+            <LiveGoldTicker compact />
+            <TestimonialsFAQ compact />
           </>
         )}
 

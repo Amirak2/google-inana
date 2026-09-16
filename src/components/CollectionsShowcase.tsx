@@ -2,7 +2,12 @@ import React from 'react';
 import { Sparkles, ArrowLeft } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
 
-export const CollectionsShowcase: React.FC = () => {
+interface CollectionsShowcaseProps {
+  limit?: number;
+  showViewAll?: boolean;
+}
+
+export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit, showViewAll = false }) => {
   const { collections, setSelectedCollection, setActiveTab, setSelectedCategory } = useGoldStore();
 
   const handleCollectionSelect = (colName: string) => {
@@ -47,7 +52,7 @@ export const CollectionsShowcase: React.FC = () => {
 
         {/* Collections Editorial Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {collections.map((col) => (
+          {collections.slice(0, limit ?? collections.length).map((col) => (
             <div
               key={col.id}
               onClick={() => handleCollectionSelect(col.name)}
@@ -94,6 +99,22 @@ export const CollectionsShowcase: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {showViewAll && collections.length > (limit ?? collections.length) && (
+          <div className="mt-8 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('collections');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#D4AF37]/40 bg-[#0B152B] px-5 py-3 text-xs font-bold text-[#E6CA65] hover:bg-[#112040]"
+            >
+              <span>مشاهده همه کالکشن‌ها</span>
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );

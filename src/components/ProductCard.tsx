@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Heart, Eye, ShoppingBag, Sparkles } from 'lucide-react';
+import { Heart, Eye, ShoppingBag } from 'lucide-react';
 import { Product } from '../types';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { formatToman, formatWeight } from '../utils/persianFormatter';
@@ -75,23 +75,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
         {/* Vignette Depth Gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#060B15] via-transparent to-transparent opacity-75" />
 
-        {/* Top Badges */}
-        <div className="absolute top-3 right-3 left-3 flex items-center justify-between z-10">
-          <div className="flex flex-col gap-1 items-start">
-            {product.isNewArrival && (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#D4AF37] text-slate-950 shadow-sm flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" />
-                <span>جدید</span>
-              </span>
-            )}
-            {product.discountPercent > 0 && (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-600 text-white shadow-sm">
-                ٪{product.discountPercent} تخفیف
-              </span>
-            )}
-          </div>
-
-          {/* Favorite Button */}
+        <div className="absolute top-3 left-3 z-10">
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
@@ -122,47 +106,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       {/* Product Information */}
       <div className="p-4 sm:p-5 flex flex-col flex-1 justify-between bg-gradient-to-b from-[#0A1325] to-[#060B15] transition-colors duration-500 group-hover:from-[#0D1830] group-hover:to-[#070D1B]">
         <div>
-          {/* Category & Collection with Sparkle accent */}
-          <div className="flex items-center justify-between text-[11px] text-slate-300 mb-1.5">
-            <span className="text-[#D4AF37] font-semibold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] opacity-60 group-hover:opacity-100 transition-opacity" />
-              {product.collection}
-            </span>
-            <span className="bg-slate-800/80 px-2 py-0.5 rounded text-[10px] text-slate-200 border border-slate-700/50">
-              {product.purity}
-            </span>
-          </div>
-
-          {/* Product Title */}
           <h3 className="text-sm sm:text-base font-bold text-white line-clamp-1 group-hover:text-[#F5E8C7] transition-colors duration-300">
             {product.title}
           </h3>
-
-          {/* Weight & Pre-set Making Charge Details */}
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-200 mt-2.5 bg-[#0B152B] p-2 rounded-xl border border-slate-700/80 group-hover:border-[#D4AF37]/25 transition-colors duration-300">
-            <div className="flex items-center gap-1">
-              <span className="text-slate-400 text-[11px]">وزن:</span>
-              <span className="font-bold text-white">{formatWeight(product.weight)}</span>
-            </div>
-            <span className="text-slate-600">|</span>
-            <div className="flex items-center gap-1">
-              <span className="text-slate-400 text-[11px]">اجرت:</span>
-              <span className="font-semibold text-[#D4AF37]">
-                {priceBreakdown.effectiveMakingChargePercent}٪
-              </span>
-            </div>
-            <span className="text-slate-600">|</span>
-            <div className="flex items-center gap-1">
-              <span className="text-slate-400 text-[11px]">سود:</span>
-              <span className="font-semibold text-emerald-400">۷٪</span>
-            </div>
-          </div>
+          <p className="mt-2 text-xs text-slate-300">وزن: <span className="font-bold text-white">{formatWeight(product.weight)}</span></p>
         </div>
 
         {/* Dynamic Computed Price & Action Button Footer */}
         <div className="mt-4 pt-3 border-t border-slate-700/80 group-hover:border-slate-700 flex items-center justify-between transition-colors duration-300">
           <div className="flex flex-col">
-            <span className="text-[10px] text-slate-300 font-light">قیمت محاسبه‌شده روز:</span>
+            <span className="text-[10px] text-slate-300 font-light">قیمت روز</span>
             <span className="text-sm sm:text-base font-bold text-white gold-gradient-text tracking-tight group-hover:brightness-115 transition-all">
               {priceReady ? formatToman(finalPrice) : 'در حال دریافت نرخ...'}
             </span>

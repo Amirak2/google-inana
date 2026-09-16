@@ -9,13 +9,18 @@ import {
   Activity,
   Layers,
   Sparkles,
+  ArrowLeft,
 } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { formatToman, formatPercent, formatJalaliDateTime } from '../utils/persianFormatter';
 import { GoldHistoryPoint } from '../types';
 
-export const LiveGoldTicker: React.FC = () => {
-  const { goldPrice, refreshGoldPrice } = useGoldStore();
+interface LiveGoldTickerProps {
+  compact?: boolean;
+}
+
+export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false }) => {
+  const { goldPrice, refreshGoldPrice, setActiveTab } = useGoldStore();
   const [activeRange, setActiveRange] = useState<'24h' | '7d' | '1m' | '3m' | '1y'>('7d');
   const [historyData, setHistoryData] = useState<GoldHistoryPoint[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -52,8 +57,9 @@ export const LiveGoldTicker: React.FC = () => {
   };
 
   useEffect(() => {
+    if (compact) return;
     fetchHistory(activeRange);
-  }, [activeRange, goldPrice.pricePerGram]);
+  }, [activeRange, goldPrice.pricePerGram, compact]);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -129,6 +135,52 @@ export const LiveGoldTicker: React.FC = () => {
     const priceVal = Math.round(maxPrice - factor * (maxPrice - minPrice));
     return { y, priceVal };
   });
+
+  if (compact) {
+    const priceAvailable = goldPrice.pricePerGram > 0;
+    return (
+      <section
+        id="gold-price-summary-section"
+        className="relative w-full overflow-hidden border-y border-[#D4AF37]/20 bg-[#07101F] px-3.5 py-10 sm:px-6"
+      >
+        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-5 rounded-3xl border border-[#D4AF37]/30 bg-[#0A152A]/90 p-5 sm:flex-row sm:p-7">
+          <div className="flex items-center gap-4">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#D4AF37]/15 text-[#D4AF37]">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-xs text-slate-400">قیمت هر گرم طلای ۱۸ عیار</span>
+              <div className="mt-1 text-xl font-black text-white sm:text-2xl">
+                {priceAvailable ? formatToman(goldPrice.pricePerGram) : 'در حال دریافت نرخ...'}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 text-xs">
+            <span className={goldPrice.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+              تغییر روزانه: {formatPercent(goldPrice.changePercent)}
+            </span>
+            <span className="text-slate-500">•</span>
+            <span className="text-slate-300">
+              آخرین بروزرسانی: {goldPrice.jalaliTimestamp || 'در حال دریافت'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('gold-price');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-[#D4AF37] px-4 py-2.5 text-xs font-bold text-slate-950 hover:brightness-110"
+          >
+            <span>جزئیات و نمودار</span>
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section

@@ -6,10 +6,8 @@ import {
   Instagram,
   Send,
   Phone,
-  MapPin,
   ShieldCheck,
   Award,
-  Sparkles,
   ArrowUp,
 } from 'lucide-react';
 import { CATEGORIES_LIST } from '../data/seedData';
@@ -87,7 +85,7 @@ export const Footer: React.FC = () => {
           <div className="lg:col-span-3">
             <h4 className="text-sm font-bold text-white mb-4">دسته‌بندی زیورآلات</h4>
             <ul className="space-y-2.5">
-              {CATEGORIES_LIST.map((cat) => (
+              {CATEGORIES_LIST.slice(0, 6).map((cat) => (
                 <li key={cat}>
                   <button
                     onClick={() => handleCategoryClick(cat)}

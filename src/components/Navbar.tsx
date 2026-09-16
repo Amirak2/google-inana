@@ -161,18 +161,6 @@ export const Navbar: React.FC = () => {
               </button>
             )}
 
-            <span className="hidden sm:inline text-slate-500">|</span>
-            <span className="inline-flex items-center gap-1 text-slate-300 hover:text-[#D4AF37] text-[10px] sm:text-[11px] transition-colors">
-              <Phone className="w-3 h-3 text-[#D4AF37] flex-shrink-0" />
-              <a
-                href="tel:09909622895"
-                className="hover:underline flex items-center whitespace-nowrap"
-                title="تماس با پشتیبانی VIP اینانا"
-              >
-                <span className="hidden sm:inline">پشتیبانی VIP: </span>
-                <span className="font-sans font-medium text-slate-200 hover:text-[#D4AF37]">۰۹۹۰۹۶۲۲۸۹۵</span>
-              </a>
-            </span>
           </div>
         </div>
       </div>

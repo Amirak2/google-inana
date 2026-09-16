@@ -579,7 +579,7 @@ export const CartDrawer: React.FC = () => {
           <div className="bg-[#0A1224] border-b border-[#D4AF37]/20 px-4 py-2 text-[11px] text-[#F5E8C7] flex items-center justify-between shadow-sm">
             <span className="flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
-              <span>قیمت نهایی بر اساس آخرین قیمت روز طلا محاسبه شده است.</span>
+              <span>نرخ مبنای محاسبه</span>
             </span>
             <span className="font-bold text-[#E6CA65]">
               {priceReady ? `${formatToman(goldPrice.pricePerGram)} / گ` : 'در حال دریافت نرخ...'}
@@ -671,8 +671,6 @@ export const CartDrawer: React.FC = () => {
                             </h4>
                             <div className="flex items-center gap-2 text-[11px] text-slate-300 mt-1">
                               <span>وزن: {formatWeight(item.product.weight)}</span>
-                              <span>•</span>
-                              <span>اجرت: {item.effectiveMakingCharge}٪</span>
                             </div>
                           </div>
 
@@ -954,19 +952,6 @@ export const CartDrawer: React.FC = () => {
                     )}
                   </div>
                 )}
-
-                {/* Step Banner: Info Registered */}
-                <div className="p-3 bg-emerald-500/15 border border-emerald-500/35 rounded-2xl flex items-center justify-between gap-3 text-emerald-300">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <div>
-                      <span className="font-bold text-white text-xs block">اطلاعات خرید با موفقیت ثبت شد</span>
-                      <span className="text-[11px] text-emerald-300/90 block mt-0.5">
-                        لطفاً مبلغ فاکتور را به شماره کارت رسمی زیر واریز فرمایید:
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
                 {/* Buyer info summary card with Edit button */}
                 <div className="p-3.5 bg-[#13254A] border border-slate-700 rounded-2xl space-y-2 relative">
