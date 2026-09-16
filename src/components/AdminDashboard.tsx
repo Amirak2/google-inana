@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sliders,
   TrendingUp,
@@ -125,6 +125,7 @@ export const AdminDashboard: React.FC = () => {
   // Orders list and Card-to-Card Verification States
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const ordersRequestInFlight = useRef(false);
   const [orderFilterStatus, setOrderFilterStatus] = useState<
     'all' | 'در انتظار بررسی' | 'تأیید شده' | 'رد شده' | 'other'
   >('all');
@@ -212,8 +213,10 @@ export const AdminDashboard: React.FC = () => {
     }
   }, [selectedProductId, selectedProduct, settings]);
 
-  const fetchOrders = async () => {
-    setLoadingOrders(true);
+  const fetchOrders = async (showLoading = true) => {
+    if (ordersRequestInFlight.current) return;
+    ordersRequestInFlight.current = true;
+    if (showLoading) setLoadingOrders(true);
     try {
       const res = await fetch('/api/orders', { headers: { ...getAuthHeaders() } });
       if (!res.ok) throw new Error('دریافت سفارش‌ها از سرور انجام نشد.');
@@ -225,14 +228,17 @@ export const AdminDashboard: React.FC = () => {
     } catch (err) {
       console.error('[ORDERS] Server fetch failed:', err);
     } finally {
-      setLoadingOrders(false);
+      if (showLoading) setLoadingOrders(false);
+      ordersRequestInFlight.current = false;
     }
   };
 
   useEffect(() => {
     if (activeAdminTab === 'orders') {
       fetchOrders();
-      const interval = window.setInterval(fetchOrders, 15000);
+      const interval = window.setInterval(() => {
+        if (document.visibilityState === 'visible') void fetchOrders(false);
+      }, 15000);
       return () => window.clearInterval(interval);
     }
   }, [activeAdminTab]);
@@ -2157,7 +2163,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   )}
                   <button
                     type="button"
-                    onClick={fetchOrders}
+                    onClick={() => void fetchOrders(false)}
                     className="text-xs text-[#D4AF37] hover:underline flex items-center gap-1.5 self-start sm:self-auto cursor-pointer px-3 py-1.5 rounded-xl bg-[#060B14] border border-slate-800"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
