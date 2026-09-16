@@ -1,5 +1,5 @@
-import React from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import React, { useRef } from 'react';
+import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { DynamicBackgroundMotion } from './DynamicBackgroundMotion';
@@ -7,6 +7,47 @@ import { DynamicBackgroundMotion } from './DynamicBackgroundMotion';
 export const HeroSection: React.FC = () => {
   const { setActiveTab } = useGoldStore();
   const shouldReduceMotion = useReducedMotion();
+  const heroRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: heroRef,
+    offset: ['start start', 'end start'],
+  });
+
+  const stageOpacity = useTransform(
+    scrollYProgress,
+    [0, 0.48, 0.86, 1],
+    shouldReduceMotion ? [1, 1, 1, 1] : [1, 1, 0.78, 0.18],
+  );
+  const stageScale = useTransform(
+    scrollYProgress,
+    [0, 0.55, 1],
+    shouldReduceMotion ? [1, 1, 1] : [1, 0.92, 0.82],
+  );
+  const stageY = useTransform(
+    scrollYProgress,
+    [0, 1],
+    shouldReduceMotion ? [0, 0] : [0, -68],
+  );
+  const backgroundScale = useTransform(
+    scrollYProgress,
+    [0, 1],
+    shouldReduceMotion ? [1, 1] : [1, 1.22],
+  );
+  const backgroundOpacity = useTransform(
+    scrollYProgress,
+    [0, 0.75, 1],
+    shouldReduceMotion ? [1, 1, 1] : [1, 0.72, 0.18],
+  );
+  const curtainOpacity = useTransform(
+    scrollYProgress,
+    [0.42, 0.78, 1],
+    shouldReduceMotion ? [0, 0, 0] : [0, 0.42, 0.82],
+  );
+  const scrollCueOpacity = useTransform(
+    scrollYProgress,
+    [0, 0.18],
+    shouldReduceMotion ? [0.5, 0.5] : [0.5, 0],
+  );
 
   // Entrance transition helpers respecting prefers-reduced-motion
   const auraTransition = shouldReduceMotion
@@ -27,18 +68,37 @@ export const HeroSection: React.FC = () => {
 
   return (
     <section
+      ref={heroRef}
       id="inana-luxury-hero"
-      className="relative w-full h-[100svh] min-h-[100svh] max-h-[1100px] flex flex-col items-center justify-center px-4 sm:px-6 overflow-hidden bg-[#060B15] select-none"
-      style={{
-        background:
-          'radial-gradient(circle at 50% 50%, rgba(18, 48, 98, 0.55) 0%, rgba(12, 28, 58, 0.4) 38%, rgba(7, 13, 24, 0.95) 75%, #050A14 100%)',
-      }}
+      className="relative h-[145svh] w-full bg-[#060B15] select-none"
     >
-      {/* Background Micro-Particles (Few, Fine, Excluded from Logo Zone) */}
-      <DynamicBackgroundMotion variant="hero-sacred" />
+      <div
+        className="sticky top-0 flex h-[100svh] min-h-[100svh] w-full flex-col items-center justify-center overflow-hidden px-4 sm:px-6"
+        style={{
+          background:
+            'radial-gradient(circle at 50% 50%, rgba(18, 48, 98, 0.55) 0%, rgba(12, 28, 58, 0.4) 38%, rgba(7, 13, 24, 0.95) 75%, #050A14 100%)',
+        }}
+      >
+        <motion.div
+          aria-hidden="true"
+          className="absolute inset-[-10%] origin-center"
+          style={{ scale: backgroundScale, opacity: backgroundOpacity }}
+        >
+          <DynamicBackgroundMotion variant="hero-sacred" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,transparent_0%,rgba(3,7,16,0.18)_54%,rgba(2,5,12,0.82)_100%)]" />
+        </motion.div>
+
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[5] bg-[linear-gradient(to_bottom,transparent_0%,rgba(6,11,21,0.12)_45%,#060B15_100%)]"
+          style={{ opacity: curtainOpacity }}
+        />
 
       {/* Main Centered Stage: Exactly Centered in Viewport */}
-      <div className="relative z-10 w-full max-w-xl mx-auto flex flex-col items-center justify-center text-center my-auto pt-10 sm:pt-14 pb-6">
+      <motion.div
+        className="relative z-10 my-auto flex w-full max-w-xl flex-col items-center justify-center pb-6 pt-10 text-center sm:pt-14"
+        style={{ opacity: stageOpacity, scale: stageScale, y: stageY }}
+      >
         {/* Stage 1: Central Soft Luminous Blue-Gold Aura */}
         <motion.div
           initial={shouldReduceMotion ? { opacity: 0.85, scale: 1 } : { opacity: 0, scale: 0.85 }}
@@ -208,13 +268,16 @@ export const HeroSection: React.FC = () => {
             <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
           </button>
         </motion.div>
-      </div>
+      </motion.div>
 
       {/* Subtle Scroll Down Indicator at the very bottom */}
-      <div className="absolute bottom-4 sm:bottom-6 z-10 opacity-50 hover:opacity-100 transition-opacity">
+      <motion.div
+        className="absolute bottom-4 z-10 transition-opacity hover:opacity-100 sm:bottom-6"
+        style={{ opacity: scrollCueOpacity }}
+      >
         <button
           onClick={() => {
-            window.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' });
+            heroRef.current?.nextElementSibling?.scrollIntoView({ behavior: 'smooth' });
           }}
           className="flex flex-col items-center gap-1 text-[11px] text-[#D4AF37] tracking-wider cursor-pointer"
           aria-label="ورود به گالری"
@@ -222,6 +285,7 @@ export const HeroSection: React.FC = () => {
           <span className="text-[10px] tracking-widest opacity-80">ورود به گالری</span>
           <span className="w-1.5 h-1.5 border-b border-r border-[#D4AF37] rotate-45 animate-pulse" />
         </button>
+      </motion.div>
       </div>
     </section>
   );
