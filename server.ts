@@ -446,6 +446,13 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
   // Return cached if fresh
   const now = Date.now();
   if (!force && now - lastFetchTimestamp < CACHE_LIFETIME_MS && currentGoldState.pricePerGram > 0) {
+    if (currentGoldState.status === 'live' && !isCurrentJalaliDate(currentGoldState.jalaliTimestamp)) {
+      currentGoldState = {
+        ...currentGoldState,
+        status: 'cached',
+        source: 'آخرین نرخ دریافتی؛ منبع هنوز نرخ امروز را اعلام نکرده است',
+      };
+    }
     return currentGoldState;
   }
 
