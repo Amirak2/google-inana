@@ -1,6 +1,7 @@
 import { Pool, type PoolClient } from 'pg';
 
 let sharedPool: Pool | null = null;
+let schemaReady: Promise<void> | null = null;
 
 function getPool(): Pool {
   const connectionString = process.env.PG_URI || process.env.DATABASE_URL;
@@ -15,6 +16,40 @@ function getPool(): Pool {
   return sharedPool;
 }
 
+async function ensureSchema(pool: Pool): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [20260911]);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS site_records (
+            bucket TEXT NOT NULL,
+            record_key TEXT NOT NULL,
+            value_json JSONB NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (bucket, record_key)
+          )
+        `);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    })();
+  }
+
+  try {
+    await schemaReady;
+  } catch (error) {
+    schemaReady = null;
+    throw error;
+  }
+}
+
 export class PostgresStore {
   private buckets = new Map<string, Map<string, any>>();
   private original = new Map<string, string>();
@@ -24,15 +59,7 @@ export class PostgresStore {
   static async load(exclusive = false, publicRead = false): Promise<PostgresStore> {
     const store = new PostgresStore();
     const pool = getPool();
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS site_records (
-        bucket TEXT NOT NULL,
-        record_key TEXT NOT NULL,
-        value_json JSONB NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        PRIMARY KEY (bucket, record_key)
-      )
-    `);
+    await ensureSchema(pool);
 
     if (exclusive) {
       store.client = await pool.connect();

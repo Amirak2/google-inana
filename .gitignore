@@ -13,6 +13,7 @@ coverage/
 .wrangler/
 .dev.vars
 .sites-runtime/
+.liara-cli-tmp/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
