@@ -43,13 +43,16 @@ async function externalizeImages(store: PostgresStore): Promise<Map<string, stri
 }
 
 async function handleRequest(req: express.Request, res: express.Response): Promise<void> {
-  const write = !['GET', 'HEAD'].includes(req.method);
-  const publicRead = !write && ['/api/products', '/api/collections', '/api/settings', '/api/gold-price', '/api/gold-history'].includes(req.path);
+  const mutatingMethod = !['GET', 'HEAD'].includes(req.method);
+  const updatesMarketCache = ['GET', 'HEAD'].includes(req.method)
+    && ['/api/products', '/api/gold-price', '/api/gold-history'].includes(req.path);
+  const needsTransaction = mutatingMethod || updatesMarketCache;
+  const publicRead = !needsTransaction && ['/api/collections', '/api/settings'].includes(req.path);
   let store: PostgresStore | null = null;
   try {
-    store = await PostgresStore.load(write, publicRead);
+    store = await PostgresStore.load(needsTransaction, publicRead);
     const origin = `${req.protocol}://${req.get('host')}`;
-    if (write && req.get('origin') && req.get('origin') !== origin) {
+    if (mutatingMethod && req.get('origin') && req.get('origin') !== origin) {
       res.status(403).json({ error: 'مبدأ درخواست معتبر نیست.' });
       return;
     }
@@ -80,8 +83,8 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
     const request = new Request(`${origin}${req.originalUrl}`, {
       method: req.method,
       headers,
-      body: write && req.body?.length ? req.body : undefined,
-      duplex: write ? 'half' : undefined,
+      body: mutatingMethod && req.body?.length ? req.body : undefined,
+      duplex: mutatingMethod ? 'half' : undefined,
     } as RequestInit & { duplex?: 'half' });
     let response = await siteApp.fetch(request);
     const replacements = await externalizeImages(store);

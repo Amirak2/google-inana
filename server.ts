@@ -367,10 +367,15 @@ function isCurrentJalaliDate(value: unknown): boolean {
 currentGoldState = store.get('market', 'gold') || currentGoldState;
 let cachedTgjuData: any[][] = store.get('market', 'history') || [];
 let lastFetchTimestamp = store.get<number>('market', 'fetchedAt') || 0;
+let lastHistoryFetchTimestamp = store.get<number>('market', 'historyFetchedAt') || 0;
+type HourlyGoldPoint = GoldHistoryPoint & { timestamp: number };
+let hourlyGoldHistory: HourlyGoldPoint[] = store.get<HourlyGoldPoint[]>('market', 'hourlyHistory') || [];
 const CACHE_LIFETIME_MS = 60 * 60 * 1000; // 1 hour cache (scheduled updates every 1 hour)
 
 async function ensureTgjuHistory(): Promise<any[][]> {
-  if (cachedTgjuData.length > 0) return cachedTgjuData;
+  if (cachedTgjuData.length > 0 && Date.now() - lastHistoryFetchTimestamp < CACHE_LIFETIME_MS) {
+    return cachedTgjuData;
+  }
   try {
     const res = await fetch('https://api.tgju.org/v1/market/indicator/summary-table-data/geram18', {
       headers: {
@@ -384,6 +389,7 @@ async function ensureTgjuHistory(): Promise<any[][]> {
       const json = await res.json();
       if (json && Array.isArray(json.data) && json.data.length > 0) {
         cachedTgjuData = json.data;
+        lastHistoryFetchTimestamp = Date.now();
         return cachedTgjuData;
       }
     }
@@ -391,6 +397,32 @@ async function ensureTgjuHistory(): Promise<any[][]> {
     console.warn('Could not fetch TGJU historical table data:', err);
   }
   return cachedTgjuData;
+}
+
+function recordHourlyGoldPoint(): void {
+  if (!Number.isFinite(currentGoldState.pricePerGram) || currentGoldState.pricePerGram <= 0) return;
+  const now = Date.now();
+  const hourKey = Math.floor(now / CACHE_LIFETIME_MS);
+  const point: HourlyGoldPoint = {
+    timestamp: now,
+    time: new Date(now).toLocaleTimeString('fa-IR', {
+      timeZone: 'Asia/Tehran',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    date: new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+      timeZone: 'Asia/Tehran',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(now)),
+    price: currentGoldState.pricePerGram,
+    isEstimated: false,
+  };
+  hourlyGoldHistory = hourlyGoldHistory
+    .filter((item) => item.timestamp >= now - 25 * CACHE_LIFETIME_MS && Math.floor(item.timestamp / CACHE_LIFETIME_MS) !== hourKey)
+    .concat(point)
+    .sort((a, b) => a.timestamp - b.timestamp);
 }
 
 async function fetchOtherMarkets(): Promise<OtherMarketsData> {
@@ -440,6 +472,7 @@ async function fetchOtherMarkets(): Promise<OtherMarketsData> {
 async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceData> {
   // If manual override is enabled and not forced by admin sync, respect manual
   if (currentGoldState.isManualOverride && !force) {
+    recordHourlyGoldPoint();
     return currentGoldState;
   }
 
@@ -453,6 +486,7 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
         source: 'آخرین نرخ دریافتی؛ منبع هنوز نرخ امروز را اعلام نکرده است',
       };
     }
+    recordHourlyGoldPoint();
     return currentGoldState;
   }
 
@@ -547,6 +581,7 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
           };
 
           lastFetchTimestamp = now;
+          recordHourlyGoldPoint();
           return currentGoldState;
         }
       }
@@ -607,6 +642,8 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
         };
 
         lastFetchTimestamp = now;
+        lastHistoryFetchTimestamp = now;
+        recordHourlyGoldPoint();
         return currentGoldState;
       }
     }
@@ -639,6 +676,7 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
           status: 'live',
         };
         lastFetchTimestamp = now;
+        recordHourlyGoldPoint();
         return currentGoldState;
       }
     }
@@ -648,6 +686,7 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
 
   // If all live calls fail, preserve state but flag as cached
   currentGoldState.status = 'cached';
+  recordHourlyGoldPoint();
   return currentGoldState;
 }
 
@@ -740,6 +779,9 @@ app.post('/api/admin/gold-price/sync', requireAdminAuth, async (_req: Authentica
 app.get('/api/gold-history', async (req: Request, res: Response) => {
   const range = (req.query.range as string) || '7d';
 
+  // Keep the current chart point in sync with the live price endpoint.
+  await getOrUpdateGoldPrice(false);
+
   // Ensure TGJU history table is loaded for historical ranges
   await ensureTgjuHistory();
 
@@ -747,6 +789,9 @@ app.get('/api/gold-history', async (req: Request, res: Response) => {
   let points: GoldHistoryPoint[] = [];
 
   if (range === '24h' || range === '1d') {
+    if (hourlyGoldHistory.length >= 2) {
+      points = hourlyGoldHistory.map(({ timestamp: _timestamp, ...point }) => point);
+    } else {
     const hours = ['۰۹:۰۰', '۱۱:۰۰', '۱۳:۰۰', '۱۵:۰۰', '۱۷:۰۰', '۱۹:۰۰', 'اکنون'];
     const low = currentGoldState.dailyLow || Math.round(base * 0.985);
     const high = currentGoldState.dailyHigh || Math.round(base * 1.015);
@@ -769,9 +814,14 @@ app.get('/api/gold-history', async (req: Request, res: Response) => {
       price: prices[idx],
       isEstimated: idx < hours.length - 1,
     }));
+    }
   } else if (range === '7d') {
     if (cachedTgjuData && cachedTgjuData.length >= 6) {
-      const slice = cachedTgjuData.slice(0, 6).reverse();
+      const currentDate = String(currentGoldState.jalaliTimestamp || '').split(' - ')[0];
+      const slice = cachedTgjuData
+        .filter((row) => String(row[7] || row[6] || '') !== currentDate)
+        .slice(0, 6)
+        .reverse();
       points = slice.map((row) => {
         const rawDate = String(row[7] || row[6] || '');
         const dateShort = rawDate.split('/').slice(1).join('/'); // e.g. 06/07
@@ -2414,6 +2464,8 @@ return { async fetch(request: globalThis.Request) {
   store.set('market', 'gold', currentGoldState);
   store.set('market', 'fetchedAt', lastFetchTimestamp);
   store.set('market', 'history', cachedTgjuData);
+  store.set('market', 'historyFetchedAt', lastHistoryFetchTimestamp);
+  store.set('market', 'hourlyHistory', hourlyGoldHistory);
   return response;
 }, authenticate: verifySessionToken };
 }
