@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from './server';
 import type { Store } from './server/storage';
 import { PostgresStore } from './server/postgresStorage';
+import { getMediaObject, isObjectStorageConfigured, putMediaObject } from './server/objectStorage';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -27,7 +28,14 @@ async function externalizeImages(store: PostgresStore): Promise<Map<string, stri
         const id = crypto.randomUUID();
         const isPublic = bucket === 'products';
         const url = `${isPublic ? '/media/products/' : '/api/receipts/'}${id}`;
-        store.set('media', id, { owner, public: isPublic, ...image });
+        if (isObjectStorageConfigured()) {
+          const extension = image.contentType.split('/')[1] === 'jpeg' ? 'jpg' : image.contentType.split('/')[1];
+          const objectKey = `${isPublic ? 'products' : 'receipts'}/${id}.${extension}`;
+          await putMediaObject(objectKey, Buffer.from(image.data, 'base64'), image.contentType);
+          store.set('media', id, { owner, public: isPublic, contentType: image.contentType, objectKey });
+        } else {
+          store.set('media', id, { owner, public: isPublic, ...image });
+        }
         replacements.set(value, url);
         return url;
       }
@@ -68,10 +76,14 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
         const user = siteApp.authenticate(token);
         if (!user || (user.role !== 'admin' && user.uid !== media.owner)) { res.sendStatus(403); return; }
       }
+      const data = media.objectKey
+        ? await getMediaObject(media.objectKey)
+        : Buffer.from(media.data, 'base64');
+      if (!data) { res.sendStatus(404); return; }
       res.set('Content-Type', media.contentType);
       res.set('Cache-Control', media.public ? 'public, max-age=86400' : 'private, no-store');
       res.set('X-Content-Type-Options', 'nosniff');
-      res.send(Buffer.from(media.data, 'base64'));
+      res.send(data);
       return;
     }
 

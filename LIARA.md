@@ -29,6 +29,10 @@ FIREBASE_PROJECT_ID=inanagold
 FIREBASE_MESSAGING_SENDER_ID=YOUR_FIREBASE_SENDER_ID
 FIREBASE_APP_ID=YOUR_FIREBASE_APP_ID
 GOOGLE_CLIENT_ID=YOUR_GOOGLE_WEB_CLIENT_ID
+LIARA_ENDPOINT=https://storage.c2.liara.site
+LIARA_BUCKET_NAME=inana
+LIARA_ACCESS_KEY=YOUR_OBJECT_STORAGE_ACCESS_KEY
+LIARA_SECRET_KEY=YOUR_OBJECT_STORAGE_SECRET_KEY
 ```
 
-برنامه در نخستین درخواست، جدول `site_records` را به‌صورت خودکار می‌سازد. تصاویر محصولات و فیش‌های کوچک نیز فعلاً در PostgreSQL ذخیره می‌شوند؛ برای حجم بالاتر بهتر است فضای ذخیره‌سازی ابری لیارا متصل شود.
+برنامه در نخستین درخواست، جدول `site_records` را به‌صورت خودکار می‌سازد. پس از تنظیم چهار متغیر Object Storage، تصاویر جدید محصولات و فیش‌ها در باکت لیارا ذخیره می‌شوند. فایل‌های قبلی همچنان از PostgreSQL خوانده می‌شوند و فیش‌ها فقط برای صاحب سفارش یا مدیر قابل دریافت‌اند.
