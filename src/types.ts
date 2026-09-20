@@ -28,7 +28,7 @@ export interface PricingSettings {
   profitPercent: number; // e.g. 7%
   taxPercent: number; // Legacy compatibility; always zero.
   fixedCost: number; // e.g. 0
-  autoSyncIntervalMinutes: number; // e.g. 5
+  autoSyncIntervalMinutes: number; // e.g. 60
   goldApiUrl?: string;
   storePhone?: string;
   storeTelegram?: string;

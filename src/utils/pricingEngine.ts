@@ -5,7 +5,7 @@ export const DEFAULT_SETTINGS: PricingSettings = {
   profitPercent: 7, // 7%
   taxPercent: 0,
   fixedCost: 0,
-  autoSyncIntervalMinutes: 5,
+  autoSyncIntervalMinutes: 60,
   storePhone: '09909622895',
   storeTelegram: 'estella_shopee',
   storeInstagram: 'inanagold.ir',
