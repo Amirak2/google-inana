@@ -75,7 +75,8 @@ export class PostgresStore {
         : 'SELECT bucket, record_key, value_json FROM site_records'
     );
     for (const row of result.rows) {
-      const value = typeof row.value_json === 'string' ? JSON.parse(row.value_json) : row.value_json;
+      // pg already decodes JSONB, including scalar strings.
+      const value = row.value_json;
       store.map(row.bucket).set(row.record_key, value);
       store.original.set(JSON.stringify([row.bucket, row.record_key]), JSON.stringify(value));
     }
