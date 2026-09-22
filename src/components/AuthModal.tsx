@@ -2,11 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   User as UserIcon,
-  Mail,
-  Lock,
   Phone,
-  Eye,
-  EyeOff,
   ShieldCheck,
   LogOut,
   MapPin,
@@ -31,16 +27,13 @@ export const AuthModal: React.FC = () => {
     isAuthModalOpen,
     authModalMode,
     closeAuthModal,
-    loginWithEmail,
-    registerWithEmail,
     sendSmsOtp,
     verifySmsOtp,
-    loginWithGoogle,
     logout,
     updateUserProfileData,
   } = useAuth();
 
-  const [mode, setMode] = useState<'otp' | 'login' | 'register' | 'profile'>('otp');
+  const [mode, setMode] = useState<'otp' | 'profile'>('otp');
 
   // OTP State
   const [otpStep, setOtpStep] = useState<'phone' | 'code'>('phone');
@@ -50,13 +43,9 @@ export const AuthModal: React.FC = () => {
   const [isOtpNewUser, setIsOtpNewUser] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
 
-  // Email/Password State
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [address, setAddress] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -184,56 +173,6 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
-      setErrorMsg('لطفاً ایمیل و رمز عبور را وارد کنید.');
-      return;
-    }
-    setSubmitting(true);
-    setErrorMsg(null);
-    try {
-      await loginWithEmail(email, password);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'ایمیل یا کلمه عبور نادرست است.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password || !displayName) {
-      setErrorMsg('لطفاً نام، ایمیل و رمز عبور را تکمیل فرمایید.');
-      return;
-    }
-    if (password.length < 6) {
-      setErrorMsg('رمز عبور باید حداقل ۶ کاراکتر باشد.');
-      return;
-    }
-    setSubmitting(true);
-    setErrorMsg(null);
-    try {
-      await registerWithEmail(email, password, displayName, phoneNumber);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'خطا در ایجاد حساب کاربری.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setSubmitting(true);
-    setErrorMsg(null);
-    try {
-      await loginWithGoogle();
-    } catch (err: any) {
-      setErrorMsg(err.message || 'خطا در ورود با گوگل.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -269,13 +208,7 @@ export const AuthModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-white">
-                {mode === 'profile'
-                  ? 'حساب کاربری اینانا'
-                  : mode === 'otp'
-                  ? 'ورود و ثبت‌نام سریع با پیامک'
-                  : mode === 'register'
-                  ? 'عضویت در باشگاه مشتریان'
-                  : 'ورود با ایمیل و گذرواژه'}
+                {mode === 'profile' ? 'حساب کاربری اینانا' : 'ورود و ثبت‌نام با شماره موبایل'}
               </h2>
               <span className="text-[11px] text-[#E6CA65]">
                 {mode === 'profile'
@@ -293,45 +226,6 @@ export const AuthModal: React.FC = () => {
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Tab Switcher (When not in profile mode) */}
-        {!currentUser && (
-          <div className="flex border-b border-[#D4AF37]/20 bg-[#081224] px-4 pt-2 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => {
-                setErrorMsg(null);
-                setMode('otp');
-              }}
-              className={`flex-1 py-2.5 font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 ${
-                mode === 'otp'
-                  ? 'border-[#D4AF37] text-[#D4AF37]'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>کد پیامکی (OTP)</span>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#D4AF37]/20 text-[#E6CA65] font-normal">
-                پیشنهادی
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setErrorMsg(null);
-                setMode('login');
-              }}
-              className={`flex-1 py-2.5 font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 ${
-                mode === 'login' || mode === 'register'
-                  ? 'border-[#D4AF37] text-[#D4AF37]'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Mail className="w-3.5 h-3.5" />
-              <span>ایمیل و گذرواژه</span>
-            </button>
-          </div>
-        )}
 
         <div className="p-6 overflow-y-auto">
           {/* Status Messages */}
@@ -396,41 +290,6 @@ export const AuthModal: React.FC = () => {
                     )}
                   </button>
 
-                  <div className="relative my-4">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-slate-700/80"></div>
-                    </div>
-                    <div className="relative flex justify-center text-xs">
-                      <span className="px-2 bg-[#0E1A33] text-slate-400">یا ورود با</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleGoogleLogin}
-                    disabled={submitting}
-                    className="w-full py-2.5 rounded-xl bg-[#13254A] hover:bg-[#1A3264] border border-slate-700 text-slate-200 font-semibold text-xs flex items-center justify-center gap-2 transition-all"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
-                    <span>ورود با حساب گوگل (Google)</span>
-                  </button>
                 </form>
               ) : (
                 <form onSubmit={handleVerifyOtp} className="space-y-4">
@@ -666,183 +525,6 @@ export const AuthModal: React.FC = () => {
             </form>
           )}
 
-          {/* ============================================================== */}
-          {/* 3. EMAIL/PASSWORD LOGIN VIEW */}
-          {/* ============================================================== */}
-          {mode === 'login' && !currentUser && (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  آدرس ایمیل
-                </label>
-                <div className="relative flex items-center">
-                  <Mail className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                  <input
-                    type="email"
-                    dir="ltr"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-[#0A1120] border border-slate-700 rounded-xl pr-9 pl-3 py-2.5 text-xs text-white placeholder-slate-500 focus:border-[#D4AF37] focus:outline-none text-left"
-                    placeholder="name@example.com"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  رمز عبور
-                </label>
-                <div className="relative flex items-center">
-                  <Lock className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    dir="ltr"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-[#0A1120] border border-slate-700 rounded-xl pr-9 pl-9 py-2.5 text-xs text-white placeholder-slate-500 focus:border-[#D4AF37] focus:outline-none text-left"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3 text-slate-400 hover:text-slate-200"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E6CA65] text-slate-950 font-bold text-xs shadow-lg hover:shadow-[#D4AF37]/25 transition-all disabled:opacity-50 mt-2"
-              >
-                {submitting ? 'در حال ورود...' : 'ورود به حساب کاربری'}
-              </button>
-
-              <div className="text-center pt-2">
-                <span className="text-xs text-slate-400">حساب کاربری ایمیلی ندارید؟ </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setErrorMsg(null);
-                    setMode('register');
-                  }}
-                  className="text-xs font-bold text-[#D4AF37] hover:underline"
-                >
-                  ثبت‌نام با ایمیل
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ============================================================== */}
-          {/* 4. EMAIL REGISTER VIEW */}
-          {/* ============================================================== */}
-          {mode === 'register' && !currentUser && (
-            <form onSubmit={handleRegister} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  نام و نام خانوادگی
-                </label>
-                <div className="relative flex items-center">
-                  <UserIcon className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                  <input
-                    type="text"
-                    required
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    className="w-full bg-[#0A1120] border border-slate-700 rounded-xl pr-9 pl-3 py-2 text-xs text-white placeholder-slate-500 focus:border-[#D4AF37] focus:outline-none"
-                    placeholder="مثال: پرنیان رضایی"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  آدرس ایمیل
-                </label>
-                <div className="relative flex items-center">
-                  <Mail className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                  <input
-                    type="email"
-                    dir="ltr"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-[#0A1120] border border-slate-700 rounded-xl pr-9 pl-3 py-2 text-xs text-white placeholder-slate-500 focus:border-[#D4AF37] focus:outline-none text-left"
-                    placeholder="name@example.com"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  شماره موبایل (اختیاری)
-                </label>
-                <div className="relative flex items-center">
-                  <Phone className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                  <input
-                    type="tel"
-                    dir="ltr"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="w-full bg-[#0A1120] border border-slate-700 rounded-xl pr-9 pl-3 py-2 text-xs text-white placeholder-slate-500 focus:border-[#D4AF37] focus:outline-none text-left"
-                    placeholder="0912..."
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  کلمه عبور (حداقل ۶ کاراکتر)
-                </label>
-                <div className="relative flex items-center">
-                  <Lock className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    dir="ltr"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-[#0A1120] border border-slate-700 rounded-xl pr-9 pl-9 py-2 text-xs text-white placeholder-slate-500 focus:border-[#D4AF37] focus:outline-none text-left"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3 text-slate-400 hover:text-slate-200"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E6CA65] text-slate-950 font-bold text-xs shadow-lg hover:shadow-[#D4AF37]/25 transition-all disabled:opacity-50 mt-2"
-              >
-                {submitting ? 'در حال ثبت‌نام...' : 'ایجاد حساب کاربری'}
-              </button>
-
-              <div className="text-center pt-2">
-                <span className="text-xs text-slate-400">قبلاً عضو شده‌اید؟ </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setErrorMsg(null);
-                    setMode('login');
-                  }}
-                  className="text-xs font-bold text-[#D4AF37] hover:underline"
-                >
-                  ورود به حساب
-                </button>
-              </div>
-            </form>
-          )}
         </div>
       </div>
     </div>

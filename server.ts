@@ -23,7 +23,7 @@ import { createLogger } from './server/logger';
 import { createDb } from './server/db';
 
 export function createApp(store: Store, env: Record<string, any>) {
-const { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, registerUser, loginUser, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, verifyGoogleOrFirebaseToken, syncGoogleUser, requestPhoneChangeOtp, verifyPhoneChangeOtp } = createAuthStore(store, env);
+const { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp } = createAuthStore(store, env);
 const { logger, requestLoggerMiddleware } = createLogger(store);
 const { runDbTransaction,
   getAllProductsFromDb,
@@ -2087,77 +2087,7 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
   }
 });
 
-// 7. Authentication Endpoints (Email/Password registration & login for all users)
-app.post('/api/auth/register', (req: Request, res: Response) => {
-  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
-  const rl = checkRateLimit(`auth_reg_${clientIp}`, 10, 60 * 1000);
-  if (!rl.allowed) {
-    res.status(429).json({ success: false, error: 'تعداد درخواست‌ها بیش از حد مجاز است. لطفاً کمی بعد دوباره تلاش کنید.' });
-    return;
-  }
-
-  try {
-    const { email, password, displayName, phoneNumber } = req.body;
-    const emailVal = validateEmail(email);
-    if (!emailVal.isValid) {
-      res.status(400).json({ success: false, error: emailVal.error });
-      return;
-    }
-    const passVal = validatePassword(password);
-    if (!passVal.isValid) {
-      res.status(400).json({ success: false, error: passVal.error });
-      return;
-    }
-
-    const result = registerUser(emailVal.value, passVal.value, displayName, phoneNumber);
-    setAuthCookie(res, result.token);
-    logger.security('AUTH', `ثبت‌نام موفق کاربر جدید: ${emailVal.value} (${displayName || 'بدون نام'})`, {
-      email: emailVal.value,
-      displayName,
-      role: result.user.role,
-    });
-    res.status(201).json({ success: true, user: result.user });
-  } catch (err: any) {
-    logger.warn('AUTH', `تلاش ناموفق برای ثبت‌نام کاربر: ${req.body?.email || 'نامشخص'} - ${err?.message}`, {
-      email: req.body?.email,
-      error: err?.message,
-    });
-    res.status(400).json({ success: false, error: err?.message || 'خطا در ثبت‌نام کاربر' });
-  }
-});
-
-app.post('/api/auth/login', (req: Request, res: Response) => {
-  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
-  const rl = checkRateLimit(`auth_login_${clientIp}`, 10, 60 * 1000);
-  if (!rl.allowed) {
-    res.status(429).json({ success: false, error: 'تعداد دفعات تلاش ورود بیش از حد مجاز است. لطفاً ۱ دقیقه صبر کنید.' });
-    return;
-  }
-
-  try {
-    const { email, password } = req.body;
-    const emailVal = validateEmail(email);
-    if (!emailVal.isValid) {
-      res.status(400).json({ success: false, error: emailVal.error });
-      return;
-    }
-
-    const result = loginUser(emailVal.value, password);
-    setAuthCookie(res, result.token);
-    logger.security('AUTH', `ورود موفق کاربر: ${emailVal.value} با نقش [${result.user.role}]`, {
-      email: emailVal.value,
-      role: result.user.role,
-    });
-    res.json({ success: true, user: result.user });
-  } catch (err: any) {
-    logger.warn('AUTH', `تلاش ناموفق برای ورود به سیستم: ${req.body?.email || 'نامشخص'}`, {
-      email: req.body?.email,
-      error: err?.message,
-    });
-    res.status(401).json({ success: false, error: err?.message || 'ایمیل یا کلمه عبور نادرست است' });
-  }
-});
-
+// 7. Authentication endpoint
 app.post('/api/auth/logout', (req: Request, res: Response) => {
   const token = extractToken(req);
   if (token) {
@@ -2165,51 +2095,6 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
   }
   clearAuthCookie(res);
   res.json({ success: true, message: 'خروج موفقیت‌آمیز بود.' });
-});
-
-// Google Firebase auth integration & account synchronization with cryptographic identity verification
-app.post('/api/auth/google-sync', async (req: Request, res: Response) => {
-  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
-  const rl = checkRateLimit(`auth_google_${clientIp}`, 15, 60 * 1000);
-  if (!rl.allowed) {
-    res.status(429).json({ success: false, error: 'درخواست ورود گوگل بیش از حد مجاز است.' });
-    return;
-  }
-
-  try {
-    const { idToken } = req.body;
-    if (!idToken || typeof idToken !== 'string' || idToken.trim().length < 20) {
-      res.status(400).json({
-        success: false,
-        error: 'ارائه توکن معتبر گوگل یا فایربیس (idToken) جهت اثبات هویت الزامی است.',
-      });
-      return;
-    }
-
-    // Issue #1 Fix: Cryptographically verify identity token directly with Google / Firebase
-    // This strictly extracts verified user claims; NEVER trusts client-submitted email/uid
-    const verifiedGoogleUser = await verifyGoogleOrFirebaseToken(idToken);
-
-    const result = syncGoogleUser({
-      uid: verifiedGoogleUser.uid,
-      email: verifiedGoogleUser.email,
-      displayName: verifiedGoogleUser.displayName,
-      photoURL: verifiedGoogleUser.photoURL,
-      emailVerified: verifiedGoogleUser.emailVerified,
-    });
-
-    setAuthCookie(res, result.token);
-    logger.security('AUTH', `همگام‌سازی و ورود موفق حساب گوگل با اثبات هویت معتبر: ${result.user.email} (${result.user.role})`, {
-      email: result.user.email,
-      role: result.user.role,
-      uid: result.user.uid,
-    });
-
-    res.json({ success: true, user: result.user });
-  } catch (err: any) {
-    logger.warn('AUTH', `تلاش ناموفق برای ورود با گوگل (توکن نامعتبر یا اثبات هویت رد شد): ${err.message}`);
-    res.status(401).json({ success: false, error: err.message || 'خطا در اعتبارسنجی هویت حساب گوگل.' });
-  }
 });
 
 // 7.1 SMS OTP Endpoints (سرویس ارسال و تایید کد پیامکی یکبارمصرف)

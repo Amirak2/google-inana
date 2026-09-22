@@ -1,7 +1,5 @@
 import crypto from 'crypto';
 import type { Store } from './storage';
-import firebaseConfig from '../firebase-applet-config.json';
-
 import { UserProfile, UserRole } from '../src/types';
 
 export interface StoredUser {
@@ -9,7 +7,6 @@ export interface StoredUser {
   email: string;
   passwordHash?: string;
   phoneVerified?: boolean;
-  googleUid?: string;
   salt?: string;
   displayName: string;
   phoneNumber?: string;
@@ -34,15 +31,6 @@ const PRIMARY_ADMIN_EMAIL = (env.ADMIN_EMAIL || 'amirbiashad@gmail.com').toLower
 const PRIMARY_ADMIN_PHONE = env.ADMIN_PHONE || '09128481806';
 const PRIMARY_ADMIN_INIT_PASS = env.ADMIN_DEFAULT_PASSWORD || '';
 
-// Load Firebase Web API Key and Project config for cryptographically verifying Google/Firebase ID tokens
-let FIREBASE_WEB_API_KEY = env.FIREBASE_WEB_API_KEY || '';
-let FIREBASE_PROJECT_ID = env.FIREBASE_PROJECT_ID || '';
-let FIREBASE_MESSAGING_SENDER_ID = env.FIREBASE_MESSAGING_SENDER_ID || '';
-let FIREBASE_APP_ID = env.FIREBASE_APP_ID || '';
-FIREBASE_WEB_API_KEY ||= firebaseConfig.apiKey;
-FIREBASE_PROJECT_ID ||= firebaseConfig.projectId;
-FIREBASE_MESSAGING_SENDER_ID ||= firebaseConfig.messagingSenderId;
-FIREBASE_APP_ID ||= firebaseConfig.appId;
 // SMS OTP Provider Config
 const SMS_OTP_URL = env.SMS_OTP_URL || 'https://s.api.ir/api/sw1/SmsOTP';
 const SMS_OTP_API_KEY = env.SMS_OTP_API_KEY || '';
@@ -133,7 +121,7 @@ function loadUsers(): void {
     adminUser = defaultAdmin;
   }
 
-  // Keep Google, email/password and SMS login tied to one administrator record.
+  // Keep SMS login tied to the designated administrator record.
   // If this phone was previously used by another account, unlink it there first.
   const normalizedAdminPhone = normalizeIranianMobile(PRIMARY_ADMIN_PHONE);
   for (const [email, user] of usersCache) {
@@ -526,7 +514,7 @@ function verifySmsOtpAndAuthenticate(
   // The designated admin phone always resolves to the same email-backed account.
   let user = isMasterAdmin
     ? usersCache.get(PRIMARY_ADMIN_EMAIL.toLowerCase().trim())
-    : [...usersCache.values()].find(u => u.phoneNumber && normalizeIranianMobile(u.phoneNumber) === cleanMobile && (u.phoneVerified === true || (!u.passwordHash && !u.googleUid)));
+    : [...usersCache.values()].find(u => u.phoneNumber && normalizeIranianMobile(u.phoneNumber) === cleanMobile && (u.phoneVerified === true || !u.passwordHash));
   let isNewUser = false;
 
   if (!user) {
@@ -568,177 +556,6 @@ function verifySmsOtpAndAuthenticate(
     user: sanitizeUser(user),
     token,
     isNewUser,
-  };
-}
-
-interface VerifiedGoogleUser {
-  uid: string;
-  email: string;
-  displayName?: string;
-  photoURL?: string;
-  emailVerified: boolean;
-}
-
-/**
- * Cryptographically verify Firebase ID token or Google OAuth ID token on server.
- * Ensures the client cannot forge user identities, use tokens from other apps, or bypass email verification.
- */
-async function verifyGoogleOrFirebaseToken(idToken: string): Promise<VerifiedGoogleUser> {
-  const token = (idToken || '').trim();
-  if (!token || token.length < 20) {
-    throw new Error('توکن امنیتی گوگل یا فایربیس ارائه نشده یا نامعتبر است.');
-  }
-
-  // 1. Verify via Firebase Identity Toolkit (official verification with Project API Key)
-  if (FIREBASE_WEB_API_KEY) {
-    try {
-      const lookupEndpoint = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_WEB_API_KEY}`;
-      const resp = await fetch(lookupEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken: token }),
-        signal: AbortSignal.timeout(8000),
-      });
-
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.users && Array.isArray(data.users) && data.users.length > 0) {
-          const u = data.users[0];
-          if (!u.email) {
-            throw new Error('حساب کاربری گوگل فاقد ایمیل معتبر می‌باشد.');
-          }
-
-          // Strict Requirement 1: Enforce that email is verified by Google before allowing access
-          const isVerified = Boolean(u.emailVerified);
-          if (!isVerified) {
-            throw new Error('ایمیل حساب گوگل تأیید نشده است (email_verified=false). اتصال به حساب یا ورود نیازمند تأیید مالکیت ایمیل است.');
-          }
-
-          return {
-            uid: u.localId,
-            email: String(u.email).toLowerCase().trim(),
-            displayName: u.displayName || '',
-            photoURL: u.photoUrl || '',
-            emailVerified: true,
-          };
-        }
-      }
-    } catch (err: any) {
-      if (err.message && err.message.includes('تأیید نشده است')) {
-        throw err;
-      }
-      console.warn('[AUTH] Firebase accounts:lookup verification notice:', err?.message || err);
-    }
-  }
-
-  // 2. Fallback: Google OAuth2 tokeninfo endpoint with strict Audience (aud) validation
-  try {
-    const googleTokenInfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`;
-    const gResp = await fetch(googleTokenInfoUrl, {
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (gResp.ok) {
-      const gData = await gResp.json();
-      if (gData.email) {
-        // Strict Requirement: Exact equality matching against allowed application/project client IDs
-        // Loose substring matching (like .includes) is strictly prohibited to prevent cross-app token spoofing
-        const tokenAud = String(gData.aud || '').trim();
-        const validAudiences = [
-          FIREBASE_PROJECT_ID,
-          FIREBASE_APP_ID,
-          env.GOOGLE_CLIENT_ID,
-        ].filter(Boolean) as string[];
-
-        const isAudValid = validAudiences.some((aud) => tokenAud === aud);
-
-        if (!isAudValid) {
-          throw new Error('مخاطب توکن گوگل (aud) با شناسه این برنامه مطابقت ندارد و توکن برای برنامه دیگری صادر شده است.');
-        }
-
-        // Strict Requirement 1: Require email_verified === true
-        const isEmailVerified = gData.email_verified === 'true' || gData.email_verified === true;
-        if (!isEmailVerified) {
-          throw new Error('ایمیل حساب گوگل تأیید نشده است (email_verified=false). ورود یا اتصال به حساب تنها با ایمیل‌های تأییدشده ممکن است.');
-        }
-
-        return {
-          uid: gData.sub || `g_${Date.now()}`,
-          email: String(gData.email).toLowerCase().trim(),
-          displayName: gData.name || '',
-          photoURL: gData.picture || '',
-          emailVerified: true,
-        };
-      }
-    }
-  } catch (err: any) {
-    if (err.message && (err.message.includes('مطابقت ندارد') || err.message.includes('تأیید نشده است'))) {
-      throw err;
-    }
-    console.warn('[AUTH] Google oauth2:tokeninfo check notice:', err?.message || err);
-  }
-
-  throw new Error('اعتبارسنجی توکن گوگل با شکست مواجه شد. توکن نامعتبر، جعلی یا منقضی شده است.');
-}
-
-/**
- * Sync Google Authenticated User with Server Session
- * Strictly enforces email verification before linking to or creating any account.
- */
-function syncGoogleUser(googleUser: {
-  uid: string;
-  email: string;
-  displayName?: string;
-  photoURL?: string;
-  emailVerified: boolean;
-}): { user: UserProfile; token: string } {
-  if (!googleUser.emailVerified) {
-    throw new Error('تأیید مالکیت ایمیل توسط گوگل الزامی است. ایمیل این حساب تأیید نشده است.');
-  }
-
-  const cleanEmail = googleUser.email.toLowerCase().trim();
-  if (!cleanEmail || !cleanEmail.includes('@')) {
-    throw new Error('فرمت ایمیل گوگل نامعتبر است.');
-  }
-
-  let user = usersCache.get(cleanEmail);
-  const isPrimaryAdmin = cleanEmail === PRIMARY_ADMIN_EMAIL.toLowerCase().trim();
-  // Never merge verified Google identity into an unverified password account.
-  if (user && !isPrimaryAdmin && ((user.googleUid && user.googleUid !== googleUser.uid) || (!user.googleUid && user.passwordHash))) {
-    throw new Error('این ایمیل قبلاً با رمز عبور ثبت شده است. برای اتصال گوگل ابتدا مالکیت حساب قبلی باید تأیید شود.');
-  }
-
-  if (!user) {
-    user = {
-      uid: googleUser.uid || `ina_usr_g_${Date.now()}`,
-      email: cleanEmail,
-      displayName: googleUser.displayName?.trim() || cleanEmail.split('@')[0],
-      role: isPrimaryAdmin ? 'admin' : 'customer',
-      phoneNumber: '',
-      address: '',
-      createdAt: new Date().toISOString(),
-    };
-    usersCache.set(cleanEmail, user);
-    saveUsers();
-  } else {
-    // If user exists, upgrade to admin if email matches primary admin
-    if (isPrimaryAdmin && (user.role !== 'admin' || user.phoneNumber !== normalizeIranianMobile(PRIMARY_ADMIN_PHONE))) {
-      user.role = 'admin';
-      user.phoneNumber = normalizeIranianMobile(PRIMARY_ADMIN_PHONE);
-      user.updatedAt = new Date().toISOString();
-      saveUsers();
-    }
-    if (googleUser.displayName && (!user.displayName || user.displayName.startsWith('کاربر '))) {
-      user.displayName = googleUser.displayName.trim();
-      saveUsers();
-    }
-  }
-
-  user.googleUid = googleUser.uid;
-  const token = createSessionToken(user);
-  return {
-    user: sanitizeUser(user),
-    token,
   };
 }
 
@@ -840,5 +657,5 @@ function verifyPhoneChangeOtp(userId: string, code: string): UserProfile {
 }
 
 
-return { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, registerUser, loginUser, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, verifyGoogleOrFirebaseToken, syncGoogleUser, requestPhoneChangeOtp, verifyPhoneChangeOtp };
+return { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, registerUser, loginUser, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp };
 }
