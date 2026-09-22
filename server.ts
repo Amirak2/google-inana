@@ -504,6 +504,11 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
         signal: AbortSignal.timeout(6000),
       });
 
+    if (!navResponse.ok) {
+      logger.warn('GOLD_PRICE', navResponse.status === 429
+        ? 'سهمیه یا محدودیت درخواست سرویس نوسان تمام شده است؛ سهمیه یا کلید API را بررسی کنید.'
+        : `دریافت نرخ نوسان ناموفق بود (HTTP ${navResponse.status}).`);
+    }
     if (navResponse.ok) {
       const data = await navResponse.json();
       if (data && data['18ayar'] && data['18ayar'].value) {
@@ -587,7 +592,7 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
       }
     }
     } catch (navErr) {
-      console.warn('Navasan API query failed, checking fallback TGJU API...', navErr);
+      logger.warn('GOLD_PRICE', 'اتصال به نوسان یا خواندن پاسخ آن ناموفق بود؛ منبع جایگزین بررسی می‌شود.');
     }
   }
 

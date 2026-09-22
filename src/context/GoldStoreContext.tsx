@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS } from '../data/seedData';
+import { INITIAL_COLLECTIONS } from '../data/seedData';
 import {
   CartItem,
   CollectionInfo,
@@ -25,6 +25,8 @@ interface GoldStoreContextType {
   quickViewProduct: Product | null;
   isCartOpen: boolean;
   isLoading: boolean;
+  productsLoading: boolean;
+  productsError: string | null;
   setActiveTab: (tab: string) => void;
   setSelectedCategory: (cat: string | null) => void;
   setSelectedCollection: (col: string | null) => void;
@@ -77,7 +79,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { currentUser, loading: authLoading } = useAuth();
   const [goldPrice, setGoldPrice] = useState<GoldPriceData>(initialGoldPrice);
   const [settings, setSettings] = useState<PricingSettings>(DEFAULT_SETTINGS);
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
   const [collections, setCollections] = useState<CollectionInfo[]>(INITIAL_COLLECTIONS);
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
@@ -172,11 +176,14 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const refreshProducts = async () => {
     try {
       setIsLoading(true);
+      setProductsLoading(true);
+      setProductsError(null);
       const res = await fetch('/api/products');
-      if (res.ok) {
-        const data = await res.json();
-        setProducts(data);
-      }
+      if (!res.ok) throw new Error('دریافت محصولات انجام نشد.');
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error('پاسخ محصولات معتبر نیست.');
+      setProducts(data);
+      setProductsLoading(false);
       const colRes = await fetch('/api/collections');
       if (colRes.ok) {
         const cols = await colRes.json();
@@ -188,9 +195,11 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setSettings(sets);
       }
     } catch (err) {
-      console.warn('Using initial product data', err);
+      setProductsError('دریافت اطلاعات فروشگاه انجام نشد. دوباره تلاش کنید.');
+      console.warn('Failed to load store data', err);
     } finally {
       setIsLoading(false);
+      setProductsLoading(false);
     }
   };
 
@@ -383,6 +392,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         quickViewProduct,
         isCartOpen,
         isLoading,
+        productsLoading,
+        productsError,
         setActiveTab,
         setSelectedCategory,
         setSelectedCollection,

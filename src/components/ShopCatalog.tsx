@@ -19,6 +19,9 @@ import { calculateProductPrice } from '../utils/pricingEngine';
 export const ShopCatalog: React.FC = () => {
   const {
     products,
+    productsLoading,
+    productsError,
+    refreshProducts,
     collections,
     goldPrice,
     settings,
@@ -336,7 +339,14 @@ export const ShopCatalog: React.FC = () => {
         </div>
 
         {/* Product Grid */}
-        {filteredProducts.length > 0 ? (
+        {productsLoading && products.length === 0 ? (
+          <div role="status" className="text-center py-20 text-slate-400">در حال دریافت محصولات...</div>
+        ) : productsError && products.length === 0 ? (
+          <div role="status" className="text-center py-20 text-slate-400">
+            <p>{productsError}</p>
+            <button onClick={() => void refreshProducts()} className="mt-4 text-[#D4AF37]">تلاش دوباره</button>
+          </div>
+        ) : filteredProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
