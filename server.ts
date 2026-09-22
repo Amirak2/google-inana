@@ -1,3 +1,4 @@
+import { BRS_USER_AGENT, parseBrsGold } from './server/brsGold';
 import express from './server/router';
 import type { Request, Response, NextFunction } from 'express';
 import type { Store } from './server/storage';
@@ -478,7 +479,7 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
 
   // Return cached if fresh
   const now = Date.now();
-  if (!force && now - lastFetchTimestamp < CACHE_LIFETIME_MS && currentGoldState.pricePerGram > 0) {
+  if (!force && (!env.BRS_API_KEY || store.get('market', 'provider') === 'brs') && now - lastFetchTimestamp < CACHE_LIFETIME_MS && currentGoldState.pricePerGram > 0) {
     if (currentGoldState.status === 'live' && !isCurrentJalaliDate(currentGoldState.jalaliTimestamp)) {
       currentGoldState = {
         ...currentGoldState,
@@ -490,110 +491,24 @@ async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceDa
     return currentGoldState;
   }
 
-  // 1. Primary Source: Navasan Tech API (item: 18ayar) if configured
-  const navasanKey = env.GOLD_API_KEY ? env.GOLD_API_KEY.trim() : '';
-  if (navasanKey) {
-    const navasanUrl = `https://api.navasan.tech/latest/?api_key=${encodeURIComponent(navasanKey)}`;
-
+  // BRS is the configured primary provider. Persist attempts to avoid retry storms.
+  const brsKey = env.BRS_API_KEY?.trim();
+  if (brsKey) {
+    lastFetchTimestamp = now;
+    store.set('market', 'provider', 'brs');
     try {
-      const navResponse = await fetch(navasanUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(6000),
+      const response = await fetch('https://Api.BrsApi.ir/Market/Gold_Currency.php?key=' + encodeURIComponent(brsKey), {
+        headers: { 'User-Agent': BRS_USER_AGENT, 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(10000),
       });
-
-    if (!navResponse.ok) {
-      logger.warn('GOLD_PRICE', navResponse.status === 429
-        ? 'سهمیه یا محدودیت درخواست سرویس نوسان تمام شده است؛ سهمیه یا کلید API را بررسی کنید.'
-        : `دریافت نرخ نوسان ناموفق بود (HTTP ${navResponse.status}).`);
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      currentGoldState = parseBrsGold(await response.json(), currentGoldState);
+    } catch {
+      currentGoldState = { ...currentGoldState, status: 'cached' };
+      logger.warn('GOLD_PRICE', 'دریافت نرخ BRS ناموفق بود؛ آخرین نرخ حفظ شد و تلاش بعدی یک ساعت دیگر است.');
     }
-    if (navResponse.ok) {
-      const data = await navResponse.json();
-      if (data && data['18ayar'] && data['18ayar'].value) {
-        const item18 = data['18ayar'];
-        const pricePerGram = parseFloat(String(item18.value).replace(/,/g, ''));
-
-        if (!isNaN(pricePerGram) && pricePerGram > 0) {
-          const changeVal = typeof item18.change === 'number' ? item18.change : parseFloat(item18.change) || 0;
-          const prevPrice = changeVal !== 0 ? Math.max(0, pricePerGram - changeVal) : pricePerGram;
-          const changePercent = prevPrice > 0 ? Number(((changeVal / prevPrice) * 100).toFixed(2)) : 0;
-
-          // Parse other markets from Navasan if available
-          const other: OtherMarketsData = { ...currentGoldState.otherMarkets };
-
-          // 24K Gold: calculated from 18K (750) -> 24K (999.9) or proportional
-          other.gold24k = Math.round((pricePerGram / 750) * 1000);
-
-          // abshodeh = mesghal
-          if (data['abshodeh'] && data['abshodeh'].value) {
-            const abVal = parseFloat(String(data['abshodeh'].value).replace(/,/g, ''));
-            if (!isNaN(abVal) && abVal > 0) {
-              other.mesghal = abVal < 1000000 ? abVal * 100 : abVal; // normalize unit if needed
-            }
-          }
-
-          // Bahar Azadi / Emami Coin
-          if (data['sekkeh'] && data['sekkeh'].value) {
-            const sekkehVal = parseFloat(String(data['sekkeh'].value).replace(/,/g, ''));
-            if (!isNaN(sekkehVal) && sekkehVal > 0) {
-              other.emamiCoin = sekkehVal < 1000000 ? sekkehVal * 1000 : sekkehVal;
-            }
-          }
-
-          // Half Coin (nim)
-          if (data['nim'] && data['nim'].value) {
-            const nimVal = parseFloat(String(data['nim'].value).replace(/,/g, ''));
-            if (!isNaN(nimVal) && nimVal > 0) {
-              other.halfCoin = nimVal < 1000000 ? nimVal * 1000 : nimVal;
-            }
-          }
-
-          // Quarter Coin (rob)
-          if (data['rob'] && data['rob'].value) {
-            const robVal = parseFloat(String(data['rob'].value).replace(/,/g, ''));
-            if (!isNaN(robVal) && robVal > 0) {
-              other.quarterCoin = robVal < 1000000 ? robVal * 1000 : robVal;
-            }
-          }
-
-          // Global Ounce USD (usd_xau)
-          if (data['usd_xau'] && data['usd_xau'].value) {
-            const xauVal = parseFloat(String(data['usd_xau'].value).replace(/,/g, ''));
-            if (!isNaN(xauVal) && xauVal > 0) {
-              other.globalOunceUsd = xauVal;
-            }
-          }
-
-          const providerIsCurrent = isCurrentJalaliDate(item18.date);
-          currentGoldState = {
-            pricePerGram: Math.round(pricePerGram),
-            currency: 'تومان',
-            purity: '18 عیار (750)',
-            timestamp: new Date().toISOString(),
-            jalaliTimestamp: item18.date ? `${item18.date}` : formatJalaliDateTime(new Date()),
-            source: providerIsCurrent
-              ? 'سامانه نوسان (Navasan.tech Live API - 18ayar)'
-              : 'آخرین نرخ دریافتی از سامانه نوسان',
-            changePercent: changePercent,
-            dailyHigh: Math.max(currentGoldState.dailyHigh || pricePerGram, pricePerGram),
-            dailyLow: Math.min(currentGoldState.dailyLow || pricePerGram, pricePerGram),
-            previousPrice: Math.round(prevPrice),
-            isManualOverride: false,
-            status: providerIsCurrent ? 'live' : 'cached',
-            otherMarkets: other,
-          };
-
-          lastFetchTimestamp = now;
-          recordHourlyGoldPoint();
-          return currentGoldState;
-        }
-      }
-    }
-    } catch (navErr) {
-      logger.warn('GOLD_PRICE', 'اتصال به نوسان یا خواندن پاسخ آن ناموفق بود؛ منبع جایگزین بررسی می‌شود.');
-    }
+    recordHourlyGoldPoint();
+    return currentGoldState;
   }
 
   // 2. Fallback Source: TGJU (اتحادیه طلا و جواهر تهران) Live Indicator API
