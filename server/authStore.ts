@@ -579,78 +579,6 @@ interface VerifiedGoogleUser {
   emailVerified: boolean;
 }
 
-let firebaseSigningCertificates: Record<string, string> = {};
-let firebaseSigningCertificatesExpireAt = 0;
-
-async function getFirebaseSigningCertificates(): Promise<Record<string, string>> {
-  if (Date.now() < firebaseSigningCertificatesExpireAt && Object.keys(firebaseSigningCertificates).length) {
-    return firebaseSigningCertificates;
-  }
-
-  const response = await fetch(
-    'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com',
-    { signal: AbortSignal.timeout(8000) }
-  );
-  if (!response.ok) throw new Error(`Firebase signing certificates request failed (${response.status}).`);
-
-  const certificates = await response.json() as Record<string, string>;
-  const cacheControl = response.headers.get('cache-control') || '';
-  const maxAge = Number(cacheControl.match(/max-age=(\d+)/)?.[1] || 300);
-  firebaseSigningCertificates = certificates;
-  firebaseSigningCertificatesExpireAt = Date.now() + Math.max(60, maxAge) * 1000;
-  return certificates;
-}
-
-async function verifyFirebaseIdTokenLocally(idToken: string, projectId: string): Promise<VerifiedGoogleUser> {
-  if (!projectId) throw new Error('Firebase project ID is not configured.');
-
-  const segments = idToken.split('.');
-  if (segments.length !== 3) throw new Error('Firebase ID token must contain three segments.');
-
-  const [encodedHeader, encodedPayload, encodedSignature] = segments;
-  const header = JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8')) as { alg?: string; kid?: string };
-  const claims = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as Record<string, any>;
-  if (header.alg !== 'RS256' || !header.kid) throw new Error('Firebase ID token has an invalid signing header.');
-
-  const certificates = await getFirebaseSigningCertificates();
-  const certificate = certificates[header.kid];
-  if (!certificate) {
-    firebaseSigningCertificatesExpireAt = 0;
-    throw new Error('Firebase ID token signing key is unknown.');
-  }
-
-  const signatureIsValid = crypto.verify(
-    'RSA-SHA256',
-    Buffer.from(`${encodedHeader}.${encodedPayload}`),
-    certificate,
-    Buffer.from(encodedSignature, 'base64url')
-  );
-  if (!signatureIsValid) throw new Error('Firebase ID token signature is invalid.');
-
-  const now = Math.floor(Date.now() / 1000);
-  if (claims.aud !== projectId) throw new Error('Firebase ID token audience does not match this project.');
-  if (claims.iss !== `https://securetoken.google.com/${projectId}`) throw new Error('Firebase ID token issuer is invalid.');
-  if (!Number.isFinite(claims.exp) || claims.exp <= now) throw new Error('Firebase ID token has expired.');
-  if (!Number.isFinite(claims.iat) || claims.iat > now + 300) throw new Error('Firebase ID token issued-at time is invalid.');
-  if (claims.auth_time != null && (!Number.isFinite(claims.auth_time) || claims.auth_time > now + 300)) {
-    throw new Error('Firebase ID token authentication time is invalid.');
-  }
-  if (typeof claims.sub !== 'string' || claims.sub.length < 1 || claims.sub.length > 128) {
-    throw new Error('Firebase ID token subject is invalid.');
-  }
-  if (!claims.email || claims.email_verified !== true) {
-    throw new Error('ایمیل حساب گوگل تأیید نشده است (email_verified=false).');
-  }
-
-  return {
-    uid: claims.sub,
-    email: String(claims.email).toLowerCase().trim(),
-    displayName: String(claims.name || ''),
-    photoURL: String(claims.picture || ''),
-    emailVerified: true,
-  };
-}
-
 /**
  * Cryptographically verify Firebase ID token or Google OAuth ID token on server.
  * Ensures the client cannot forge user identities, use tokens from other apps, or bypass email verification.
@@ -703,16 +631,7 @@ async function verifyGoogleOrFirebaseToken(idToken: string): Promise<VerifiedGoo
     }
   }
 
-  // Verify Firebase tokens locally using Google's rotating public certificates.
-  // This also works when the browser API key is restricted to approved HTTP referrers.
-  try {
-    return await verifyFirebaseIdTokenLocally(token, FIREBASE_PROJECT_ID);
-  } catch (err: any) {
-    if (err.message && err.message.includes('تأیید نشده است')) throw err;
-    console.warn('[AUTH] Firebase public-key verification notice:', err?.message || err);
-  }
-
-  // 3. Fallback: Google OAuth2 tokeninfo endpoint with strict Audience (aud) validation
+  // 2. Fallback: Google OAuth2 tokeninfo endpoint with strict Audience (aud) validation
   try {
     const googleTokenInfoUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`;
     const gResp = await fetch(googleTokenInfoUrl, {
