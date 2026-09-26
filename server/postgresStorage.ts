@@ -3,6 +3,18 @@ import { Pool, type PoolClient } from 'pg';
 let sharedPool: Pool | null = null;
 let schemaReady: Promise<void> | null = null;
 
+async function releaseClient(client: PoolClient, rollback: boolean): Promise<void> {
+  let discard = false;
+  try {
+    if (rollback) await client.query('ROLLBACK');
+  } catch {
+    // Never reuse a connection whose transaction state cannot be cleared.
+    discard = true;
+  } finally {
+    client.release(discard);
+  }
+}
+
 function getPool(): Pool {
   const connectionString = process.env.PG_URI || process.env.DATABASE_URL;
   if (!connectionString) throw new Error('PG_URI or DATABASE_URL is required');
@@ -20,6 +32,7 @@ async function ensureSchema(pool: Pool): Promise<void> {
   if (!schemaReady) {
     schemaReady = (async () => {
       const client = await pool.connect();
+      let committed = false;
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock($1)', [20260911]);
@@ -33,11 +46,9 @@ async function ensureSchema(pool: Pool): Promise<void> {
           )
         `);
         await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
+        committed = true;
       } finally {
-        client.release();
+        await releaseClient(client, !committed);
       }
     })();
   }
@@ -61,27 +72,33 @@ export class PostgresStore {
     const pool = getPool();
     await ensureSchema(pool);
 
-    if (exclusive) {
-      store.client = await pool.connect();
-      await store.client.query('BEGIN');
-      await store.client.query('SELECT pg_advisory_xact_lock($1)', [20260912]);
-      store.transactionOpen = true;
-    }
+    try {
+      if (exclusive) {
+        store.client = await pool.connect();
+        // BEGIN may fail after reaching the server; clean up even in that case.
+        store.transactionOpen = true;
+        await store.client.query('BEGIN');
+        await store.client.query('SELECT pg_advisory_xact_lock($1)', [20260912]);
+      }
 
-    const runner = store.client || pool;
-    const result = await runner.query(
-      publicRead
-        ? "SELECT bucket, record_key, value_json FROM site_records WHERE bucket NOT IN ('orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits')"
-        : 'SELECT bucket, record_key, value_json FROM site_records'
-    );
-    for (const row of result.rows) {
-      // pg already decodes JSONB, including scalar strings.
-      const value = row.value_json;
-      store.map(row.bucket).set(row.record_key, value);
-      store.original.set(JSON.stringify([row.bucket, row.record_key]), JSON.stringify(value));
+      const runner = store.client || pool;
+      const result = await runner.query(
+        publicRead
+          ? "SELECT bucket, record_key, value_json FROM site_records WHERE bucket NOT IN ('orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits')"
+          : 'SELECT bucket, record_key, value_json FROM site_records'
+      );
+      for (const row of result.rows) {
+        // pg already decodes JSONB, including scalar strings.
+        const value = row.value_json;
+        store.map(row.bucket).set(row.record_key, value);
+        store.original.set(JSON.stringify([row.bucket, row.record_key]), JSON.stringify(value));
+      }
+      store.prune();
+      return store;
+    } catch (error) {
+      await store.release();
+      throw error;
     }
-    store.prune();
-    return store;
   }
 
   map<T = any>(bucket: string): Map<string, T> {
@@ -144,13 +161,11 @@ export class PostgresStore {
   }
 
   async release(): Promise<void> {
-    if (!this.client) return;
-    try {
-      if (this.transactionOpen) await this.client.query('ROLLBACK');
-    } finally {
-      this.transactionOpen = false;
-      this.client.release();
-      this.client = null;
-    }
+    const client = this.client;
+    if (!client) return;
+    const rollback = this.transactionOpen;
+    this.client = null;
+    this.transactionOpen = false;
+    await releaseClient(client, rollback);
   }
 }
