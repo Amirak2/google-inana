@@ -228,6 +228,23 @@ function findUserByMobile(mobile: string): StoredUser | undefined {
   return undefined;
 }
 
+function findSmsLoginUser(mobile: string): StoredUser | undefined {
+  if (mobile === normalizeIranianMobile(PRIMARY_ADMIN_PHONE)) {
+    return usersCache.get(PRIMARY_ADMIN_EMAIL.toLowerCase().trim());
+  }
+  const matches = [...usersCache.values()].filter(
+    user => user.phoneNumber && normalizeIranianMobile(user.phoneNumber) === mobile
+  );
+  if (matches.length > 1) {
+    throw new Error('چند حساب با این شماره ثبت شده است. برای بازیابی حساب با پشتیبانی تماس بگیرید.');
+  }
+  const user = matches[0];
+  if (user && user.phoneVerified !== true && user.passwordHash) {
+    throw new Error('این شماره در یک حساب قدیمی تأیید نشده است. برای اتصال امن حساب با پشتیبانی تماس بگیرید.');
+  }
+  return user;
+}
+
 function registerUser(
   email: string,
   pass: string,
@@ -374,6 +391,7 @@ async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
   if (!isValidIranianMobile(cleanMobile)) {
     throw new Error('شماره موبایل وارد شده نامعتبر است. شماره باید ۱۱ رقمی و با ۰۹ شروع شود.');
   }
+  const existingUser = findSmsLoginUser(cleanMobile);
 
   // Rate limit: max 5 OTP requests per 10 minutes per mobile
   const rateLimitPhone = checkRateLimit(`otp_phone_${cleanMobile}`, 5, 10 * 60 * 1000);
@@ -429,11 +447,20 @@ async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
       console.log(`[SMS OTP] Provider HTTP status: ${response.status}`);
 
       if (!response.ok) {
-        console.error(`[SMS OTP] Provider error: HTTP ${response.status} - ${responseText}`);
+        console.error(`[SMS OTP] Provider error: HTTP ${response.status}`);
         throw new Error(`ارسال پیامک با خطا مواجه شد (کد پاسخ سامانه: ${response.status}).`);
       }
+      let providerResult: { success?: unknown; data?: unknown; error?: unknown };
+      try {
+        providerResult = JSON.parse(responseText);
+      } catch {
+        throw new Error('پاسخ سرویس پیامک معتبر نیست. لطفاً دوباره تلاش کنید.');
+      }
+      if (!providerResult || providerResult.success !== true || providerResult.data === false || providerResult.error) {
+        throw new Error('سرویس پیامک ارسال کد را تأیید نکرد. لطفاً دوباره تلاش کنید.');
+      }
     } catch (err: any) {
-      console.error('[SMS OTP] Network or provider failure:', err);
+      console.error('[SMS OTP] Send failure:', err);
       throw new Error(err.message || 'خطا در برقراری ارتباط با سرور پیامک.');
     }
   } else {
@@ -454,8 +481,6 @@ async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
     attempts: 0,
     createdAt: now,
   });
-
-  const existingUser = findUserByMobile(cleanMobile);
 
   return {
     expiresInSeconds: 180,
@@ -479,8 +504,8 @@ function verifySmsOtpAndAuthenticate(
     throw new Error('شماره موبایل نامعتبر است.');
   }
 
-  if (!cleanCode || cleanCode.length < 4) {
-    throw new Error('کد تایید وارد شده نامعتبر است.');
+  if (cleanCode.length !== 5) {
+    throw new Error('کد تایید باید دقیقاً ۵ رقم باشد.');
   }
 
   const record = otpCache.get(cleanMobile);
@@ -512,9 +537,7 @@ function verifySmsOtpAndAuthenticate(
   const isMasterAdmin = cleanMobile === normalizeIranianMobile(PRIMARY_ADMIN_PHONE);
 
   // The designated admin phone always resolves to the same email-backed account.
-  let user = isMasterAdmin
-    ? usersCache.get(PRIMARY_ADMIN_EMAIL.toLowerCase().trim())
-    : [...usersCache.values()].find(u => u.phoneNumber && normalizeIranianMobile(u.phoneNumber) === cleanMobile && (u.phoneVerified === true || !u.passwordHash));
+  let user = findSmsLoginUser(cleanMobile);
   let isNewUser = false;
 
   if (!user) {
@@ -633,6 +656,9 @@ function verifyPhoneChangeOtp(userId: string, code: string): UserProfile {
     throw new Error('تعداد تلاش‌های ناموفق بیش از حد مجاز بود.');
   }
 
+  if (!/^\d{5}$/.test(code.trim())) {
+    throw new Error('کد تایید باید دقیقاً ۵ رقم باشد.');
+  }
   if (pending.code !== code.trim()) {
     pending.attempts += 1;
     throw new Error(`کد تایید اشتباه است. (${5 - pending.attempts} تلاش دیگر باقی مانده)`);
