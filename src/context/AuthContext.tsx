@@ -20,6 +20,8 @@ interface AuthContextType {
   closeAuthModal: () => void;
   sendSmsOtp: (mobile: string) => Promise<{ expiresInSeconds: number; isRegistered: boolean }>;
   verifySmsOtp: (mobile: string, code: string, displayName?: string) => Promise<{ isNewUser: boolean }>;
+  requestPhoneChange: (newMobile: string) => Promise<void>;
+  verifyPhoneChange: (code: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfileData: (data: Partial<UserProfile>) => Promise<void>;
 }
@@ -125,6 +127,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { isNewUser: Boolean(data.isNewUser) };
   };
 
+  const requestPhoneChange = async (newMobile: string): Promise<void> => {
+    const res = await fetch('/api/auth/phone/change-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newMobile }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'ارسال کد تغییر شماره انجام نشد.');
+    }
+  };
+
+  const verifyPhoneChange = async (code: string): Promise<void> => {
+    const res = await fetch('/api/auth/phone/change-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success || !data.user) {
+      throw new Error(data.error || 'تأیید شماره جدید انجام نشد.');
+    }
+    const user = data.user as UserProfile;
+    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user }));
+    setUserProfile(user);
+    setCurrentUser({ uid: user.uid, email: user.email, displayName: user.displayName, phoneNumber: user.phoneNumber });
+    setIsAdmin(user.role === 'admin');
+  };
+
   const logout = async () => {
     const response = await fetch('/api/auth/logout', { method: 'POST' });
     if (!response.ok) throw new Error('خروج از حساب انجام نشد. دوباره تلاش کنید.');
@@ -182,6 +213,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         closeAuthModal,
         sendSmsOtp,
         verifySmsOtp,
+        requestPhoneChange,
+        verifyPhoneChange,
         logout,
         updateUserProfileData,
       }}
