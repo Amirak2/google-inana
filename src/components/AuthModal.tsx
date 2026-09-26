@@ -29,6 +29,8 @@ export const AuthModal: React.FC = () => {
     closeAuthModal,
     sendSmsOtp,
     verifySmsOtp,
+    requestPhoneChange,
+    verifyPhoneChange,
     logout,
     updateUserProfileData,
   } = useAuth();
@@ -44,7 +46,10 @@ export const AuthModal: React.FC = () => {
   const [otpCountdown, setOtpCountdown] = useState(0);
 
   const [displayName, setDisplayName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneChangeStep, setPhoneChangeStep] = useState<'idle' | 'phone' | 'code'>('idle');
+  const [newPhoneNumber, setNewPhoneNumber] = useState('');
+  const [phoneChangeCode, setPhoneChangeCode] = useState('');
+  const [phoneChangeCountdown, setPhoneChangeCountdown] = useState(0);
   const [address, setAddress] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -58,7 +63,6 @@ export const AuthModal: React.FC = () => {
     if (currentUser) {
       setMode('profile');
       setDisplayName(userProfile?.displayName || currentUser.displayName || '');
-      setPhoneNumber(userProfile?.phoneNumber || '');
       setAddress(userProfile?.address || '');
     } else {
       setMode('otp'); // Default to convenient SMS OTP
@@ -67,7 +71,10 @@ export const AuthModal: React.FC = () => {
     }
     setErrorMsg(null);
     setSuccessMsg(null);
-  }, [isAuthModalOpen, authModalMode, currentUser, userProfile]);
+    setPhoneChangeStep('idle');
+    setNewPhoneNumber('');
+    setPhoneChangeCode('');
+  }, [isAuthModalOpen, authModalMode, currentUser?.uid]);
 
   useEffect(() => {
     if (!isAuthModalOpen || !currentUser || isAdmin) {
@@ -112,12 +119,25 @@ export const AuthModal: React.FC = () => {
     return () => clearInterval(timer);
   }, [otpCountdown]);
 
+  useEffect(() => {
+    if (phoneChangeCountdown <= 0) return;
+    const timer = setInterval(() => setPhoneChangeCountdown((prev) => Math.max(0, prev - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [phoneChangeCountdown]);
+
   if (!isAuthModalOpen) return null;
 
-  const normalizePhone = (num: string) => {
-    return num
+  const normalizeDigits = (num: string) =>
+    num
       .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+      .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
       .replace(/\D/g, '');
+
+  const normalizePhone = (num: string) => {
+    let digits = normalizeDigits(num);
+    if (digits.startsWith('98')) digits = `0${digits.slice(2)}`;
+    else if (digits.length === 10 && digits.startsWith('9')) digits = `0${digits}`;
+    return digits;
   };
 
   // 1. Send SMS OTP Request
@@ -150,10 +170,10 @@ export const AuthModal: React.FC = () => {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPhone = normalizePhone(mobileNumber);
-    const cleanCode = normalizePhone(otpCode);
+    const cleanCode = normalizeDigits(otpCode);
 
-    if (!cleanCode || cleanCode.length < 4) {
-      setErrorMsg('لطفاً کد تایید پیامک‌شده را وارد کنید.');
+    if (cleanCode.length !== 5) {
+      setErrorMsg('لطفاً کد تایید ۵ رقمی را کامل وارد کنید.');
       return;
     }
 
@@ -173,6 +193,48 @@ export const AuthModal: React.FC = () => {
     }
   };
 
+  const handleRequestPhoneChange = async () => {
+    const cleanPhone = normalizePhone(newPhoneNumber);
+    if (!/^09\d{9}$/.test(cleanPhone)) {
+      setErrorMsg('شماره جدید را به صورت یک شماره موبایل معتبر وارد کنید.');
+      return;
+    }
+    setSubmitting(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      await requestPhoneChange(cleanPhone);
+      setNewPhoneNumber(cleanPhone);
+      setPhoneChangeStep('code');
+      setPhoneChangeCountdown(60);
+      setSuccessMsg(`کد تایید به شماره ${toPersianDigits(cleanPhone)} ارسال شد.`);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'ارسال کد تغییر شماره انجام نشد.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVerifyPhoneChange = async () => {
+    const cleanCode = normalizeDigits(phoneChangeCode);
+    if (cleanCode.length !== 5) {
+      setErrorMsg('کد تایید باید دقیقاً ۵ رقم باشد.');
+      return;
+    }
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await verifyPhoneChange(cleanCode);
+      setPhoneChangeStep('idle');
+      setPhoneChangeCode('');
+      setSuccessMsg('شماره موبایل حساب با موفقیت تغییر کرد.');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'تأیید شماره جدید انجام نشد.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -181,7 +243,6 @@ export const AuthModal: React.FC = () => {
     try {
       await updateUserProfileData({
         displayName,
-        phoneNumber,
         address,
       });
       setSuccessMsg('اطلاعات حساب کاربری شما با موفقیت بروزرسانی شد.');
@@ -259,6 +320,8 @@ export const AuthModal: React.FC = () => {
                       <input
                         type="tel"
                         dir="ltr"
+                        inputMode="tel"
+                        autoComplete="tel"
                         autoFocus
                         required
                         value={mobileNumber}
@@ -322,9 +385,11 @@ export const AuthModal: React.FC = () => {
                       <input
                         type="text"
                         dir="ltr"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
                         autoFocus
                         required
-                        maxLength={6}
+                        maxLength={5}
                         value={otpCode}
                         onChange={(e) => setOtpCode(e.target.value)}
                         className="w-full bg-[#0A1120] border border-[#D4AF37]/60 rounded-xl pr-9 pl-3 py-2.5 text-base text-white placeholder-slate-500 focus:border-[#D4AF37] focus:outline-none text-center tracking-[0.4em] font-mono font-bold"
@@ -371,7 +436,7 @@ export const AuthModal: React.FC = () => {
 
                   <button
                     type="submit"
-                    disabled={submitting || otpCode.trim().length < 4}
+                    disabled={submitting || normalizeDigits(otpCode).length !== 5}
                     className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#E6CA65] text-slate-950 font-bold text-xs shadow-lg hover:shadow-[#D4AF37]/25 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
                     {submitting ? (
@@ -447,21 +512,67 @@ export const AuthModal: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  شماره موبایل جهت هماهنگی و ارسال
-                </label>
-                <div className="relative flex items-center">
-                  <Phone className="w-4 h-4 text-slate-400 absolute right-3 pointer-events-none" />
-                  <input
-                    type="tel"
-                    dir="ltr"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="w-full bg-[#0A1120] border border-slate-700 rounded-xl pr-9 pl-3 py-2.5 text-xs text-white placeholder-slate-500 focus:border-[#D4AF37] focus:outline-none text-left"
-                    placeholder="09123456789"
-                  />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-semibold text-slate-300">شماره موبایل تأییدشده</label>
+                  {phoneChangeStep === 'idle' && (
+                    <button type="button" onClick={() => { setPhoneChangeStep('phone'); setErrorMsg(null); }} className="text-xs text-[#D4AF37] hover:underline">
+                      تغییر شماره
+                    </button>
+                  )}
                 </div>
+                <p className="rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm font-mono text-white" dir="ltr">
+                  {userProfile?.phoneNumber || 'شماره‌ای ثبت نشده است'}
+                </p>
+                {phoneChangeStep !== 'idle' && (
+                  <div className="space-y-2 rounded-xl border border-[#D4AF37]/25 p-3">
+                    <label className="block text-xs text-slate-300" htmlFor="new-account-phone">شماره موبایل جدید</label>
+                    <input
+                      id="new-account-phone"
+                      type="tel"
+                      dir="ltr"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      disabled={phoneChangeStep === 'code'}
+                      value={newPhoneNumber}
+                      onChange={(e) => setNewPhoneNumber(e.target.value)}
+                      className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white disabled:opacity-60"
+                      placeholder="09120000000"
+                    />
+                    {phoneChangeStep === 'code' && (
+                      <>
+                        <label className="block text-xs text-slate-300" htmlFor="new-account-phone-code">کد ۵ رقمی ارسال‌شده</label>
+                        <input
+                          id="new-account-phone-code"
+                          type="text"
+                          dir="ltr"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          maxLength={5}
+                          value={phoneChangeCode}
+                          onChange={(e) => setPhoneChangeCode(e.target.value)}
+                          className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-center text-sm text-white"
+                        />
+                      </>
+                    )}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={submitting || (phoneChangeStep === 'code' && normalizeDigits(phoneChangeCode).length !== 5)}
+                        onClick={phoneChangeStep === 'phone' ? handleRequestPhoneChange : handleVerifyPhoneChange}
+                        className="rounded-lg bg-[#D4AF37] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50"
+                      >
+                        {phoneChangeStep === 'phone' ? 'ارسال کد به شماره جدید' : 'تأیید و تغییر شماره'}
+                      </button>
+                      {phoneChangeStep === 'code' && (
+                        <button type="button" disabled={submitting || phoneChangeCountdown > 0} onClick={handleRequestPhoneChange} className="text-xs text-[#D4AF37] disabled:text-slate-500">
+                          {phoneChangeCountdown > 0 ? `ارسال مجدد پس از ${toPersianDigits(phoneChangeCountdown)} ثانیه` : 'ارسال مجدد کد'}
+                        </button>
+                      )}
+                      <button type="button" onClick={() => { setPhoneChangeStep('idle'); setPhoneChangeCode(''); setErrorMsg(null); }} className="text-xs text-slate-400 hover:text-white">انصراف</button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
