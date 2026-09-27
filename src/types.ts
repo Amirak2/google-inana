@@ -162,6 +162,7 @@ export type UserRole = 'admin' | 'customer';
 export interface UserProfile {
   uid: string;
   email: string;
+  username?: string;
   displayName: string;
   phoneNumber?: string;
   role: UserRole;

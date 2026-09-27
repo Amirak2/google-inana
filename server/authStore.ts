@@ -5,6 +5,8 @@ import { UserProfile, UserRole } from '../src/types';
 export interface StoredUser {
   uid: string;
   email: string;
+  username?: string;
+  authVersion?: number;
   passwordHash?: string;
   phoneVerified?: boolean;
   salt?: string;
@@ -154,6 +156,7 @@ function createSessionToken(user: StoredUser): string {
       uid: user.uid,
       email: user.email,
       role: user.role,
+      authVersion: user.authVersion || 0,
       phoneNumber: user.phoneNumber,
       exp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     })
@@ -193,7 +196,7 @@ function verifySessionToken(token: string): UserProfile | null {
     if (typeof data.exp !== 'number' || data.exp < Date.now()) return null;
 
     const user = usersCache.get(data.email?.toLowerCase().trim());
-    if (!user || user.uid !== data.uid) return null;
+    if (!user || user.uid !== data.uid || (data.authVersion || 0) !== (user.authVersion || 0)) return null;
 
     return sanitizeUser(user);
   } catch {
@@ -208,6 +211,7 @@ function sanitizeUser(u: StoredUser): UserProfile {
   return {
     uid: u.uid,
     email: u.email,
+    username: u.username,
     displayName: u.displayName,
     phoneNumber: u.phoneNumber || '',
     role: isAdmin ? 'admin' : 'customer',
@@ -226,6 +230,61 @@ function findUserByMobile(mobile: string): StoredUser | undefined {
     }
   }
   return undefined;
+}
+
+function normalizeUsername(value: string): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function setPasswordCredentials(uid: string, username: string, password: string, code: string): { user: UserProfile; token: string } {
+  const user = [...usersCache.values()].find((candidate) => candidate.uid === uid);
+  if (!user || !user.phoneNumber || user.phoneVerified !== true) {
+    throw new Error('برای فعال‌سازی ورود با رمز، ابتدا شماره موبایل حساب را تأیید کنید.');
+  }
+  const normalized = normalizeUsername(username);
+  if (!/^[a-z][a-z0-9._-]{2,31}$/.test(normalized)) {
+    throw new Error('نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی باشد و با حرف شروع شود.');
+  }
+  if (typeof password !== 'string' || password.length < 12 || password.length > 128) {
+    throw new Error('رمز عبور باید بین ۱۲ تا ۱۲۸ کاراکتر باشد.');
+  }
+  if ([...usersCache.values()].some((candidate) => candidate.uid !== uid && candidate.username?.toLowerCase() === normalized)) {
+    throw new Error('این نام کاربری قبلاً انتخاب شده است.');
+  }
+  const mobile = normalizeIranianMobile(user.phoneNumber);
+  const record = otpCache.get(mobile);
+  if (!record || Date.now() > record.expiresAt || record.attempts >= 5) {
+    otpCache.delete(mobile);
+    throw new Error('کد تأیید منقضی شده است. کد جدید دریافت کنید.');
+  }
+  const cleanCode = String(code || '').replace(/\D/g, '');
+  if (cleanCode !== record.code) {
+    record.attempts += 1;
+    throw new Error('کد تأیید نادرست است.');
+  }
+  otpCache.delete(mobile);
+  const salt = crypto.randomBytes(16).toString('hex');
+  user.username = normalized;
+  user.salt = salt;
+  user.passwordHash = hashPassword(password, salt);
+  user.authVersion = (user.authVersion || 0) + 1;
+  user.updatedAt = new Date().toISOString();
+  saveUsers();
+  return { user: sanitizeUser(user), token: createSessionToken(user) };
+}
+
+function loginWithUsername(username: string, password: string): { user: UserProfile; token: string } {
+  const normalized = normalizeUsername(username);
+  const user = [...usersCache.values()].find((candidate) => candidate.username?.toLowerCase() === normalized);
+  const storedHash = user?.passwordHash;
+  const salt = user?.salt || '00000000000000000000000000000000';
+  const candidateHash = hashPassword(String(password || ''), salt);
+  const expectedHash = /^[a-f0-9]{128}$/i.test(storedHash || '') ? storedHash! : '0'.repeat(128);
+  const matches = crypto.timingSafeEqual(Buffer.from(candidateHash, 'hex'), Buffer.from(expectedHash, 'hex'));
+  if (!user || !user.username || !user.phoneVerified || !matches) {
+    throw new Error('نام کاربری یا رمز عبور نادرست است.');
+  }
+  return { user: sanitizeUser(user), token: createSessionToken(user) };
 }
 
 function findSmsLoginUser(mobile: string): StoredUser | undefined {
@@ -683,5 +742,5 @@ function verifyPhoneChangeOtp(userId: string, code: string): UserProfile {
 }
 
 
-return { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, registerUser, loginUser, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp };
+return { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, registerUser, loginUser, loginWithUsername, setPasswordCredentials, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp };
 }

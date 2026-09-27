@@ -92,8 +92,8 @@ export const Navbar: React.FC = () => {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#D4AF37] opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#D4AF37]"></span>
               </span>
-              <span className="hidden sm:inline">{goldPrice.status === 'live' ? 'نرخ لحظه‌ای ۱۸ عیار:' : 'نرخ تأییدنشده / آخرین نرخ:'}</span>
-              <span className="sm:hidden">{goldPrice.status === 'live' ? 'طلای ۱۸ عیار:' : 'آخرین نرخ:'}</span>
+              <span className="hidden sm:inline">{goldPrice.status === 'manual' ? 'نرخ تعیین‌شده توسط مدیر:' : goldPrice.status === 'live' ? 'نرخ لحظه‌ای ۱۸ عیار:' : 'آخرین نرخ دریافتی:'}</span>
+              <span className="sm:hidden">{goldPrice.status === 'manual' ? 'نرخ دستی طلا:' : goldPrice.status === 'live' ? 'طلای ۱۸ عیار:' : 'آخرین نرخ:'}</span>
               <span className="min-w-0 truncate font-bold text-white font-sans">
                 {goldPrice.pricePerGram > 0 ? formatToman(goldPrice.pricePerGram) : 'در دسترس نیست'}
               </span>

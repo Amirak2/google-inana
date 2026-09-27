@@ -29,13 +29,19 @@ export const AuthModal: React.FC = () => {
     closeAuthModal,
     sendSmsOtp,
     verifySmsOtp,
+    loginWithPassword,
+    setPasswordCredentials,
     requestPhoneChange,
     verifyPhoneChange,
     logout,
     updateUserProfileData,
   } = useAuth();
 
-  const [mode, setMode] = useState<'otp' | 'profile'>('otp');
+  const [mode, setMode] = useState<'otp' | 'password' | 'profile'>('otp');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [credentialCode, setCredentialCode] = useState('');
+  const [credentialCodeSent, setCredentialCodeSent] = useState(false);
 
   // OTP State
   const [otpStep, setOtpStep] = useState<'phone' | 'code'>('phone');
@@ -62,15 +68,20 @@ export const AuthModal: React.FC = () => {
   useEffect(() => {
     if (currentUser) {
       setMode('profile');
+      setUsername(userProfile?.username || '');
       setDisplayName(userProfile?.displayName || currentUser.displayName || '');
       setAddress(userProfile?.address || '');
     } else {
       setMode('otp'); // Default to convenient SMS OTP
+      setUsername('');
       setOtpStep('phone');
       setOtpCode('');
     }
     setErrorMsg(null);
     setSuccessMsg(null);
+    setPassword('');
+    setCredentialCode('');
+    setCredentialCodeSent(false);
     setPhoneChangeStep('idle');
     setNewPhoneNumber('');
     setPhoneChangeCode('');
@@ -193,6 +204,51 @@ export const AuthModal: React.FC = () => {
     }
   };
 
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await loginWithPassword(username, password);
+      setPassword('');
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'ورود انجام نشد.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSendCredentialCode = async () => {
+    if (!userProfile?.phoneNumber) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await sendSmsOtp(userProfile.phoneNumber);
+      setCredentialCodeSent(true);
+      setSuccessMsg('کد تأیید به شماره حساب شما ارسال شد.');
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'ارسال کد انجام نشد.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSaveCredentials = async () => {
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await setPasswordCredentials(username, password, normalizeDigits(credentialCode));
+      setPassword('');
+      setCredentialCode('');
+      setCredentialCodeSent(false);
+      setSuccessMsg('نام کاربری و رمز عبور ذخیره شد. از این پس هر دو روش ورود فعال هستند.');
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'ثبت اطلاعات ورود انجام نشد.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleRequestPhoneChange = async () => {
     const cleanPhone = normalizePhone(newPhoneNumber);
     if (!/^09\d{9}$/.test(cleanPhone)) {
@@ -269,14 +325,14 @@ export const AuthModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-white">
-                {mode === 'profile' ? 'حساب کاربری اینانا' : 'ورود و ثبت‌نام با شماره موبایل'}
+                {mode === 'profile' ? 'حساب کاربری اینانا' : mode === 'password' ? 'ورود با نام کاربری' : 'ورود و ثبت‌نام با شماره موبایل'}
               </h2>
               <span className="text-[11px] text-[#E6CA65]">
                 {mode === 'profile'
                   ? isAdmin
                     ? 'سطح دسترسی: مدیر سیستم'
                     : 'مشتری وفادار گالری طلا'
-                  : 'رمز یکبار مصرف امن (OTP) بدون نیاز به رمز عبور'}
+                  : mode === 'password' ? 'ورود با رمز عبور حساب شما' : 'رمز یکبار مصرف پیامکی'}
               </span>
             </div>
           </div>
@@ -302,6 +358,24 @@ export const AuthModal: React.FC = () => {
               <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
               <span>{successMsg}</span>
             </div>
+          )}
+
+          {!currentUser && (
+            <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl bg-[#0A1120] p-1" role="tablist" aria-label="روش ورود">
+              <button type="button" role="tab" aria-selected={mode === 'otp'} onClick={() => { setMode('otp'); setErrorMsg(null); }} className={`rounded-lg px-2 py-2 text-xs ${mode === 'otp' ? 'bg-[#D4AF37] font-bold text-slate-950' : 'text-slate-300'}`}>پیامک</button>
+              <button type="button" role="tab" aria-selected={mode === 'password'} onClick={() => { setMode('password'); setErrorMsg(null); }} className={`rounded-lg px-2 py-2 text-xs ${mode === 'password' ? 'bg-[#D4AF37] font-bold text-slate-950' : 'text-slate-300'}`}>نام کاربری و رمز</button>
+            </div>
+          )}
+
+          {mode === 'password' && !currentUser && (
+            <form onSubmit={handlePasswordLogin} className="space-y-4">
+              <label className="block text-xs text-slate-300" htmlFor="auth-username">نام کاربری</label>
+              <input id="auth-username" dir="ltr" autoComplete="username" required value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
+              <label className="block text-xs text-slate-300" htmlFor="auth-password">رمز عبور</label>
+              <input id="auth-password" type="password" dir="ltr" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
+              <button type="submit" disabled={submitting} className="w-full rounded-xl bg-[#D4AF37] px-3 py-2.5 text-xs font-bold text-slate-950 disabled:opacity-50">ورود</button>
+              <p className="text-[11px] leading-relaxed text-slate-400">برای ساخت یا بازیابی رمز، با پیامک وارد شوید و در حساب کاربری رمز تازه تنظیم کنید.</p>
+            </form>
           )}
 
           {/* ============================================================== */}
@@ -571,6 +645,21 @@ export const AuthModal: React.FC = () => {
                       )}
                       <button type="button" onClick={() => { setPhoneChangeStep('idle'); setPhoneChangeCode(''); setErrorMsg(null); }} className="text-xs text-slate-400 hover:text-white">انصراف</button>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 rounded-2xl border border-[#D4AF37]/25 bg-[#0A1120] p-3.5">
+                <h3 className="text-xs font-bold text-white">ورود با نام کاربری و رمز عبور</h3>
+                <p className="text-[11px] text-slate-400">{userProfile?.username ? `نام کاربری فعلی: ${userProfile.username}` : 'برای فعال‌سازی این روش، نام کاربری و رمز بسازید.'} تغییر یا بازیابی رمز با کد پیامکی شماره تأییدشده انجام می‌شود.</p>
+                <input dir="ltr" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="نام کاربری انگلیسی" aria-label="نام کاربری جدید" className="w-full rounded-xl border border-slate-700 bg-[#060B15] px-3 py-2 text-sm text-white" />
+                <input type="password" dir="ltr" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="رمز عبور، حداقل ۱۲ کاراکتر" aria-label="رمز عبور جدید" className="w-full rounded-xl border border-slate-700 bg-[#060B15] px-3 py-2 text-sm text-white" />
+                {!credentialCodeSent ? (
+                  <button type="button" disabled={submitting || !userProfile?.phoneNumber} onClick={handleSendCredentialCode} className="rounded-lg border border-[#D4AF37] px-3 py-2 text-xs font-bold text-[#E6CA65] disabled:opacity-50">دریافت کد تأیید</button>
+                ) : (
+                  <div className="flex gap-2">
+                    <input dir="ltr" inputMode="numeric" autoComplete="one-time-code" maxLength={5} value={credentialCode} onChange={(event) => setCredentialCode(event.target.value)} placeholder="کد ۵ رقمی" aria-label="کد تأیید نام کاربری" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-[#060B15] px-3 py-2 text-sm text-white" />
+                    <button type="button" disabled={submitting || normalizeDigits(credentialCode).length !== 5} onClick={handleSaveCredentials} className="rounded-lg bg-[#D4AF37] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50">ذخیره اطلاعات ورود</button>
                   </div>
                 )}
               </div>

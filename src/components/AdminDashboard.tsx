@@ -1632,25 +1632,24 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 )}
               </div>
 
-              {/* API Live Status & Instant Sync Card */}
+              {/* Current price mode */}
               <div className="bg-[#0A1224] border border-[#D4AF37]/30 rounded-2xl p-5 mb-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-xs font-bold text-emerald-400">وب‌سرویس استعلام خودکار فعال است</span>
-                      <span className="text-[10px] text-slate-300 bg-slate-800 px-2 py-0.5 rounded-md">چرخه: هر ۱ ساعت</span>
-                      <span className="text-[10px] text-[#D4AF37] bg-[#D4AF37]/10 border border-[#D4AF37]/30 px-2 py-0.5 rounded-md">Navasan API (18ayar)</span>
+                      <span className="text-xs font-bold text-emerald-400">{goldPrice.isManualOverride ? 'نرخ دستی مدیریت فعال است' : 'استعلام خودکار قیمت فعال است'}</span>
+                      {!goldPrice.isManualOverride && <span className="text-[10px] text-slate-300 bg-slate-800 px-2 py-0.5 rounded-md">چرخه: هر ۱ ساعت</span>}
                     </div>
                     <p className="text-xs text-slate-300">
                       منبع: {goldPrice.source}
                     </p>
                     <p className="text-[11px] text-slate-400">
-                      آخرین استعلام: {goldPrice.jalaliTimestamp || 'امروز'} | تغییرات روز: {goldPrice.changePercent > 0 ? `+${goldPrice.changePercent}%` : `${goldPrice.changePercent}%`}
+                      {goldPrice.isManualOverride ? 'زمان ثبت نرخ دستی' : 'آخرین استعلام'}: {goldPrice.jalaliTimestamp || 'ثبت نشده'}
                     </p>
                   </div>
 
-                  <button
+                  {!goldPrice.isManualOverride && <button
                     type="button"
                     onClick={handleSyncLiveApi}
                     disabled={isSyncingApi}
@@ -1658,11 +1657,11 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   >
                     <RefreshCw className={`w-4 h-4 ${isSyncingApi ? 'animate-spin' : ''}`} />
                     <span>{isSyncingApi ? 'در حال استعلام از API...' : 'همگام‌سازی فوری با API زنده'}</span>
-                  </button>
+                  </button>}
                 </div>
 
                 {/* Other markets summary */}
-                {goldPrice.otherMarkets && (
+                {!goldPrice.isManualOverride && goldPrice.otherMarkets && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-800/80 text-[11px]">
                     <div className="bg-[#060B14] p-2 rounded-lg border border-slate-800">
                       <span className="text-slate-400 block text-[10px]">طلای ۲۴ عیار:</span>
@@ -1816,14 +1815,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 </div>
 
                 <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={refreshGoldPrice}
-                    className="flex items-center gap-2 text-xs text-[#D4AF37] hover:underline"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>دریافت آخرین نرخ رسمی اتحادیه</span>
-                  </button>
+                  <span className="text-[11px] text-slate-400">ثبت نرخ دستی، استعلام خودکار را متوقف می‌کند.</span>
 
                   <button
                     type="submit"
