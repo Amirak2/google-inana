@@ -42,7 +42,7 @@ try {
   assert.throws(() => auth.setPasswordCredentials(newAccount.user.uid, 'buyer_one', 'long-test-password-123', '00000'), /منقضی/);
   await auth.sendSmsOtpCode(phone);
   const credentialsCode = store.map('otp').get(phone).code;
-  assert.throws(() => auth.setPasswordCredentials(newAccount.user.uid, 'buyer_one', 'short', credentialsCode), /۱۲/);
+  assert.throws(() => auth.setPasswordCredentials(newAccount.user.uid, 'buyer_one', 'short', credentialsCode), /۸/);
   assert.throws(() => auth.setPasswordCredentials(newAccount.user.uid, 'buyer_one', 'long-test-password-123', '00000'), /نادرست/);
   const credentials = auth.setPasswordCredentials(newAccount.user.uid, 'Buyer_One', 'long-test-password-123', credentialsCode);
   assert.equal(credentials.user.username, 'buyer_one');

@@ -144,8 +144,8 @@ export const AuthModal: React.FC = () => {
       <input id="register-username" dir="ltr" autoComplete="username" required minLength={3} maxLength={32} value={username} onChange={event => setUsername(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
       <p className="text-[11px] text-slate-400">۳ تا ۳۲ کاراکتر انگلیسی با شروع حرف؛ عدد، نقطه، خط تیره و زیرخط مجازند.</p>
       <label htmlFor="register-password" className="block text-xs text-slate-300">رمز عبور</label>
-      <input id="register-password" type="password" dir="ltr" autoComplete="new-password" required minLength={12} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
-      <p className="text-[11px] text-slate-400">حداقل ۱۲ کاراکتر. پس از تأیید شماره، ورود با رمز هم فعال می‌شود.</p>
+      <input id="register-password" type="password" dir="ltr" autoComplete="new-password" required minLength={8} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
+      <p className="text-[11px] text-slate-400">حداقل ۸ کاراکتر. پس از تأیید شماره، ورود با رمز هم فعال می‌شود.</p>
     </div>
   );
 
@@ -166,8 +166,8 @@ export const AuthModal: React.FC = () => {
   const handleSendOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const cleanPhone = normalizePhone(mobileNumber);
-    if (mode === 'register' && (!/^[a-z][a-z0-9._-]{2,31}$/i.test(username.trim()) || password.length < 12 || password.length > 128)) {
-      setErrorMsg('نام کاربری انگلیسی ۳ تا ۳۲ کاراکتر با شروع حرف و رمز عبور ۱۲ تا ۱۲۸ کاراکتر وارد کنید.');
+    if (mode === 'register' && (!/^[a-z][a-z0-9._-]{2,31}$/i.test(username.trim()) || password.length < 8 || password.length > 128)) {
+      setErrorMsg('نام کاربری انگلیسی ۳ تا ۳۲ کاراکتر با شروع حرف و رمز عبور ۸ تا ۱۲۸ کاراکتر وارد کنید.');
       return;
     }
     if (!cleanPhone || cleanPhone.length !== 11 || !cleanPhone.startsWith('09')) {
@@ -672,7 +672,7 @@ export const AuthModal: React.FC = () => {
                 <h3 className="text-xs font-bold text-white">ورود با نام کاربری و رمز عبور</h3>
                 <p className="text-[11px] text-slate-400">{userProfile?.username ? `نام کاربری فعلی: ${userProfile.username}` : 'برای فعال‌سازی این روش، نام کاربری و رمز بسازید.'} تغییر یا بازیابی رمز با کد پیامکی شماره تأییدشده انجام می‌شود.</p>
                 <input dir="ltr" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="نام کاربری انگلیسی" aria-label="نام کاربری جدید" className="w-full rounded-xl border border-slate-700 bg-[#060B15] px-3 py-2 text-sm text-white" />
-                <input type="password" dir="ltr" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="رمز عبور، حداقل ۱۲ کاراکتر" aria-label="رمز عبور جدید" className="w-full rounded-xl border border-slate-700 bg-[#060B15] px-3 py-2 text-sm text-white" />
+                <input type="password" dir="ltr" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="رمز عبور، حداقل ۸ کاراکتر" aria-label="رمز عبور جدید" className="w-full rounded-xl border border-slate-700 bg-[#060B15] px-3 py-2 text-sm text-white" />
                 {!credentialCodeSent ? (
                   <button type="button" disabled={submitting || !userProfile?.phoneNumber} onClick={handleSendCredentialCode} className="rounded-lg border border-[#D4AF37] px-3 py-2 text-xs font-bold text-[#E6CA65] disabled:opacity-50">دریافت کد تأیید</button>
                 ) : (

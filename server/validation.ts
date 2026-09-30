@@ -111,8 +111,8 @@ export function validatePassword(password: unknown): { isValid: boolean; value: 
   if (typeof password !== 'string') {
     return { isValid: false, value: '', error: 'کلمه عبور باید متنی معتبر باشد.' };
   }
-  if (password.length < 6) {
-    return { isValid: false, value: password, error: 'کلمه عبور باید حداقل ۶ نویسه داشته باشد.' };
+  if (password.length < 8) {
+    return { isValid: false, value: password, error: 'کلمه عبور باید حداقل ۸ نویسه داشته باشد.' };
   }
   if (password.length > 128) {
     return { isValid: false, value: password, error: 'کلمه عبور نمی‌تواند بیش از ۱۲۸ نویسه باشد.' };

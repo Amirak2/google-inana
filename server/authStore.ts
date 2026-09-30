@@ -239,7 +239,7 @@ function normalizeUsername(value: string): string {
 function validateCredentials(username: string | undefined, password: string | undefined, uid?: string): string {
   const normalized = normalizeUsername(username);
   if (!/^[a-z][a-z0-9._-]{2,31}$/.test(normalized)) throw new Error('نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی باشد و با حرف شروع شود.');
-  if (typeof password !== 'string' || password.length < 12 || password.length > 128) throw new Error('رمز عبور باید بین ۱۲ تا ۱۲۸ کاراکتر باشد.');
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) throw new Error('رمز عبور باید بین ۸ تا ۱۲۸ کاراکتر باشد.');
   if ([...usersCache.values()].some(candidate => candidate.uid !== uid && candidate.username?.toLowerCase() === normalized)) throw new Error('این نام کاربری قبلاً انتخاب شده است.');
   return normalized;
 }
@@ -253,8 +253,8 @@ function setPasswordCredentials(uid: string, username: string, password: string,
   if (!/^[a-z][a-z0-9._-]{2,31}$/.test(normalized)) {
     throw new Error('نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی باشد و با حرف شروع شود.');
   }
-  if (typeof password !== 'string' || password.length < 12 || password.length > 128) {
-    throw new Error('رمز عبور باید بین ۱۲ تا ۱۲۸ کاراکتر باشد.');
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+    throw new Error('رمز عبور باید بین ۸ تا ۱۲۸ کاراکتر باشد.');
   }
   if ([...usersCache.values()].some((candidate) => candidate.uid !== uid && candidate.username?.toLowerCase() === normalized)) {
     throw new Error('این نام کاربری قبلاً انتخاب شده است.');
