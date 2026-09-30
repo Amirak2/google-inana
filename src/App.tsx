@@ -20,14 +20,14 @@ import { DynamicBackgroundMotion } from './components/DynamicBackgroundMotion';
 
 const MainLayout: React.FC = () => {
   const { activeTab, setActiveTab, quickViewProduct, setQuickViewProduct } = useGoldStore();
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
 
   // Strict guard: Ordinary users are never shown the admin panel and are routed to home
   useEffect(() => {
-    if (activeTab === 'admin' && !isAdmin) {
+    if (!authLoading && activeTab === 'admin' && !isAdmin) {
       setActiveTab('home');
     }
-  }, [activeTab, isAdmin, setActiveTab]);
+  }, [activeTab, isAdmin, authLoading, setActiveTab]);
 
   return (
     <div className="min-h-screen bg-[#060B15] text-slate-100 flex flex-col font-sans selection:bg-[#D4AF37] selection:text-slate-950 w-full max-w-full overflow-x-hidden relative">

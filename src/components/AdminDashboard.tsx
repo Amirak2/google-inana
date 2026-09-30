@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { readAdminTab, saveSessionValue, type AdminTab } from '../utils/navigationState';
 import {
   Sliders,
   TrendingUp,
@@ -67,9 +68,11 @@ export const AdminDashboard: React.FC = () => {
 
   const { currentUser, userProfile, isAdmin, openAuthModal, logout } = useAuth();
 
-  const [activeAdminTab, setActiveAdminTab] = useState<
-    'direct-pricing' | 'products' | 'gold-rate' | 'calculator' | 'orders' | 'logs'
-  >('direct-pricing');
+  const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>(() => readAdminTab(currentUser?.uid));
+
+  useEffect(() => {
+    saveSessionValue(`inana_admin_tab_${currentUser?.uid || ''}`, activeAdminTab);
+  }, [activeAdminTab, currentUser?.uid]);
 
   // Direct Product Pricing State
   const [selectedProductId, setSelectedProductId] = useState<string>(

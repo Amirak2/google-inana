@@ -10,6 +10,7 @@ import {
 import { DEFAULT_SETTINGS } from '../utils/pricingEngine';
 import { getAuthHeaders } from '../utils/authHelper';
 import { useAuth } from './AuthContext';
+import { NAVIGATION_KEY, readNavigationState, saveSessionValue } from '../utils/navigationState';
 
 interface GoldStoreContextType {
   goldPrice: GoldPriceData;
@@ -93,13 +94,26 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   });
   const [favorites, setFavorites] = useState<string[]>([]);
 
-  const [activeTab, setActiveTab] = useState<string>('home');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
-  const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
+  const [initialNavigation] = useState(readNavigationState);
+  const [activeTab, setActiveTab] = useState<string>(initialNavigation.activeTab);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(initialNavigation.selectedCategory);
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(initialNavigation.selectedCollection);
+  const [searchQuery, setSearchQuery] = useState<string>(initialNavigation.searchQuery);
+  const [quickViewProductId, setQuickViewProductId] = useState<string | null>(initialNavigation.quickViewProductId);
+  const quickViewProduct = products.find(product => product.id === quickViewProductId) || null;
+  const setQuickViewProduct = (product: Product | null) => setQuickViewProductId(product?.id || null);
+  const [isCartOpen, setIsCartOpen] = useState<boolean>(initialNavigation.isCartOpen);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    saveSessionValue(NAVIGATION_KEY, { activeTab, selectedCategory, selectedCollection, searchQuery, quickViewProductId, isCartOpen });
+  }, [activeTab, selectedCategory, selectedCollection, searchQuery, quickViewProductId, isCartOpen]);
+
+  useEffect(() => {
+    if (!productsLoading && !productsError && quickViewProductId && !products.some(product => product.id === quickViewProductId)) {
+      setQuickViewProductId(null);
+    }
+  }, [productsLoading, productsError, products, quickViewProductId]);
 
   // Save cart & favorites to localStorage
   useEffect(() => {
