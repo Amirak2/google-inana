@@ -287,6 +287,7 @@ function saveSettingsToDb(settings: PricingSettings): void { store.set('settings
 seedDatabaseIfEmpty(INITIAL_PRODUCTS, []);
 seedProductsOnce('pearlProductsV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p3'));
 seedProductsOnce('pearlClass10V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-class10'));
+seedProductsOnce('pearlP9V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p9'));
 let pricingSettings: PricingSettings = {
   ...(store.get('settings', 'pricing') || DEFAULT_SETTINGS),
   taxPercent: 0,

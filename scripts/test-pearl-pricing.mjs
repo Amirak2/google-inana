@@ -2,17 +2,15 @@ import assert from 'node:assert/strict';
 import { PEARL_PRODUCTS } from '../src/data/seedData.ts';
 import { calculateProductPrice, DEFAULT_SETTINGS } from '../src/utils/pricingEngine.ts';
 
-const pearl = PEARL_PRODUCTS.find((product) => product.sku === 'p3');
-assert.ok(pearl);
-assert.equal(pearl.stock, 1);
-
 const products = [
-  [pearl, 7_000_000],
-  [PEARL_PRODUCTS.find((product) => product.sku === 'class10'), 10_000_000],
+  ['p3', 7_000_000, 1],
+  ['class10', 10_000_000, 1],
+  ['p9', 3_000_000, 2],
 ];
-for (const [product, expectedPrice] of products) {
+for (const [sku, expectedPrice, expectedStock] of products) {
+  const product = PEARL_PRODUCTS.find((candidate) => candidate.sku === sku);
   assert.ok(product);
-  assert.equal(product.stock, 1);
+  assert.equal(product.stock, expectedStock);
   for (const goldRate of [0, 15_000_000, 30_000_000]) {
     const price = calculateProductPrice(product, goldRate, DEFAULT_SETTINGS);
     assert.equal(price.finalPrice, expectedPrice);
