@@ -85,7 +85,7 @@ export const ShopCatalog: React.FC = () => {
         }
 
         // Stock filter
-        if (onlyInStock && p.stock <= 0) {
+        if (onlyInStock && (p.availableStock ?? p.stock ?? 0) <= 0) {
           return false;
         }
 

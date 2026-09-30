@@ -129,7 +129,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
           </div>
 
           {/* Add to Cart quick icon with spring response */}
-          {product.availableStock !== undefined && product.availableStock <= 0 ? (
+          {(product.availableStock ?? product.stock ?? 0) <= 0 ? (
             <span className="text-[10px] text-rose-400 bg-rose-500/20 px-2 py-1 rounded-lg font-medium border border-rose-500/30">
               ناموجود
             </span>

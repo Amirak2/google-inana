@@ -1172,12 +1172,16 @@ app.put('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedRequest,
     stock: req.body.stock !== undefined ? Math.max(0, Number(req.body.stock)) : productsList[index].stock,
   };
 
+  // Availability and pricing are calculated by the server, never persisted from an admin form.
+  delete productsList[index].availableStock;
+  delete (productsList[index] as any).calculatedPrice;
+  delete (productsList[index] as any).priceBreakdown;
   saveProductsToDb(productsList);
   logger.security('ADMIN', `ویرایش محصول توسط مدیر: ${productsList[index].title}`, {
     admin: req.user?.email,
     productId: productsList[index].id,
   });
-  res.json(productsList[index]);
+  res.json({ ...productsList[index], availableStock: getAvailableStock(productsList[index]) });
 });
 
 // Dedicated fast endpoint to directly update making charge & profit on a specific gold product
@@ -1825,32 +1829,34 @@ async function handleOrderStatusUpdate(
       }
 
       const wasRejected = order.status === 'رد شده' || order.status === 'لغو شده';
+      const quantities = new Map<string, number>();
+      for (const item of order.items) quantities.set(item.productId, (quantities.get(item.productId) || 0) + item.quantity);
 
       // 1. Transition to Rejected/Cancelled: Restore inventory only once
       if (isRejecting && !order.inventoryReleased) {
-        for (const itm of order.items) {
-          const prod = productsList.find((p) => p.id === itm.productId);
+        for (const [productId, quantity] of quantities) {
+          const prod = productsList.find((p) => p.id === productId);
           if (prod && prod.stock !== undefined) {
-            prod.stock += itm.quantity;
+            prod.stock += quantity;
             saveProductToDb(prod); // Persisted to SQLite inside transaction
           }
         }
         order.inventoryReleased = true;
       }
       // 2. Transition from Rejected/Cancelled to Active status: Deduct inventory again if available
-      else if (!isRejecting && wasRejected && order.inventoryReleased) {
-        for (const itm of order.items) {
-          const prod = productsList.find((p) => p.id === itm.productId);
-          if (prod && prod.stock !== undefined && prod.stock < itm.quantity) {
-            const err: any = new Error(`موجودی قطعه «${prod.title}» (${prod.stock} عدد) برای فعال‌سازی مجدد این سفارش (${itm.quantity} عدد) کافی نیست.`);
+      else if (status !== undefined && !isRejecting && wasRejected && order.inventoryReleased) {
+        for (const [productId, quantity] of quantities) {
+          const prod = productsList.find((p) => p.id === productId);
+          if (!prod || getAvailableStock(prod) < quantity) {
+            const err: any = new Error('موجودی قابل خرید برای فعال‌سازی مجدد این سفارش کافی نیست.');
             err.statusCode = 409;
             throw err;
           }
         }
-        for (const itm of order.items) {
-          const prod = productsList.find((p) => p.id === itm.productId);
+        for (const [productId, quantity] of quantities) {
+          const prod = productsList.find((p) => p.id === productId);
           if (prod && prod.stock !== undefined) {
-            prod.stock -= itm.quantity;
+            prod.stock -= quantity;
             saveProductToDb(prod); // Persisted to SQLite inside transaction
           }
         }

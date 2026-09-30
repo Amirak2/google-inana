@@ -62,6 +62,7 @@ export const AdminDashboard: React.FC = () => {
     updateSingleProductPricing,
     deleteProduct,
     refreshGoldPrice,
+    refreshProducts,
     syncWithApi,
     setActiveTab,
   } = useGoldStore();
@@ -324,7 +325,7 @@ export const AdminDashboard: React.FC = () => {
             : null,
         additionalCost: 0,
         stoneCost: 0,
-        stock: Number(productForm.stock) || 1,
+        stock: Number(productForm.stock ?? 1),
         description: productForm.description || '',
         features: productForm.features || (isFixedPrice ? [] : ['طلای ۱۸ عیار ۷۵۰']),
         images:
@@ -398,6 +399,7 @@ export const AdminDashboard: React.FC = () => {
               : o
           )
         );
+        await refreshProducts();
         setOrderActionNotification({
           message: `وضعیت سفارش به «${newStatus}» تغییر یافت.`,
           type: 'success',
@@ -437,6 +439,7 @@ export const AdminDashboard: React.FC = () => {
               : o
           )
         );
+        await refreshProducts();
         setOrderActionNotification({
           message: `فیش و سفارش کد ${order.trackingCode} با موفقیت تایید شد.`,
           type: 'success',
@@ -490,6 +493,7 @@ export const AdminDashboard: React.FC = () => {
           type: 'error',
         });
         setTimeout(() => setOrderActionNotification(null), 3500);
+        await refreshProducts();
         setRejectingOrder(null);
         setRejectionReasonInput('');
         if (viewingReceiptOrder?.id === orderId) {
@@ -522,6 +526,7 @@ export const AdminDashboard: React.FC = () => {
           type: 'success',
         });
         setTimeout(() => setOrderActionNotification(null), 3500);
+        await refreshProducts();
         setDeletingOrder(null);
       } else {
         setOrderActionNotification({

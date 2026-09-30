@@ -221,11 +221,30 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     refreshGoldPrice();
     refreshProducts();
 
+    // Refresh availability without resetting loading states or admin forms.
+    let disposed = false;
+    const syncAvailability = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const response = await fetch('/api/products', { cache: 'no-store' });
+        if (!response.ok) return;
+        const latest = await response.json();
+        if (!disposed && Array.isArray(latest)) setProducts(latest);
+      } catch { /* Keep the last successful inventory during a network outage. */ }
+    };
+    const stockInterval = setInterval(syncAvailability, 30000);
+    window.addEventListener('focus', syncAvailability);
+    document.addEventListener('visibilitychange', syncAvailability);
+
     // Auto-poll gold price every 1 hour (3600000 ms)
     const ONE_HOUR_MS = 60 * 60 * 1000;
     const interval = setInterval(refreshGoldPrice, ONE_HOUR_MS);
 
     return () => {
+      disposed = true;
+      clearInterval(stockInterval);
+      window.removeEventListener('focus', syncAvailability);
+      document.removeEventListener('visibilitychange', syncAvailability);
       clearInterval(interval);
     };
   }, []);
@@ -356,7 +375,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       body: JSON.stringify(updates),
     });
     if (!res.ok) throw new Error('ویرایش محصول در سرور انجام نشد.');
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+    const savedProduct: Product = await res.json();
+    setProducts((prev) => prev.map((p) => (p.id === id ? savedProduct : p)));
   };
 
   const updateSingleProductPricing = async (

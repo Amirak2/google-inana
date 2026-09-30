@@ -302,7 +302,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                 </div>
 
                 {/* Quantity adjust */}
-                {product.availableStock !== undefined && product.availableStock <= 0 ? (
+                {(product.availableStock ?? product.stock ?? 0) <= 0 ? (
                   <span className="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold">
                     اتمام موجودی در انبار
                   </span>
@@ -337,14 +337,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   onClick={handleAddToCart}
-                  disabled={!priceReady || (product.availableStock !== undefined && product.availableStock <= 0)}
+                  disabled={!priceReady || ((product.availableStock ?? product.stock ?? 0) <= 0)}
                   className="flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all shadow-[0_4px_20px_rgba(212,175,55,0.3)] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ShoppingBag className="w-4 h-4" />
                   <span>
                     {!priceReady
                       ? 'در حال دریافت نرخ طلا'
-                      : product.availableStock !== undefined && product.availableStock <= 0
+                      : (product.availableStock ?? product.stock ?? 0) <= 0
                       ? 'اتمام موجودی'
                       : 'افزودن به سبد خرید'}
                   </span>
