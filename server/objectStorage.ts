@@ -59,7 +59,7 @@ export async function putMediaObject(key: string, data: Buffer, contentType: str
     Body: data,
     ContentType: contentType,
     CacheControl: key.startsWith('products/') ? 'public, max-age=31536000, immutable' : 'private, no-store',
-  }));
+  }), { abortSignal: AbortSignal.timeout(20000) });
 }
 
 export async function getMediaObject(key: string): Promise<Buffer | null> {
@@ -69,7 +69,7 @@ export async function getMediaObject(key: string): Promise<Buffer | null> {
     const result = await storage.client.send(new storage.commands.GetObjectCommand({
       Bucket: storage.config.bucket,
       Key: key,
-    }));
+    }), { abortSignal: AbortSignal.timeout(20000) });
     if (!result.Body) return null;
     if (typeof result.Body.transformToByteArray === 'function') {
       return Buffer.from(await result.Body.transformToByteArray());

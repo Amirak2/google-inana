@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { externalizeImages, replaceResponseImages } from '../server/mediaStorage.ts';
+import { externalizeImages, replaceResponseImages, migrateInlineMedia } from '../server/mediaStorage.ts';
 
 const data = 'data:image/png;base64,aGVsbG8=';
 function storeOf(records) {
@@ -38,3 +38,17 @@ await assert.rejects(externalizeImages(failed,async()=>{throw new Error('S3 unav
 assert.equal(failed.get('orders','x').paymentReceiptImage,data);
 assert.equal(failed.map('media').size,0);
 console.log('Media storage: owner isolation, public products, retry and failure checks passed');
+
+for (const key of ['LIARA_ENDPOINT','LIARA_BUCKET_NAME','LIARA_ACCESS_KEY','LIARA_SECRET_KEY']) process.env[key]='test';
+const legacy=storeOf({media:[['old',{owner:'a',public:false,contentType:'image/png',data:'aGVsbG8='}]]});
+await assert.rejects(migrateInlineMedia(legacy,async()=>{throw new Error('offline');}),/offline/);
+assert.equal(legacy.get('media','old').data,'aGVsbG8=');
+await migrateInlineMedia(legacy,async(key,bytes)=>{
+  assert.equal(key,'receipts/old.png');
+  assert.equal(bytes.toString(),'hello');
+});
+assert.equal(legacy.get('media','old').data,undefined);
+assert.equal(legacy.get('media','old').owner,'a');
+assert.equal(legacy.get('media','old').public,false);
+assert.equal(legacy.get('media','old').objectKey,'receipts/old.png');
+console.log('Legacy migration preserves URL IDs and permissions, and retains data on upload failure');

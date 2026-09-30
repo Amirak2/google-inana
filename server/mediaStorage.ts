@@ -16,7 +16,7 @@ function decodeImage(value: string) {
 // Call only inside a database transaction. Upload failure leaves database rows untouched.
 export async function externalizeImages(store: Pick<PostgresStore, 'get' | 'set' | 'map'>, upload: Upload = putMediaObject, configured = isObjectStorageConfigured()) {
   const replacements = new Map<string, string>();
-  for (const bucket of ['products', 'orders', 'idempotency']) {
+  for (const bucket of ['products', 'collections', 'orders', 'idempotency']) {
     async function visit(value: any, owner: string, isPublic: boolean): Promise<any> {
       if (typeof value === 'string' && value.startsWith('data:image/')) {
         if (!configured) throw new Error('Object Storage is required for image uploads');
@@ -43,7 +43,7 @@ export async function externalizeImages(store: Pick<PostgresStore, 'get' | 'set'
       }
       return value;
     }
-    for (const [key, value] of store.map(bucket)) store.set(bucket, key, await visit(value, value.userId || '', bucket === 'products'));
+    for (const [key, value] of store.map(bucket)) store.set(bucket, key, await visit(value, value.userId || '', ['products', 'collections'].includes(bucket)));
   }
   return replacements;
 }
