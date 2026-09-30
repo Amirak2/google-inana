@@ -4,51 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from './server';
 import type { Store } from './server/storage';
 import { PostgresStore } from './server/postgresStorage';
-import { getMediaObject, isObjectStorageConfigured, putMediaObject } from './server/objectStorage';
+import { getMediaObject } from './server/objectStorage';
+import { externalizeImages, migrateInlineMedia, replaceResponseImages } from './server/mediaStorage';
 
 const app = express();
 app.set('trust proxy', 1);
 app.use(express.raw({ type: '*/*', limit: '4mb' }));
-
-function decodeImage(value: string): { contentType: string; data: string } | null {
-  const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=\s]+)$/.exec(value);
-  if (!match) return null;
-  if (Buffer.byteLength(match[2], 'base64') > 3 * 1024 * 1024) throw new Error('Image exceeds size limit');
-  return { contentType: match[1], data: match[2].replace(/\s/g, '') };
-}
-
-async function externalizeImages(store: PostgresStore): Promise<Map<string, string>> {
-  const replacements = new Map<string, string>();
-  for (const bucket of ['products', 'orders', 'idempotency']) {
-    async function visit(value: any, owner: string): Promise<any> {
-      if (typeof value === 'string' && value.startsWith('data:image/')) {
-        if (replacements.has(value)) return replacements.get(value)!;
-        const image = decodeImage(value);
-        if (!image) throw new Error('Unsupported image');
-        const id = crypto.randomUUID();
-        const isPublic = bucket === 'products';
-        const url = `${isPublic ? '/media/products/' : '/api/receipts/'}${id}`;
-        if (isObjectStorageConfigured()) {
-          const extension = image.contentType.split('/')[1] === 'jpeg' ? 'jpg' : image.contentType.split('/')[1];
-          const objectKey = `${isPublic ? 'products' : 'receipts'}/${id}.${extension}`;
-          await putMediaObject(objectKey, Buffer.from(image.data, 'base64'), image.contentType);
-          store.set('media', id, { owner, public: isPublic, contentType: image.contentType, objectKey });
-        } else {
-          store.set('media', id, { owner, public: isPublic, ...image });
-        }
-        replacements.set(value, url);
-        return url;
-      }
-      if (Array.isArray(value)) return Promise.all(value.map((item) => visit(item, owner)));
-      if (value && typeof value === 'object') {
-        for (const key of Object.keys(value)) value[key] = await visit(value[key], owner);
-      }
-      return value;
-    }
-    for (const [key, value] of store.map(bucket)) store.set(bucket, key, await visit(value, value.userId || ''));
-  }
-  return replacements;
-}
 
 async function handleRequest(req: express.Request, res: express.Response): Promise<void> {
   const mutatingMethod = !['GET', 'HEAD'].includes(req.method);
@@ -99,13 +60,12 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
       duplex: mutatingMethod ? 'half' : undefined,
     } as RequestInit & { duplex?: 'half' });
     let response = await siteApp.fetch(request);
-    const replacements = await externalizeImages(store);
+    const replacements = needsTransaction ? await externalizeImages(store) : new Map<string, string>();
+    if (needsTransaction) await migrateInlineMedia(store);
     await store.commit();
     let body = Buffer.from(await response.arrayBuffer());
     if (replacements.size && response.headers.get('content-type')?.includes('application/json')) {
-      let text = body.toString('utf8');
-      for (const [before, after] of replacements) text = text.split(JSON.stringify(before)).join(JSON.stringify(after));
-      body = Buffer.from(text);
+      body = Buffer.from(JSON.stringify(replaceResponseImages(JSON.parse(body.toString('utf8')), replacements)));
     }
     response.headers.forEach((value, key) => res.set(key, value));
     res.status(response.status).send(body);
@@ -118,6 +78,23 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
 }
 
 app.all(['/api/*', '/media/*'], (req, res) => { void handleRequest(req, res); });
+
+// Preserve existing product URLs while serving their bytes from the private bucket.
+app.get('/products/pearls/:filename', async (req, res) => {
+  if (!['p3-white.png', 'class10-white.png', 'p9-white.png'].includes(req.params.filename)) {
+    res.sendStatus(404); return;
+  }
+  try {
+    const data = await getMediaObject(`products/pearls/${req.params.filename}`);
+    if (!data) { res.sendStatus(404); return; }
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.send(data);
+  } catch {
+    res.sendStatus(503);
+  }
+});
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const clientDir = path.join(currentDir, 'client');
