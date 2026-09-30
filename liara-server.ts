@@ -3,31 +3,28 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './server';
 import type { Store } from './server/storage';
-import { PostgresStore } from './server/postgresStorage';
+import { PostgresStore, PostgresConflictError } from './server/postgresStorage';
 import { getMediaObject } from './server/objectStorage';
-import { externalizeImages, migrateInlineMedia, replaceResponseImages } from './server/mediaStorage';
+import { configureTrustedProxy, normalizeClientIp } from './server/clientIp';
+import { runPostgresRequest } from './server/postgresRequest';
 
 const app = express();
-app.set('trust proxy', 1);
+configureTrustedProxy(app, process.env.TRUSTED_PROXY_CIDRS);
 app.use(express.raw({ type: '*/*', limit: '4mb' }));
 
 async function handleRequest(req: express.Request, res: express.Response): Promise<void> {
   const mutatingMethod = !['GET', 'HEAD'].includes(req.method);
-  const updatesMarketCache = ['GET', 'HEAD'].includes(req.method)
-    && ['/api/products', '/api/gold-price', '/api/gold-history'].includes(req.path);
-  const needsTransaction = mutatingMethod || updatesMarketCache;
-  const publicRead = !needsTransaction && ['/api/collections', '/api/settings'].includes(req.path);
   let store: PostgresStore | null = null;
   try {
-    store = await PostgresStore.load(needsTransaction, publicRead);
     const origin = `${req.protocol}://${req.get('host')}`;
     if (mutatingMethod && req.get('origin') && req.get('origin') !== origin) {
       res.status(403).json({ error: 'مبدأ درخواست معتبر نیست.' });
       return;
     }
-    const siteApp = createApp(store as unknown as Store, { ...process.env, NODE_ENV: 'production' });
 
     if (req.path.startsWith('/api/receipts/') || req.path.startsWith('/media/products/')) {
+      store = await PostgresStore.load(false);
+      const siteApp = createApp(store as unknown as Store, { ...process.env, NODE_ENV: 'production' });
       const id = req.path.split('/').pop()!;
       const media = store.get<any>('media', id);
       if (!media) { res.sendStatus(404); return; }
@@ -59,19 +56,17 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
       body: mutatingMethod && req.body?.length ? req.body : undefined,
       duplex: mutatingMethod ? 'half' : undefined,
     } as RequestInit & { duplex?: 'half' });
-    let response = await siteApp.fetch(request);
-    const replacements = needsTransaction ? await externalizeImages(store) : new Map<string, string>();
-    if (needsTransaction) await migrateInlineMedia(store);
-    await store.commit();
-    let body = Buffer.from(await response.arrayBuffer());
-    if (replacements.size && response.headers.get('content-type')?.includes('application/json')) {
-      body = Buffer.from(JSON.stringify(replaceResponseImages(JSON.parse(body.toString('utf8')), replacements)));
-    }
+    const clientIp = normalizeClientIp(req.ip || req.socket.remoteAddress);
+    const response = await runPostgresRequest(req.method, req.path, { ...process.env, NODE_ENV: 'production' },
+      (snapshot, requestEnv) => createApp(snapshot, requestEnv).fetch(request.clone(), { clientIp }));
+    const body = Buffer.from(await response.arrayBuffer());
     response.headers.forEach((value, key) => res.set(key, value));
     res.status(response.status).send(body);
   } catch (error) {
     console.error('Request failed', error);
-    res.status(503).json({ error: 'ذخیره یا دریافت اطلاعات انجام نشد. لطفاً دوباره تلاش کنید.' });
+    const conflict = error instanceof PostgresConflictError;
+    if (conflict) res.set('Retry-After', '2');
+    res.status(conflict ? 409 : 503).json({ error: conflict ? error.message : 'ذخیره یا دریافت اطلاعات انجام نشد. لطفاً دوباره تلاش کنید.' });
   } finally {
     await store?.release();
   }

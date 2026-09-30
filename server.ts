@@ -25,6 +25,7 @@ import { createLogger } from './server/logger';
 import { createDb } from './server/db';
 
 export function createApp(store: Store, env: Record<string, any>) {
+const fetch: typeof globalThis.fetch = env.marketFetch || globalThis.fetch;
 const { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp, loginWithUsername, setPasswordCredentials } = createAuthStore(store, env);
 const { logger, requestLoggerMiddleware } = createLogger(store);
 const { runDbTransaction,
@@ -1920,16 +1921,7 @@ async function handleDeleteOrder(orderId: string, adminUser: any, res: Response)
 
       const orderToDelete = ordersList[index];
 
-      if (!orderToDelete.inventoryReleased && orderToDelete.status !== 'رد شده' && orderToDelete.status !== 'لغو شده') {
-        for (const itm of orderToDelete.items) {
-          const prod = productsList.find((p) => p.id === itm.productId);
-          if (prod && prod.stock !== undefined) {
-            prod.stock += itm.quantity;
-            saveProductToDb(prod); // Persisted to SQLite inside transaction
-          }
-        }
-        orderToDelete.inventoryReleased = true;
-      }
+      // Deleting sales history never changes inventory. Cancel/reject first to restock.
 
       ordersList.splice(index, 1);
       deleteOrderFromDb(orderToDelete.id); // Persisted to SQLite inside transaction
@@ -1973,19 +1965,7 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
         const prevCount = ordersList.length;
         const allIds = ordersList.map((o) => o.id);
 
-        // Release inventory for all active, non-released orders being cleared
-        for (const order of ordersList) {
-          if (!order.inventoryReleased && order.status !== 'رد شده' && order.status !== 'لغو شده') {
-            for (const itm of order.items) {
-              const prod = productsList.find((p) => p.id === itm.productId);
-              if (prod && prod.stock !== undefined) {
-                prod.stock += itm.quantity;
-                saveProductToDb(prod); // Persisted to SQLite inside transaction
-              }
-            }
-            order.inventoryReleased = true;
-          }
-        }
+        // Clearing history has no stock effect, including completed sales.
 
         ordersList = [];
         deleteOrdersBulkFromDb(allIds);
@@ -2001,17 +1981,7 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
         for (const o of ordersList) {
           if (idSet.has(o.id) || idSet.has(o.trackingCode)) {
             toDeleteIds.push(o.id);
-            // Release inventory for active, non-released order being deleted
-            if (!o.inventoryReleased && o.status !== 'رد شده' && o.status !== 'لغو شده') {
-              for (const itm of o.items) {
-                const prod = productsList.find((p) => p.id === itm.productId);
-                if (prod && prod.stock !== undefined) {
-                  prod.stock += itm.quantity;
-                  saveProductToDb(prod); // Persisted to SQLite inside transaction
-                }
-              }
-              o.inventoryReleased = true;
-            }
+            // Only the status-update path may release inventory.
           } else {
             keptOrders.push(o);
           }
@@ -2115,7 +2085,7 @@ app.post('/api/auth/otp/send', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await sendSmsOtpCode(phoneVal.phone);
+    const result = await sendSmsOtpCode(phoneVal.phone, clientIp);
     logger.security('AUTH', `درخواست ارسال کد پیامکی OTP به شماره: ${phoneVal.phone}`, {
       mobile: phoneVal.phone,
       isRegistered: result.isRegistered,
@@ -2341,12 +2311,12 @@ app.get('/api/admin/logs/export', requireAdminAuth, (req: AuthenticatedRequest, 
 
 // ----------------------------------------------------
 // Persist market cache with the same atomic request commit as the business data.
-return { async fetch(request: globalThis.Request) {
+return { async fetch(request: globalThis.Request, context: { clientIp?: string } = {}) {
   const pathname = new URL(request.url).pathname;
   if (request.method === 'POST' && (pathname === '/api/orders/quote' || pathname === '/api/orders')) {
     await getOrUpdateGoldPrice();
   }
-  const response = await app.fetch(request);
+  const response = await app.fetch(request, context);
   store.set('market', 'gold', currentGoldState);
   store.set('market', 'fetchedAt', lastFetchTimestamp);
   store.set('market', 'history', cachedTgjuData);

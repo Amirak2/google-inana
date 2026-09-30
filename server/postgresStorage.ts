@@ -3,6 +3,12 @@ import { Pool, type PoolClient } from 'pg';
 let sharedPool: Pool | null = null;
 let schemaReady: Promise<void> | null = null;
 
+// JSONB normalizes object key order. Compare content, not JS insertion order.
+function serializeRecord(value: any): string {
+  return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
+}
+
 async function releaseClient(client: PoolClient, rollback: boolean): Promise<void> {
   let discard = false;
   try {
@@ -66,32 +72,31 @@ export class PostgresStore {
   private original = new Map<string, string>();
   private client: PoolClient | null = null;
   private transactionOpen = false;
+  private writable = false;
+  private publicRead = false;
 
-  static async load(exclusive = false, publicRead = false): Promise<PostgresStore> {
+  private selectQuery(): string {
+    return this.publicRead
+      ? "SELECT bucket, record_key, value_json FROM site_records WHERE bucket NOT IN ('orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits')"
+      : 'SELECT bucket, record_key, value_json FROM site_records';
+  }
+
+  static async load(writable = false, publicRead = false): Promise<PostgresStore> {
     const store = new PostgresStore();
+    store.writable = writable;
+    store.publicRead = publicRead;
     const pool = getPool();
     await ensureSchema(pool);
 
     try {
-      if (exclusive) {
-        store.client = await pool.connect();
-        // BEGIN may fail after reaching the server; clean up even in that case.
-        store.transactionOpen = true;
-        await store.client.query('BEGIN');
-        await store.client.query('SELECT pg_advisory_xact_lock($1)', [20260912]);
-      }
-
-      const runner = store.client || pool;
-      const result = await runner.query(
-        publicRead
-          ? "SELECT bucket, record_key, value_json FROM site_records WHERE bucket NOT IN ('orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits')"
-          : 'SELECT bucket, record_key, value_json FROM site_records'
-      );
+      // Request-local snapshot. No connection or database lock is held while
+      // handlers call price providers or upload media.
+      const result = await pool.query(store.selectQuery());
       for (const row of result.rows) {
         // pg already decodes JSONB, including scalar strings.
         const value = row.value_json;
         store.map(row.bucket).set(row.record_key, value);
-        store.original.set(JSON.stringify([row.bucket, row.record_key]), JSON.stringify(value));
+        store.original.set(JSON.stringify([row.bucket, row.record_key]), serializeRecord(value));
       }
       store.prune();
       return store;
@@ -134,13 +139,30 @@ export class PostgresStore {
   }
 
   async commit(): Promise<void> {
-    if (!this.client || !this.transactionOpen) return;
+    if (!this.writable) return;
+    const current = new Map<string, string>();
+    for (const [bucket, values] of this.buckets) {
+      for (const [key, value] of values) current.set(JSON.stringify([bucket, key]), serializeRecord(value));
+    }
+    if (current.size === this.original.size && [...current].every(([key, value]) => this.original.get(key) === value)) return;
+    this.client = await getPool().connect();
+    this.transactionOpen = true;
+    await this.client.query('BEGIN');
+    await this.client.query("SET LOCAL lock_timeout = '3s'");
+    await this.client.query("SET LOCAL statement_timeout = '5s'");
+    await this.client.query('SELECT pg_advisory_xact_lock($1)', [20260912]);
+    // Reject a stale decision, including new/deleted rows (phantoms). The
+    // caller re-runs validation against a fresh snapshot before responding.
+    const fresh = await this.client.query(this.selectQuery());
+    if (fresh.rows.length !== this.original.size || fresh.rows.some(row =>
+      this.original.get(JSON.stringify([row.bucket, row.record_key])) !== serializeRecord(row.value_json)
+    )) throw new PostgresConflictError();
     const currentKeys = new Set<string>();
     for (const [bucket, values] of this.buckets) {
       for (const [key, value] of values) {
         const composite = JSON.stringify([bucket, key]);
         currentKeys.add(composite);
-        const serialized = JSON.stringify(value);
+        const serialized = serializeRecord(value);
         if (serialized === this.original.get(composite)) continue;
         await this.client.query(
           `INSERT INTO site_records (bucket, record_key, value_json, updated_at)
@@ -168,4 +190,8 @@ export class PostgresStore {
     this.transactionOpen = false;
     await releaseClient(client, rollback);
   }
+}
+
+export class PostgresConflictError extends Error {
+  constructor() { super('اطلاعات هم‌زمان تغییر کرده است. لطفاً دوباره تلاش کنید.'); }
 }

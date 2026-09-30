@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   TrendingUp,
   Clock,
@@ -14,6 +14,7 @@ import {
 import { useGoldStore } from '../context/GoldStoreContext';
 import { formatToman, formatPercent, formatJalaliDateTime } from '../utils/persianFormatter';
 import { GoldHistoryPoint } from '../types';
+import { loadGoldHistory } from '../utils/goldHistory';
 
 interface LiveGoldTickerProps {
   compact?: boolean;
@@ -25,6 +26,9 @@ export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false 
   const [historyData, setHistoryData] = useState<GoldHistoryPoint[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hoveredPoint, setHoveredPoint] = useState<GoldHistoryPoint | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const historyAbort = useRef<AbortController | null>(null);
 
   const ranges = [
     { id: '24h', label: '۲۴ ساعت' },
@@ -35,30 +39,25 @@ export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false 
   ];
 
   const fetchHistory = async (range: string) => {
+    historyAbort.current?.abort();
+    const controller = new AbortController();
+    historyAbort.current = controller;
+    setHistoryData([]);
+    setHoveredPoint(null);
+    setHistoryError(null);
+    setHistoryLoading(true);
     try {
-      const res = await fetch(`/api/gold-history?range=${range}`);
-      if (res.ok) {
-        const data = await res.json();
-        setHistoryData(data.points || []);
-      }
-    } catch {
-      // Fallback points
-      const base = goldPrice.pricePerGram;
-      setHistoryData([
-        { time: 'شنبه', date: 'هفته', price: base * 0.985 },
-        { time: 'یکشنبه', date: 'هفته', price: base * 0.991 },
-        { time: 'دوشنبه', date: 'هفته', price: base * 0.996 },
-        { time: 'سه‌شنبه', date: 'هفته', price: base * 1.002 },
-        { time: 'چهارشنبه', date: 'هفته', price: base * 1.004 },
-        { time: 'پنجشنبه', date: 'هفته', price: base * 1.007 },
-        { time: 'امروز', date: 'هفته', price: base },
-      ]);
-    }
+      const points = await loadGoldHistory(range, controller.signal);
+      if (!controller.signal.aborted) setHistoryData(points);
+    } catch (error) {
+      if (!controller.signal.aborted) setHistoryError(error instanceof Error ? error.message : 'دریافت نمودار انجام نشد.');
+    } finally { if (!controller.signal.aborted) setHistoryLoading(false); }
   };
 
   useEffect(() => {
     if (compact) return;
     fetchHistory(activeRange);
+    return () => historyAbort.current?.abort();
   }, [activeRange, goldPrice.pricePerGram, compact]);
 
   const handleManualRefresh = async () => {
@@ -257,7 +256,7 @@ export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false 
           <div className="luxury-glass-card rounded-2xl p-5 sm:p-6 min-w-0 border border-[#D4AF37]/25">
             <span className="text-slate-300 text-xs block mb-2">بالاترین قیمت امروز</span>
             <div className="text-xl sm:text-2xl font-bold text-emerald-400 mb-2 truncate">
-              {formatToman(goldPrice.dailyHigh || goldPrice.pricePerGram * 1.008)}
+              {goldPrice.dailyHigh > 0 ? formatToman(goldPrice.dailyHigh) : '—'}
             </div>
             <span className="text-[11px] text-slate-400 block truncate">ثبت شده در ساعات اوج بازار</span>
           </div>
@@ -266,7 +265,7 @@ export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false 
           <div className="luxury-glass-card rounded-2xl p-5 sm:p-6 min-w-0 border border-[#D4AF37]/25">
             <span className="text-slate-300 text-xs block mb-2">پایین‌ترین قیمت امروز</span>
             <div className="text-xl sm:text-2xl font-bold text-slate-100 mb-2 truncate">
-              {formatToman(goldPrice.dailyLow || goldPrice.pricePerGram * 0.992)}
+              {goldPrice.dailyLow > 0 ? formatToman(goldPrice.dailyLow) : '—'}
             </div>
             <span className="text-[11px] text-slate-400 block truncate">کف قیمت معاملاتی روز</span>
           </div>
@@ -367,13 +366,13 @@ export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false 
             <div className="text-right min-w-0">
               <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-0.5 truncate">بالاترین نرخ دوره</span>
               <span className="text-xs sm:text-sm font-bold text-emerald-400 block truncate">
-                {formatToman(periodHigh)}
+                {historyData.length ? formatToman(periodHigh) : '—'}
               </span>
             </div>
             <div className="text-right min-w-0">
               <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-0.5 truncate">پایین‌ترین نرخ دوره</span>
               <span className="text-xs sm:text-sm font-bold text-slate-200 block truncate">
-                {formatToman(periodLow)}
+                {historyData.length ? formatToman(periodLow) : '—'}
               </span>
             </div>
             <div className="text-right min-w-0">
@@ -388,15 +387,15 @@ export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false 
                 ) : (
                   <ArrowDownRight className="w-3.5 h-3.5 flex-shrink-0" />
                 )}
-                {formatPercent(periodPercent)}
+                {historyData.length ? formatPercent(periodPercent) : '—'}
               </span>
             </div>
             <div className="text-right min-w-0">
               <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-0.5 truncate">نرخ میانگین</span>
               <span className="text-xs sm:text-sm font-bold text-[#E6CA65] block truncate">
-                {formatToman(
+                {historyData.length ? formatToman(
                   Math.round(prices.reduce((a, b) => a + b, 0) / (prices.length || 1))
-                )}
+                ) : '—'}
               </span>
             </div>
           </div>
@@ -434,7 +433,12 @@ export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false 
           </div>
 
           {/* SVG Chart Graphic */}
-          <div className="w-full max-w-full min-w-0 overflow-x-auto pb-2 -mx-1 px-1">
+          {historyData.length === 0 ? (
+            <div role="status" className="flex min-h-[250px] flex-col items-center justify-center gap-4 text-sm text-slate-300">
+              <p>{historyLoading ? 'در حال دریافت نمودار…' : historyError || 'برای این بازه، تاریخچه قیمت ثبت نشده است.'}</p>
+              {historyError && <button type="button" onClick={() => fetchHistory(activeRange)} className="rounded-lg border border-[#D4AF37]/40 px-4 py-2 text-[#E6CA65]">تلاش دوباره</button>}
+            </div>
+          ) : <div className="w-full max-w-full min-w-0 overflow-x-auto pb-2 -mx-1 px-1">
             <div className="min-w-[620px] sm:min-w-[680px] h-[250px] sm:h-[260px] relative">
               <svg
                 viewBox={`0 0 ${chartWidth} ${chartHeight}`}
@@ -579,7 +583,7 @@ export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false 
                 })}
               </svg>
             </div>
-          </div>
+          </div>}
 
           {/* Legal / Formula note */}
           <div className="mt-6 pt-4 border-t border-slate-700/80 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-300">

@@ -1,11 +1,13 @@
 /** Fetch-native adapter for the retained Express-style route handlers. */
+import { normalizeClientIp } from './clientIp';
+export interface RequestContext { clientIp?: string }
 type Handler = (req: any, res: any, next: () => void) => any;
 function router() {
   const routes: { method: string; path: string; handlers: Handler[] }[] = [];
   const middleware: Handler[] = [];
   const app: any = { use: (fn: Handler) => middleware.push(fn) };
   for (const method of ['get','post','put','patch','delete']) app[method] = (path: string, ...handlers: Handler[]) => routes.push({ method: method.toUpperCase(), path, handlers });
-  app.fetch = async (request: Request) => {
+  app.fetch = async (request: Request, context: RequestContext = {}) => {
     const url = new URL(request.url);
     const method = request.method === 'HEAD' ? 'GET' : request.method;
     const parts = url.pathname.split('/').filter(Boolean);
@@ -23,8 +25,9 @@ function router() {
       catch { return Response.json({ error: 'ساختار درخواست نامعتبر است.' }, { status: 400 }); }
     }
     const headers = Object.fromEntries(request.headers);
-    headers['x-forwarded-for'] = request.headers.get('cf-connecting-ip') || 'unknown';
-    const req = { method: request.method, path: url.pathname, headers, socket: { remoteAddress: headers['x-forwarded-for'] }, params, query: Object.fromEntries(url.searchParams), body };
+    const clientIp = normalizeClientIp(context.clientIp);
+    headers['x-forwarded-for'] = clientIp;
+    const req = { method: request.method, path: url.pathname, ip: clientIp, headers, socket: { remoteAddress: clientIp }, params, query: Object.fromEntries(url.searchParams), body };
     let output: string | undefined;
     const responseHeaders = new Headers({ 'Cache-Control': 'no-store' });
     const finish: (() => void)[] = [];

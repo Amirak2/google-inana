@@ -493,8 +493,8 @@ async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
       ? SMS_OTP_API_KEY
       : `Bearer ${SMS_OTP_API_KEY}`;
 
+    const send = async () => {
     console.log(`[SMS OTP] Sending OTP to ${cleanMobile} via ${SMS_OTP_URL}...`);
-
     try {
       const response = await fetch(SMS_OTP_URL, {
         method: 'POST',
@@ -530,6 +530,11 @@ async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
       console.error('[SMS OTP] Send failure:', err);
       throw new Error(err.message || 'خطا در برقراری ارتباط با سرور پیامک.');
     }
+    };
+    // PostgreSQL adapter sends only after durable OTP/rate-limit commit.
+    // Direct adapters retain immediate delivery and their existing validation.
+    if (env.deferSms) env.deferSms(send, { mobile: cleanMobile, code: otpCode });
+    else await send();
   } else {
     // Check if running in production environment
     if (env.NODE_ENV === 'production') {

@@ -65,7 +65,7 @@ export default {
         if (!object) return new Response('Not found', { status: 404 });
         return new Response(request.method === 'HEAD' ? null : object.body, { headers: { 'Content-Type': metadata.contentType, 'Cache-Control': metadata.public ? 'public, max-age=86400' : 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
       }
-      let response = await app.fetch(request);
+      let response = await app.fetch(request, { clientIp: request.headers.get('cf-connecting-ip') || undefined });
       const replacements = await externalizeImages(store, bindings);
       // Never return success or a session cookie before durable commit.
       try { await store.commit(); }

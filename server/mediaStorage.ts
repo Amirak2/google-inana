@@ -13,7 +13,8 @@ function decodeImage(value: string) {
   return { contentType: match[1], bytes };
 }
 
-// Call only inside a database transaction. Upload failure leaves database rows untouched.
+// Prepare object uploads on a request-local snapshot before its short commit.
+// Content-addressed keys make retries safe; upload failure leaves DB rows untouched.
 export async function externalizeImages(store: Pick<PostgresStore, 'get' | 'set' | 'map'>, upload: Upload = putMediaObject, configured = isObjectStorageConfigured()) {
   const replacements = new Map<string, string>();
   for (const bucket of ['products', 'collections', 'orders', 'idempotency']) {
