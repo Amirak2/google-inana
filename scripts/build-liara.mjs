@@ -13,6 +13,7 @@ await viteBuild({
   build: { outDir: 'dist/client', emptyOutDir: true },
 });
 
+console.log('Liara: building Node server...');
 await build({
   absWorkingDir: projectDir,
   entryPoints: ['./liara-server.ts'],
@@ -33,3 +34,4 @@ await build({
   },
   minify: true,
 });
+console.log('Liara: client and Node server builds completed.');
