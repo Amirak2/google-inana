@@ -388,6 +388,11 @@ export const CartDrawer: React.FC = () => {
       return;
     }
 
+    if (isReadingReceipt || !paymentReceiptImage) {
+      setFormError(isReadingReceipt ? 'لطفاً تا آماده شدن تصویر فیش صبر کنید.' : 'برای ثبت سفارش، ابتدا عکس فیش بانکی را بارگذاری کنید.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -911,7 +916,7 @@ export const CartDrawer: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleCheckoutSubmit}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isReadingReceipt || !paymentReceiptImage}
                       className="w-full mt-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
@@ -1097,9 +1102,9 @@ export const CartDrawer: React.FC = () => {
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
                         <ImageIcon className="w-3.5 h-3.5 text-[#D4AF37]" />
-                        <span>عکس فیش واریز کارت به کارت (اختیاری):</span>
+                        <span>عکس فیش واریز کارت به کارت (الزامی):</span>
                       </label>
-                      <span className="text-[10px] text-slate-400">برای بررسی سریع‌تر سفارش</span>
+                      <span className="text-[10px] text-slate-400">برای ثبت سفارش الزامی است</span>
                     </div>
 
                     <input
@@ -1170,7 +1175,7 @@ export const CartDrawer: React.FC = () => {
                         </div>
                         <div className="space-y-0.5">
                           <span className="text-xs font-bold text-white block">
-                            {isReadingReceipt ? 'در حال پردازش تصویر فیش...' : 'در صورت پرداخت، عکس فیش را بارگذاری کنید'}
+                            {isReadingReceipt ? 'در حال پردازش تصویر فیش...' : 'برای ادامه، عکس فیش بانکی را بارگذاری کنید'}
                           </span>
                           <span className="text-[10px] text-slate-400 block">
                             فرمت‌های مجاز: JPG، PNG، WEBP (حداکثر ۱۲ مگابایت)
@@ -1410,10 +1415,10 @@ export const CartDrawer: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleCheckoutSubmit}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isReadingReceipt || !paymentReceiptImage}
                     className="flex-[2] flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3 rounded-xl hover:brightness-110 active:scale-98 transition-all text-xs shadow-md cursor-pointer disabled:opacity-75"
                   >
-                    <span>{isSubmitting ? 'در حال ثبت سفارش...' : paymentReceiptImage ? 'تأیید نهایی و ارسال فیش' : 'ثبت سفارش بدون فیش'}</span>
+                    <span>{isSubmitting ? 'در حال ثبت سفارش...' : isReadingReceipt ? 'در حال آماده‌سازی فیش...' : paymentReceiptImage ? 'تأیید نهایی و ارسال فیش' : 'ابتدا عکس فیش را بارگذاری کنید'}</span>
                   </button>
                 </div>
               )}

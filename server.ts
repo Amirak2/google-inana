@@ -1,4 +1,5 @@
 import { BRS_USER_AGENT, parseBrsGold } from './server/brsGold';
+import { validateReceipt } from './server/receiptValidation';
 import express from './server/router';
 import type { Request, Response, NextFunction } from 'express';
 import type { Store } from './server/storage';
@@ -1527,15 +1528,11 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
     ? String(contactMethod) as 'telegram' | 'phone' | 'sms'
     : 'phone';
 
-  // 1. Prevent OOM: Enforce receipt image length limit (~600KB max base64)
-  if (
-    paymentReceiptImage &&
-    typeof paymentReceiptImage === 'string' &&
-    paymentReceiptImage.length > 750 * 1024
-  ) {
+  const receiptError = validateReceipt(paymentReceiptImage);
+  if (receiptError) {
     res.status(400).json({
-      error: 'حجم تصویر فیش بیش از حد مجاز است',
-      message: 'حجم تصویر فیش بیش از حد مجاز است. لطفاً از تصویر فشرده یا کم‌حجم‌تر استفاده فرمایید.',
+      error: receiptError,
+      message: receiptError,
     });
     return;
   }
