@@ -285,7 +285,8 @@ const DEFAULT_SEED_ORDERS: Order[] = [
 // --- Settings Persistence ---
 function saveSettingsToDb(settings: PricingSettings): void { store.set('settings', 'pricing', settings); }
 seedDatabaseIfEmpty(INITIAL_PRODUCTS, []);
-seedProductsOnce('pearlProductsV1', PEARL_PRODUCTS);
+seedProductsOnce('pearlProductsV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p3'));
+seedProductsOnce('pearlClass10V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-class10'));
 let pricingSettings: PricingSettings = {
   ...(store.get('settings', 'pricing') || DEFAULT_SETTINGS),
   taxPercent: 0,
