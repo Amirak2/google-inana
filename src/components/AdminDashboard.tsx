@@ -1705,7 +1705,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   <div className="relative">
                     <input
                       type="number"
-                      step="1000"
+                      step="1"
                       value={overridePrice}
                       onChange={(e) => setOverridePrice(parseFloat(e.target.value) || 0)}
                       className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-lg font-bold text-white outline-none"
