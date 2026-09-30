@@ -15,13 +15,11 @@ interface AuthContextType {
   isAdmin: boolean;
   loading: boolean;
   isAuthModalOpen: boolean;
-  authModalMode: 'login' | 'register' | 'profile';
-  openAuthModal: (mode?: 'login' | 'register' | 'profile') => void;
+  authModalMode: 'login' | 'profile';
+  openAuthModal: (mode?: 'login' | 'profile') => void;
   closeAuthModal: () => void;
   sendSmsOtp: (mobile: string) => Promise<{ expiresInSeconds: number; isRegistered: boolean }>;
-  verifySmsOtp: (mobile: string, code: string, displayName?: string, credentials?: { username: string; password: string }) => Promise<{ isNewUser: boolean }>;
-  loginWithPassword: (username: string, password: string) => Promise<void>;
-  setPasswordCredentials: (username: string, password: string, code: string) => Promise<void>;
+  verifySmsOtp: (mobile: string, code: string, displayName?: string) => Promise<{ isNewUser: boolean }>;
   requestPhoneChange: (newMobile: string) => Promise<void>;
   verifyPhoneChange: (code: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -38,9 +36,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'profile'>('login');
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'profile'>('login');
 
-  const openAuthModal = (mode: 'login' | 'register' | 'profile' = 'login') => {
+  const openAuthModal = (mode: 'login' | 'profile' = 'login') => {
     setAuthModalMode(mode);
     setIsAuthModalOpen(true);
   };
@@ -95,8 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const verifySmsOtp = async (
     mobile: string,
     code: string,
-    displayName?: string,
-    credentials?: { username: string; password: string }
+    displayName?: string
   ): Promise<{ isNewUser: boolean }> => {
     const res = await fetch('/api/auth/otp/verify', {
       method: 'POST',
@@ -105,8 +102,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         mobile: mobile.trim(),
         code: code.trim(),
         displayName: displayName?.trim(),
-        username: credentials?.username,
-        password: credentials?.password,
       }),
     });
 
@@ -130,36 +125,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     closeAuthModal();
 
     return { isNewUser: Boolean(data.isNewUser) };
-  };
-
-  const loginWithPassword = async (username: string, password: string): Promise<void> => {
-    const res = await fetch('/api/auth/password/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.trim(), password }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success || !data.user) throw new Error(data.error || 'ورود انجام نشد.');
-    const user = data.user as UserProfile;
-    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user }));
-    setCurrentUser({ uid: user.uid, email: user.email, displayName: user.displayName, phoneNumber: user.phoneNumber });
-    setUserProfile(user);
-    setIsAdmin(user.role === 'admin');
-    closeAuthModal();
-  };
-
-  const setPasswordCredentials = async (username: string, password: string, code: string): Promise<void> => {
-    const res = await fetch('/api/auth/password/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: username.trim(), password, code }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success || !data.user) throw new Error(data.error || 'ثبت نام کاربری و رمز انجام نشد.');
-    const user = data.user as UserProfile;
-    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user }));
-    setUserProfile(user);
-    setCurrentUser({ uid: user.uid, email: user.email, displayName: user.displayName, phoneNumber: user.phoneNumber });
   };
 
   const requestPhoneChange = async (newMobile: string): Promise<void> => {
@@ -248,8 +213,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         closeAuthModal,
         sendSmsOtp,
         verifySmsOtp,
-        loginWithPassword,
-        setPasswordCredentials,
         requestPhoneChange,
         verifyPhoneChange,
         logout,

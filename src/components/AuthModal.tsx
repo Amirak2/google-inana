@@ -29,19 +29,13 @@ export const AuthModal: React.FC = () => {
     closeAuthModal,
     sendSmsOtp,
     verifySmsOtp,
-    loginWithPassword,
-    setPasswordCredentials,
     requestPhoneChange,
     verifyPhoneChange,
     logout,
     updateUserProfileData,
   } = useAuth();
 
-  const [mode, setMode] = useState<'otp' | 'register' | 'password' | 'profile'>('otp');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [credentialCode, setCredentialCode] = useState('');
-  const [credentialCodeSent, setCredentialCodeSent] = useState(false);
+  const [mode, setMode] = useState<'otp' | 'profile'>('otp');
 
   // OTP State
   const [otpStep, setOtpStep] = useState<'phone' | 'code'>('phone');
@@ -68,20 +62,15 @@ export const AuthModal: React.FC = () => {
   useEffect(() => {
     if (currentUser) {
       setMode('profile');
-      setUsername(userProfile?.username || '');
       setDisplayName(userProfile?.displayName || currentUser.displayName || '');
       setAddress(userProfile?.address || '');
     } else {
-      setMode(authModalMode === 'register' ? 'register' : 'otp');
-      setUsername('');
+      setMode('otp');
       setOtpStep('phone');
       setOtpCode('');
     }
     setErrorMsg(null);
     setSuccessMsg(null);
-    setPassword('');
-    setCredentialCode('');
-    setCredentialCodeSent(false);
     setPhoneChangeStep('idle');
     setNewPhoneNumber('');
     setPhoneChangeCode('');
@@ -138,17 +127,6 @@ export const AuthModal: React.FC = () => {
 
   if (!isAuthModalOpen) return null;
 
-  const registrationFields = (
-    <div className="space-y-2">
-      <label htmlFor="register-username" className="block text-xs text-slate-300">نام کاربری</label>
-      <input id="register-username" dir="ltr" autoComplete="username" required minLength={3} maxLength={32} value={username} onChange={event => setUsername(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
-      <p className="text-[11px] text-slate-400">۳ تا ۳۲ کاراکتر انگلیسی با شروع حرف؛ عدد، نقطه، خط تیره و زیرخط مجازند.</p>
-      <label htmlFor="register-password" className="block text-xs text-slate-300">رمز عبور</label>
-      <input id="register-password" type="password" dir="ltr" autoComplete="new-password" required minLength={8} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
-      <p className="text-[11px] text-slate-400">حداقل ۸ کاراکتر. پس از تأیید شماره، ورود با رمز هم فعال می‌شود.</p>
-    </div>
-  );
-
   const normalizeDigits = (num: string) =>
     num
       .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
@@ -166,10 +144,6 @@ export const AuthModal: React.FC = () => {
   const handleSendOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const cleanPhone = normalizePhone(mobileNumber);
-    if (mode === 'register' && (!/^[a-z][a-z0-9._-]{2,31}$/i.test(username.trim()) || password.length < 8 || password.length > 128)) {
-      setErrorMsg('نام کاربری انگلیسی ۳ تا ۳۲ کاراکتر با شروع حرف و رمز عبور ۸ تا ۱۲۸ کاراکتر وارد کنید.');
-      return;
-    }
     if (!cleanPhone || cleanPhone.length !== 11 || !cleanPhone.startsWith('09')) {
       setErrorMsg('لطفاً شماره موبایل ۱۱ رقمی معتبر با فرمت ...۰۹ وارد کنید.');
       return;
@@ -206,8 +180,7 @@ export const AuthModal: React.FC = () => {
     setSubmitting(true);
     setErrorMsg(null);
     try {
-      const result = await verifySmsOtp(cleanPhone, cleanCode, otpDisplayName, isOtpNewUser ? { username: username.trim(), password } : undefined);
-      setPassword('');
+      const result = await verifySmsOtp(cleanPhone, cleanCode, otpDisplayName);
       setSuccessMsg(
         result.isNewUser
           ? 'خوش آمدید! حساب کاربری شما با موفقیت فعال شد.'
@@ -215,51 +188,6 @@ export const AuthModal: React.FC = () => {
       );
     } catch (err: any) {
       setErrorMsg(err.message || 'کد تایید اشتباه یا منقضی شده است.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handlePasswordLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setErrorMsg(null);
-    try {
-      await loginWithPassword(username, password);
-      setPassword('');
-    } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : 'ورود انجام نشد.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleSendCredentialCode = async () => {
-    if (!userProfile?.phoneNumber) return;
-    setSubmitting(true);
-    setErrorMsg(null);
-    try {
-      await sendSmsOtp(userProfile.phoneNumber);
-      setCredentialCodeSent(true);
-      setSuccessMsg('کد تأیید به شماره حساب شما ارسال شد.');
-    } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : 'ارسال کد انجام نشد.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleSaveCredentials = async () => {
-    setSubmitting(true);
-    setErrorMsg(null);
-    try {
-      await setPasswordCredentials(username, password, normalizeDigits(credentialCode));
-      setPassword('');
-      setCredentialCode('');
-      setCredentialCodeSent(false);
-      setSuccessMsg('نام کاربری و رمز عبور ذخیره شد. از این پس هر دو روش ورود فعال هستند.');
-    } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : 'ثبت اطلاعات ورود انجام نشد.');
     } finally {
       setSubmitting(false);
     }
@@ -341,14 +269,14 @@ export const AuthModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-white">
-                {mode === 'profile' ? 'حساب کاربری اینانا' : mode === 'register' ? 'ثبت‌نام در اینانا' : mode === 'password' ? 'ورود با نام کاربری' : 'ورود با شماره موبایل'}
+                {mode === 'profile' ? 'حساب کاربری اینانا' : 'ورود با شماره موبایل'}
               </h2>
               <span className="text-[11px] text-[#E6CA65]">
                 {mode === 'profile'
                   ? isAdmin
                     ? 'سطح دسترسی: مدیر سیستم'
                     : 'مشتری وفادار گالری طلا'
-                  : mode === 'password' ? 'ورود با رمز عبور حساب شما' : 'رمز یکبار مصرف پیامکی'}
+                  : 'رمز یکبار مصرف پیامکی'}
               </span>
             </div>
           </div>
@@ -376,33 +304,13 @@ export const AuthModal: React.FC = () => {
             </div>
           )}
 
-          {!currentUser && (
-            <div className="mb-5 grid grid-cols-3 gap-2 rounded-xl bg-[#0A1120] p-1" role="tablist" aria-label="ورود و ثبت‌نام">
-              <button type="button" role="tab" aria-selected={mode === 'register'} onClick={() => { setMode('register'); setOtpStep('phone'); setErrorMsg(null); setSuccessMsg(null); }} className={`rounded-lg px-2 py-2 text-xs ${mode === 'register' ? 'bg-[#D4AF37] font-bold text-slate-950' : 'text-slate-300'}`}>ثبت‌نام</button>
-              <button type="button" role="tab" aria-selected={mode === 'otp'} onClick={() => { setMode('otp'); setErrorMsg(null); }} className={`rounded-lg px-2 py-2 text-xs ${mode === 'otp' ? 'bg-[#D4AF37] font-bold text-slate-950' : 'text-slate-300'}`}>پیامک</button>
-              <button type="button" role="tab" aria-selected={mode === 'password'} onClick={() => { setMode('password'); setErrorMsg(null); }} className={`rounded-lg px-2 py-2 text-xs ${mode === 'password' ? 'bg-[#D4AF37] font-bold text-slate-950' : 'text-slate-300'}`}>نام کاربری و رمز</button>
-            </div>
-          )}
-
-          {mode === 'password' && !currentUser && (
-            <form onSubmit={handlePasswordLogin} className="space-y-4">
-              <label className="block text-xs text-slate-300" htmlFor="auth-username">نام کاربری</label>
-              <input id="auth-username" dir="ltr" autoComplete="username" required value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
-              <label className="block text-xs text-slate-300" htmlFor="auth-password">رمز عبور</label>
-              <input id="auth-password" type="password" dir="ltr" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
-              <button type="submit" disabled={submitting} className="w-full rounded-xl bg-[#D4AF37] px-3 py-2.5 text-xs font-bold text-slate-950 disabled:opacity-50">ورود</button>
-              <p className="text-[11px] leading-relaxed text-slate-400">برای ساخت یا بازیابی رمز، با پیامک وارد شوید و در حساب کاربری رمز تازه تنظیم کنید.</p>
-            </form>
-          )}
-
           {/* ============================================================== */}
           {/* 1. OTP AUTHENTICATION VIEW */}
           {/* ============================================================== */}
-          {(mode === 'otp' || mode === 'register') && !currentUser && (
+          {mode === 'otp' && !currentUser && (
             <div>
               {otpStep === 'phone' ? (
                 <form onSubmit={handleSendOtp} className="space-y-4">
-                  {mode === 'register' && registrationFields}
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                       شماره تلفن همراه خود را وارد نمایید
@@ -423,7 +331,7 @@ export const AuthModal: React.FC = () => {
                       />
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-                      کد تایید ۵ رقمی امن بلافاصله از طریق سامانه پیامکی اختصاصی به این شماره ارسال خواهد شد.
+                      با کد پیامکی وارد می‌شوید. در ورود اول، حساب شما خودکار ساخته می‌شود؛ نیازی به نام کاربری و رمز عبور نیست.
                     </p>
                   </div>
 
@@ -448,7 +356,6 @@ export const AuthModal: React.FC = () => {
                 </form>
               ) : (
                 <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  {isOtpNewUser && mode === 'otp' && registrationFields}
                   <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                     <div className="text-xs text-slate-300">
                       <span>ارسال به شماره: </span>
@@ -664,21 +571,6 @@ export const AuthModal: React.FC = () => {
                       )}
                       <button type="button" onClick={() => { setPhoneChangeStep('idle'); setPhoneChangeCode(''); setErrorMsg(null); }} className="text-xs text-slate-400 hover:text-white">انصراف</button>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2 rounded-2xl border border-[#D4AF37]/25 bg-[#0A1120] p-3.5">
-                <h3 className="text-xs font-bold text-white">ورود با نام کاربری و رمز عبور</h3>
-                <p className="text-[11px] text-slate-400">{userProfile?.username ? `نام کاربری فعلی: ${userProfile.username}` : 'برای فعال‌سازی این روش، نام کاربری و رمز بسازید.'} تغییر یا بازیابی رمز با کد پیامکی شماره تأییدشده انجام می‌شود.</p>
-                <input dir="ltr" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="نام کاربری انگلیسی" aria-label="نام کاربری جدید" className="w-full rounded-xl border border-slate-700 bg-[#060B15] px-3 py-2 text-sm text-white" />
-                <input type="password" dir="ltr" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="رمز عبور، حداقل ۸ کاراکتر" aria-label="رمز عبور جدید" className="w-full rounded-xl border border-slate-700 bg-[#060B15] px-3 py-2 text-sm text-white" />
-                {!credentialCodeSent ? (
-                  <button type="button" disabled={submitting || !userProfile?.phoneNumber} onClick={handleSendCredentialCode} className="rounded-lg border border-[#D4AF37] px-3 py-2 text-xs font-bold text-[#E6CA65] disabled:opacity-50">دریافت کد تأیید</button>
-                ) : (
-                  <div className="flex gap-2">
-                    <input dir="ltr" inputMode="numeric" autoComplete="one-time-code" maxLength={5} value={credentialCode} onChange={(event) => setCredentialCode(event.target.value)} placeholder="کد ۵ رقمی" aria-label="کد تأیید نام کاربری" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-[#060B15] px-3 py-2 text-sm text-white" />
-                    <button type="button" disabled={submitting || normalizeDigits(credentialCode).length !== 5} onClick={handleSaveCredentials} className="rounded-lg bg-[#D4AF37] px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50">ذخیره اطلاعات ورود</button>
                   </div>
                 )}
               </div>

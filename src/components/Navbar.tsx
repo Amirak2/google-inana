@@ -164,7 +164,7 @@ export const Navbar: React.FC = () => {
                 className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#D4AF37]/15 hover:bg-[#D4AF37]/25 text-[#F5E8C7] border border-[#D4AF37]/30 text-[10px] sm:text-[11px] font-medium transition-all"
               >
                 <User className="w-3 h-3 text-[#D4AF37]" />
-                <span>ورود / ثبت‌نام</span>
+                <span>ورود با پیامک</span>
               </button>
             )}
 
@@ -280,7 +280,7 @@ export const Navbar: React.FC = () => {
                 }
               }}
               className="relative p-2.5 rounded-full text-slate-300 hover:text-[#D4AF37] hover:bg-slate-800/50 transition-colors"
-              title={currentUser ? userProfile?.displayName || 'پروفایل کاربری' : 'ورود / ثبت‌نام'}
+              title={currentUser ? userProfile?.displayName || 'پروفایل کاربری' : 'ورود با پیامک'}
             >
               <User className={`w-5 h-5 ${currentUser ? 'text-[#D4AF37]' : ''}`} />
               {currentUser && (
@@ -377,7 +377,7 @@ export const Navbar: React.FC = () => {
                   }}
                   className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#AA822A] text-slate-950 font-bold text-xs shadow-md"
                 >
-                  ورود / ثبت‌نام
+                  ورود با پیامک
                 </button>
               </div>
             )}

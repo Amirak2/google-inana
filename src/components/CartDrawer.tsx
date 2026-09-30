@@ -326,7 +326,7 @@ export const CartDrawer: React.FC = () => {
 
     if (!isAuthenticated) {
       setShowAuthRequiredModal(true);
-      setFormError('جهت ثبت سفارش و پرداخت، لطفاً ابتدا در سایت ثبت‌نام نمایید.');
+      setFormError('جهت ثبت سفارش و پرداخت، ابتدا با کد پیامکی وارد شوید.');
       return;
     }
 
@@ -367,7 +367,7 @@ export const CartDrawer: React.FC = () => {
 
     if (!isAuthenticated) {
       setShowAuthRequiredModal(true);
-      setFormError('جهت ثبت سفارش و پرداخت، لطفاً ابتدا در سایت ثبت‌نام نمایید.');
+      setFormError('جهت ثبت سفارش و پرداخت، ابتدا با کد پیامکی وارد شوید.');
       return;
     }
 
@@ -617,7 +617,7 @@ export const CartDrawer: React.FC = () => {
                           </div>
                           <div>
                             <span className="text-white font-bold block text-xs">
-                              ثبت‌نام جهت ورود به مرحله پرداخت
+                              ورود با پیامک جهت ادامه خرید
                             </span>
                             <span className="text-[11px] text-amber-200/80 block mt-0.5">
                               برای صدور فاکتور و پرداخت، ابتدا در سامانه عضو شوید.
@@ -626,11 +626,11 @@ export const CartDrawer: React.FC = () => {
                         </div>
                         <button
                           type="button"
-                          onClick={() => openAuthModal('register')}
+                          onClick={() => openAuthModal('login')}
                           className="bg-gradient-to-r from-[#D4AF37] to-[#AA822A] text-slate-950 px-3 py-1.5 rounded-xl text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow whitespace-nowrap flex items-center gap-1 cursor-pointer flex-shrink-0"
                         >
                           <UserPlus className="w-3.5 h-3.5" />
-                          <span>لینک ثبت‌نام</span>
+                          <span>ورود با پیامک</span>
                         </button>
                       </div>
                     ) : (
@@ -735,21 +735,21 @@ export const CartDrawer: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <h4 className="text-white font-bold text-sm">
-                          ثبت‌نام برای تکمیل و پرداخت سفارش الزامی است
+                          برای پرداخت، شماره موبایل خود را تأیید کنید
                         </h4>
                         <p className="text-slate-300 leading-relaxed text-[11px]">
-                          کاربر گرامی، جهت صدور پیش‌فاکتور معتبر و نهایی‌سازی سفارش، باید ابتدا در سایت ثبت‌نام فرمایید.
+                          برای صدور پیش‌فاکتور و ثبت سفارش، با شماره موبایل و کد پیامکی وارد شوید.
                         </p>
                       </div>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-slate-700/80">
                       <button
                         type="button"
-                        onClick={() => openAuthModal('register')}
+                        onClick={() => openAuthModal('login')}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#AA822A] text-slate-950 font-bold text-xs hover:brightness-110 active:scale-98 shadow-md transition-all cursor-pointer"
                       >
                         <UserPlus className="w-4 h-4" />
-                        <span>لینک ثبت‌نام در گالری اینانا</span>
+                        <span>ورود با شماره موبایل</span>
                       </button>
                       <button
                         type="button"
@@ -1454,10 +1454,10 @@ export const CartDrawer: React.FC = () => {
             {/* Explanatory Message */}
             <div className="space-y-2">
               <h3 className="text-base sm:text-lg font-bold text-white">
-                ثبت‌نام برای ورود به بخش پرداخت الزامی است
+                ورود با پیامک برای ادامه پرداخت
               </h3>
               <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
-                کاربر گرامی، جهت نهایی‌سازی سفارش، صدور فاکتور رسمی به همراه کد رهگیری شتاب و بررسی فیش کارت به کارت، لازم است ابتدا در سامانه گالری اینانا ثبت‌نام کنید یا وارد حساب خود شوید.
+                برای ثبت سفارش و ارسال فیش، شماره موبایل خود را با کد پیامکی تأیید کنید. در ورود اول، حساب شما خودکار ساخته می‌شود.
               </p>
             </div>
 
@@ -1465,7 +1465,7 @@ export const CartDrawer: React.FC = () => {
             <div className="bg-[#081124] border border-slate-800 rounded-2xl p-3.5 text-right space-y-2.5 text-xs text-slate-300">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>ثبت‌نام سریع و رایگان در کمتر از ۳۰ ثانیه</span>
+                <span>ورود آسان با شماره موبایل و کد پیامکی</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-[#D4AF37] flex-shrink-0" />
@@ -1482,24 +1482,15 @@ export const CartDrawer: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  openAuthModal('register');
+                  openAuthModal('login');
                 }}
                 className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold text-sm hover:brightness-110 active:scale-98 transition-all shadow-[0_4px_20px_rgba(212,175,55,0.3)] cursor-pointer"
               >
                 <UserPlus className="w-5 h-5" />
-                <span>لینک ثبت‌نام در گالری اینانا</span>
+                <span>ورود با شماره موبایل</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  openAuthModal('login');
-                }}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-white font-semibold text-xs border border-slate-700 transition-all cursor-pointer"
-              >
-                <LogIn className="w-4 h-4 text-[#D4AF37]" />
-                <span>قبلاً ثبت‌نام کرده‌اید؟ ورود به حساب</span>
-              </button>
+
 
               <button
                 type="button"

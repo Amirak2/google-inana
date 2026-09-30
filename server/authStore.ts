@@ -567,8 +567,7 @@ async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
 function verifySmsOtpAndAuthenticate(
   mobile: string,
   code: string,
-  displayName?: string,
-  credentials?: { username: string; password: string }
+  displayName?: string
 ): { user: UserProfile; token: string; isNewUser: boolean } {
   const cleanMobile = normalizeIranianMobile(mobile);
   const cleanCode = (code || '').trim().replace(/\D/g, '');
@@ -605,8 +604,6 @@ function verifySmsOtpAndAuthenticate(
   }
 
   const existingUser = findSmsLoginUser(cleanMobile);
-  // New accounts require both credentials; SMS login must never reset an existing password.
-  const registrationUsername = !existingUser ? validateCredentials(credentials?.username, credentials?.password) : undefined;
 
   // OTP is correct! Clear it from cache
   otpCache.delete(cleanMobile);
@@ -632,11 +629,6 @@ function verifySmsOtpAndAuthenticate(
       address: '',
       createdAt: new Date().toISOString(),
     };
-
-    const salt = crypto.randomBytes(16).toString('hex');
-    user.username = registrationUsername;
-    user.salt = salt;
-    user.passwordHash = hashPassword(credentials!.password, salt);
 
     usersCache.set(user.email.toLowerCase(), user);
     saveUsers();

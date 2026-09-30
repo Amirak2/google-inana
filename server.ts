@@ -27,7 +27,7 @@ import { createDb } from './server/db';
 
 export function createApp(store: Store, env: Record<string, any>) {
 const fetch: typeof globalThis.fetch = env.marketFetch || globalThis.fetch;
-const { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp, loginWithUsername, setPasswordCredentials } = createAuthStore(store, env);
+const { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp } = createAuthStore(store, env);
 const { logger, requestLoggerMiddleware } = createLogger(store);
 const { runDbTransaction,
   getAllProductsFromDb,
@@ -2093,41 +2093,6 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
 });
 
 // 7.1 SMS OTP Endpoints (سرویس ارسال و تایید کد پیامکی یکبارمصرف)
-app.post('/api/auth/password/login', (req: Request, res: Response) => {
-  const username = String(req.body?.username || '').trim().toLowerCase();
-  const password = req.body?.password;
-  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
-  const ipLimit = checkRateLimit(`password_login_ip_${clientIp}`, 15, 15 * 60 * 1000);
-  const accountLimit = checkRateLimit(`password_login_account_${username}`, 5, 15 * 60 * 1000);
-  if (!ipLimit.allowed || !accountLimit.allowed) {
-    res.status(429).json({ success: false, error: 'تلاش‌های ورود بیش از حد مجاز است. ۱۵ دقیقه دیگر دوباره تلاش کنید.' });
-    return;
-  }
-  try {
-    if (username.length > 32 || typeof password !== 'string' || password.length > 128) throw new Error('نام کاربری یا رمز عبور نادرست است.');
-    const result = loginWithUsername(username, password);
-    setAuthCookie(res, result.token);
-    res.json({ success: true, user: result.user });
-  } catch {
-    res.status(401).json({ success: false, error: 'نام کاربری یا رمز عبور نادرست است.' });
-  }
-});
-
-app.post('/api/auth/password/set', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
-  if (!checkRateLimit(`password_set_${req.user!.uid}_${clientIp}`, 5, 15 * 60 * 1000).allowed) {
-    res.status(429).json({ success: false, error: 'تلاش‌های ثبت رمز بیش از حد مجاز است. ۱۵ دقیقه دیگر دوباره تلاش کنید.' });
-    return;
-  }
-  try {
-    const result = setPasswordCredentials(req.user!.uid, req.body?.username, req.body?.password, req.body?.code);
-    setAuthCookie(res, result.token);
-    res.json({ success: true, user: result.user });
-  } catch (error) {
-    res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'ثبت نام کاربری و رمز انجام نشد.' });
-  }
-});
-
 app.post('/api/auth/otp/send', async (req: Request, res: Response) => {
   const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
   const rl = checkRateLimit(`auth_otp_send_${clientIp}`, 5, 60 * 1000);
@@ -2173,14 +2138,14 @@ app.post('/api/auth/otp/verify', (req: Request, res: Response) => {
   }
 
   try {
-    const { mobile, code, displayName, username, password } = req.body;
+    const { mobile, code, displayName } = req.body;
     const phoneVal = validatePhoneNumber(mobile);
     if (!phoneVal.isValid || !code) {
       res.status(400).json({ success: false, error: 'شماره موبایل و کد تایید ۵ رقمی الزامی هستند.' });
       return;
     }
 
-    const result = verifySmsOtpAndAuthenticate(phoneVal.phone, String(code).trim(), displayName, { username, password });
+    const result = verifySmsOtpAndAuthenticate(phoneVal.phone, String(code).trim(), displayName);
     setAuthCookie(res, result.token);
     logger.security(
       'AUTH',
