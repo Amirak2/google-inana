@@ -36,7 +36,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   if (!product) return null;
 
   const favorite = isFavorite(product.id);
-  const priceReady = goldPrice.pricePerGram > 0;
+  const isFixed = product.pricingMode === 'fixed';
+  const priceReady = isFixed ? (product.fixedPrice ?? 0) > 0 : goldPrice.pricePerGram > 0;
   const priceBreakdown = calculateProductPrice(product, goldPrice.pricePerGram, settings);
   const finalPrice = priceBreakdown.finalPrice;
 
@@ -55,7 +56,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
   // Telegram direct support message
   const telegramUrl = `https://t.me/estella_shopee?text=${encodeURIComponent(
-    `با سلام. من مایل به ثبت سفارش/استعلام محصول «${product.title}» با کد ${product.sku} به وزن ${product.weight} گرم و قیمت محاسبه شده ${formatToman(
+    `با سلام. من مایل به ثبت سفارش/استعلام محصول «${product.title}» با کد ${product.sku}${isFixed ? '' : ` به وزن ${product.weight} گرم`} و قیمت ${formatToman(
       finalPrice
     )} از گالری اینانا هستم.`
   )}`;
@@ -176,7 +177,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs text-[#E6CA65] font-semibold">{product.category}</span>
                 <span className="text-slate-500">•</span>
-                <span className="text-xs text-slate-300">{product.purity} (استاندارد ۷۵۰)</span>
+                <span className="text-xs text-slate-300">{product.purity}{isFixed ? '' : ' (استاندارد ۷۵۰)'}</span>
               </div>
 
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white mb-4">
@@ -187,31 +188,31 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               <div className="bg-[#0A1224] border border-[#D4AF37]/30 rounded-2xl p-3.5 mb-6 flex items-center justify-between text-xs shadow-sm">
                 <div className="flex items-center gap-2 text-slate-200">
                   <Sparkles className="w-4 h-4 text-[#D4AF37]" />
-                  <span>قیمت این محصول با توجه به قیمت روز طلا محاسبه شده است.</span>
+                  <span>{isFixed ? 'قیمت این محصول ثابت است و به نرخ طلا وابسته نیست.' : 'قیمت این محصول با توجه به قیمت روز طلا محاسبه شده است.'}</span>
                 </div>
-                <span className="text-[#E6CA65] font-bold">
+                {!isFixed && <span className="text-[#E6CA65] font-bold">
                   نرخ ۱۸ عیار: {priceReady ? formatToman(goldPrice.pricePerGram) : 'در حال دریافت...'}
-                </span>
+                </span>}
               </div>
 
               {/* Key Specs Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                <div className="bg-[#081224] border border-[#D4AF37]/20 p-3 rounded-xl text-center">
+                {!isFixed && <div className="bg-[#081224] border border-[#D4AF37]/20 p-3 rounded-xl text-center">
                   <span className="text-[11px] text-slate-400 block">وزن طلا</span>
                   <span className="text-sm font-bold text-white mt-1 block">
                     {formatWeight(product.weight, true)}
                   </span>
-                </div>
+                </div>}
                 <div className="bg-[#081224] border border-[#D4AF37]/20 p-3 rounded-xl text-center">
-                  <span className="text-[11px] text-slate-400 block">عیار قطعه</span>
+                  <span className="text-[11px] text-slate-400 block">{isFixed ? 'کیفیت' : 'عیار قطعه'}</span>
                   <span className="text-sm font-bold text-white mt-1 block">{product.purity}</span>
                 </div>
-                <div className="bg-[#081224] border border-[#D4AF37]/20 p-3 rounded-xl text-center">
+                {!isFixed && <div className="bg-[#081224] border border-[#D4AF37]/20 p-3 rounded-xl text-center">
                   <span className="text-[11px] text-slate-400 block">درصد اجرت</span>
                   <span className="text-sm font-bold text-[#E6CA65] mt-1 block">
                     {priceBreakdown.effectiveMakingChargePercent}٪
                   </span>
-                </div>
+                </div>}
                 <div className="bg-[#081224] border border-[#D4AF37]/20 p-3 rounded-xl text-center">
                   <span className="text-[11px] text-slate-400 block">وضعیت موجودی</span>
                   <span
@@ -245,7 +246,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               )}
 
               {/* Price Breakdown Drawer Toggle */}
-              <div className="mb-6">
+              {!isFixed && <div className="mb-6">
                 <button
                   type="button"
                   onClick={() => setShowFormulaBreakdown(!showFormulaBreakdown)}
@@ -287,14 +288,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                     )}
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
 
             {/* Price & Action Section */}
             <div className="pt-4 border-t border-slate-700/80">
               <div className="flex items-baseline justify-between mb-4">
                 <div>
-                  <span className="text-xs text-slate-300 block">قیمت تمام‌شده روز:</span>
+                  <span className="text-xs text-slate-300 block">{isFixed ? 'قیمت ثابت:' : 'قیمت تمام‌شده روز:'}</span>
                   <div className="text-2xl sm:text-3xl font-extrabold text-white gold-gradient-text">
                     {priceReady ? formatToman(finalPrice * quantity) : 'در حال دریافت نرخ...'}
                   </div>

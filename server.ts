@@ -6,7 +6,7 @@ import type { Store } from './server/storage';
 
 import crypto from 'crypto';
 
-import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS } from './src/data/seedData';
+import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS } from './src/data/seedData';
 import { GoldHistoryPoint, GoldPriceData, Order, OtherMarketsData, PricingSettings, Product, SystemLogModule } from './src/types';
 import { calculateProductPrice, DEFAULT_SETTINGS } from './src/utils/pricingEngine';
 import { formatJalaliDateTime } from './src/utils/persianFormatter';
@@ -39,7 +39,7 @@ const { runDbTransaction,
   deleteOrdersBulkFromDb,
   getIdempotentOrderFromDb,
   saveIdempotencyKeyToDb,
-  seedDatabaseIfEmpty, } = createDb(store);
+  seedDatabaseIfEmpty, seedProductsOnce, } = createDb(store);
 const app = express();
 const PORT = 3000;
 
@@ -285,6 +285,7 @@ const DEFAULT_SEED_ORDERS: Order[] = [
 // --- Settings Persistence ---
 function saveSettingsToDb(settings: PricingSettings): void { store.set('settings', 'pricing', settings); }
 seedDatabaseIfEmpty(INITIAL_PRODUCTS, []);
+seedProductsOnce('pearlProductsV1', PEARL_PRODUCTS);
 let pricingSettings: PricingSettings = {
   ...(store.get('settings', 'pricing') || DEFAULT_SETTINGS),
   taxPercent: 0,
@@ -1010,8 +1011,22 @@ app.post('/api/admin/products', requireAdminAuth, (req: AuthenticatedRequest, re
     return;
   }
 
-  const weightVal = validatePositiveNumber(req.body.weight || 1.0, 'وزن طلا', 0.01, 5000);
-  if (!weightVal.isValid) {
+  if (req.body.pricingMode !== undefined && !['gold', 'fixed'].includes(req.body.pricingMode)) {
+    res.status(400).json({ error: 'نوع قیمت‌گذاری معتبر نیست.' });
+    return;
+  }
+  const isFixedPrice = req.body.pricingMode === 'fixed';
+  const fixedPriceVal = isFixedPrice
+    ? validatePositiveNumber(req.body.fixedPrice, 'قیمت ثابت', 1, 1_000_000_000)
+    : null;
+  if (fixedPriceVal && !fixedPriceVal.isValid) {
+    res.status(400).json({ error: fixedPriceVal.error });
+    return;
+  }
+  const weightVal = isFixedPrice
+    ? null
+    : validatePositiveNumber(req.body.weight || 1.0, 'وزن طلا', 0.01, 5000);
+  if (weightVal && !weightVal.isValid) {
     res.status(400).json({ error: weightVal.error });
     return;
   }
@@ -1046,18 +1061,20 @@ app.post('/api/admin/products', requireAdminAuth, (req: AuthenticatedRequest, re
     slug: req.body.slug ? String(req.body.slug).trim().slice(0, 100) : `product-${Date.now()}`,
     category: req.body.category ? String(req.body.category).trim().slice(0, 50) : 'پلاک طلا',
     collection: req.body.collection ? String(req.body.collection).trim().slice(0, 80) : 'INANA SIGNATURE',
-    weight: Number(weightVal.value.toFixed(3)),
-    purity: req.body.purity ? String(req.body.purity).trim().slice(0, 30) : '18 عیار',
-    customMakingChargePercent: makingChargeVal.value,
-    customProfitPercent: profitVal.value,
+    pricingMode: isFixedPrice ? 'fixed' : 'gold',
+    fixedPrice: isFixedPrice ? Math.round(fixedPriceVal!.value) : undefined,
+    weight: isFixedPrice ? 0 : Number(weightVal!.value.toFixed(3)),
+    purity: req.body.purity ? String(req.body.purity).trim().slice(0, 30) : isFixedPrice ? 'مروارید' : '18 عیار',
+    customMakingChargePercent: isFixedPrice ? 0 : makingChargeVal.value,
+    customProfitPercent: isFixedPrice ? 0 : profitVal.value,
     additionalCost: Math.max(0, Number(req.body.additionalCost) || 0),
     stoneCost: Math.max(0, Number(req.body.stoneCost) || 0),
     discountPercent: discountVal.value ?? 0,
     images: Array.isArray(req.body.images) && req.body.images.length > 0 ? req.body.images.slice(0, 8) : [
       'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=85',
     ],
-    description: req.body.description ? String(req.body.description).slice(0, 2000) : 'توضیحات محصول طلای لوکس اینانا',
-    features: Array.isArray(req.body.features) ? req.body.features.slice(0, 10) : ['طلای ۱۸ عیار استاندارد ۷۵۰', 'شناسنامه و فاکتور رسمی'],
+    description: req.body.description ? String(req.body.description).slice(0, 2000) : isFixedPrice ? 'توضیحات محصول مرواریدی' : 'توضیحات محصول طلای لوکس اینانا',
+    features: Array.isArray(req.body.features) ? req.body.features.slice(0, 10) : isFixedPrice ? [] : ['طلای ۱۸ عیار استاندارد ۷۵۰', 'شناسنامه و فاکتور رسمی'],
     dimensions: req.body.dimensions ? String(req.body.dimensions).slice(0, 100) : 'استاندارد',
     sku: req.body.sku ? String(req.body.sku).trim().slice(0, 50) : `INA-${Math.floor(1000 + Math.random() * 9000)}`,
     stock: stockVal.value,
@@ -1093,12 +1110,29 @@ app.put('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedRequest,
     }
   }
 
-  if (req.body.weight !== undefined) {
+  const nextPricingMode = req.body.pricingMode ?? productsList[index].pricingMode ?? 'gold';
+  if (!['gold', 'fixed'].includes(nextPricingMode)) {
+    res.status(400).json({ error: 'نوع قیمت‌گذاری معتبر نیست.' });
+    return;
+  }
+  const nextFixedPrice = req.body.fixedPrice ?? productsList[index].fixedPrice;
+  if (nextPricingMode === 'fixed') {
+    const priceVal = validatePositiveNumber(nextFixedPrice, 'قیمت ثابت', 1, 1_000_000_000);
+    if (!priceVal.isValid) {
+      res.status(400).json({ error: priceVal.error });
+      return;
+    }
+  }
+  if (req.body.weight !== undefined && nextPricingMode !== 'fixed') {
     const wVal = validatePositiveNumber(req.body.weight, 'وزن طلا', 0.01, 5000);
     if (!wVal.isValid) {
       res.status(400).json({ error: wVal.error });
       return;
     }
+  }
+  if (nextPricingMode === 'gold' && Number(req.body.weight ?? productsList[index].weight) <= 0) {
+    res.status(400).json({ error: 'برای محصول طلا وزن معتبر لازم است.' });
+    return;
   }
 
   if (req.body.stock !== undefined) {
@@ -1113,19 +1147,21 @@ app.put('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedRequest,
     ...productsList[index],
     ...req.body,
     title: req.body.title ? String(req.body.title).trim() : productsList[index].title,
-    weight: req.body.weight !== undefined ? Number(Number(req.body.weight).toFixed(3)) : productsList[index].weight,
+    pricingMode: nextPricingMode,
+    fixedPrice: nextPricingMode === 'fixed' ? Math.round(Number(nextFixedPrice)) : undefined,
+    weight: nextPricingMode === 'fixed' ? 0 : req.body.weight !== undefined ? Number(Number(req.body.weight).toFixed(3)) : productsList[index].weight,
     customMakingChargePercent:
-      req.body.customMakingChargePercent !== undefined
+      nextPricingMode === 'fixed' ? 0 : req.body.customMakingChargePercent !== undefined
         ? req.body.customMakingChargePercent === '' || req.body.customMakingChargePercent === null
           ? null
           : Math.min(100, Math.max(0, Number(req.body.customMakingChargePercent)))
-        : productsList[index].customMakingChargePercent,
+        : nextPricingMode === 'fixed' ? 0 : productsList[index].customMakingChargePercent,
     customProfitPercent:
-      req.body.customProfitPercent !== undefined
+      nextPricingMode === 'fixed' ? 0 : req.body.customProfitPercent !== undefined
         ? req.body.customProfitPercent === '' || req.body.customProfitPercent === null
           ? null
           : Math.min(50, Math.max(0, Number(req.body.customProfitPercent)))
-        : productsList[index].customProfitPercent,
+        : nextPricingMode === 'fixed' ? 0 : productsList[index].customProfitPercent,
     discountPercent:
       req.body.discountPercent !== undefined
         ? Math.min(90, Math.max(0, Number(req.body.discountPercent)))
@@ -1390,7 +1426,7 @@ app.post('/api/orders/quote', authenticateUser, (req: AuthenticatedRequest, res:
     const unitPrice = priceBreakdown.finalPrice;
     const itemTotal = unitPrice * qty;
 
-    computedTotalWeight += product.weight * qty;
+    if (product.pricingMode !== 'fixed') computedTotalWeight += product.weight * qty;
     computedTotalPrice += itemTotal;
 
     quoteItems.push({
@@ -1401,7 +1437,7 @@ app.post('/api/orders/quote', authenticateUser, (req: AuthenticatedRequest, res:
       unitPrice,
       quantity: qty,
       totalPrice: itemTotal,
-      goldPriceAtOrder: currentGoldPrice,
+      goldPriceAtOrder: product.pricingMode === 'fixed' ? 0 : currentGoldPrice,
       makingChargePercent: priceBreakdown.effectiveMakingChargePercent,
     });
   }
@@ -1611,7 +1647,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
           const unitPrice = priceBreakdown.finalPrice;
           const itemTotal = unitPrice * itm.quantity;
 
-          computedTotalWeight += product.weight * itm.quantity;
+          if (product.pricingMode !== 'fixed') computedTotalWeight += product.weight * itm.quantity;
           computedTotalPrice += itemTotal;
 
           validatedItems.push({
@@ -1622,7 +1658,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
             unitPrice,
             quantity: itm.quantity,
             totalPrice: itemTotal,
-            goldPriceAtOrder: effectiveGoldPrice,
+            goldPriceAtOrder: product.pricingMode === 'fixed' ? 0 : effectiveGoldPrice,
             makingChargePercent: priceBreakdown.effectiveMakingChargePercent,
           });
         }

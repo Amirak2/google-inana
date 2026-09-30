@@ -170,7 +170,8 @@ export const CartDrawer: React.FC = () => {
   }, [isAuthenticated, showAuthRequiredModal]);
 
   if (!isCartOpen) return null;
-  const priceReady = goldPrice.pricePerGram > 0;
+  const hasGoldProducts = cart.some((item) => item.product.pricingMode !== 'fixed');
+  const priceReady = !hasGoldProducts || goldPrice.pricePerGram > 0;
 
   // Calculate real-time cart summary
   let totalWeight = 0;
@@ -180,7 +181,7 @@ export const CartDrawer: React.FC = () => {
     const breakdown = calculateProductPrice(item.product, goldPrice.pricePerGram, settings);
     const unitPrice = breakdown.finalPrice;
     const itemTotal = unitPrice * item.quantity;
-    totalWeight += item.product.weight * item.quantity;
+    if (item.product.pricingMode !== 'fixed') totalWeight += item.product.weight * item.quantity;
     subtotalPrice += itemTotal;
 
     return {
@@ -576,7 +577,7 @@ export const CartDrawer: React.FC = () => {
           )}
 
           {/* Live Gold Price Recalculation Notice */}
-          <div className="bg-[#0A1224] border-b border-[#D4AF37]/20 px-4 py-2 text-[11px] text-[#F5E8C7] flex items-center justify-between shadow-sm">
+          {hasGoldProducts && <div className="bg-[#0A1224] border-b border-[#D4AF37]/20 px-4 py-2 text-[11px] text-[#F5E8C7] flex items-center justify-between shadow-sm">
             <span className="flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>نرخ مبنای محاسبه</span>
@@ -584,7 +585,7 @@ export const CartDrawer: React.FC = () => {
             <span className="font-bold text-[#E6CA65]">
               {priceReady ? `${formatToman(goldPrice.pricePerGram)} / گ` : 'در حال دریافت نرخ...'}
             </span>
-          </div>
+          </div>}
 
           {/* Body Section */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-5">
@@ -670,7 +671,7 @@ export const CartDrawer: React.FC = () => {
                               {item.product.title}
                             </h4>
                             <div className="flex items-center gap-2 text-[11px] text-slate-300 mt-1">
-                              <span>وزن: {formatWeight(item.product.weight)}</span>
+                              <span>{item.product.pricingMode === 'fixed' ? 'قیمت ثابت' : `وزن: ${formatWeight(item.product.weight)}`}</span>
                             </div>
                           </div>
 
@@ -870,12 +871,12 @@ export const CartDrawer: React.FC = () => {
                 <div className="p-3 bg-[#0A1324] border border-[#D4AF37]/30 rounded-2xl space-y-2">
                   <div className="flex justify-between items-center text-[11px] text-slate-300">
                     <span>اقلام انتخاب شده:</span>
-                    <span className="font-semibold text-white">{toPersianDigits(cart.length)} قطعه طلا</span>
+                    <span className="font-semibold text-white">{toPersianDigits(cart.length)} محصول</span>
                   </div>
-                  <div className="flex justify-between items-center text-[11px] text-slate-300">
+                  {hasGoldProducts && <div className="flex justify-between items-center text-[11px] text-slate-300">
                     <span>مجموع وزن طلای ۱۸ عیار:</span>
                     <span className="font-semibold text-white">{formatWeight(totalWeight)}</span>
-                  </div>
+                  </div>}
                   <div className="flex justify-between items-center pt-2 border-t border-slate-800 font-bold text-xs">
                     <span className="text-slate-200">مبلغ قابل پرداخت:</span>
                     <span className="text-[#D4AF37] text-sm">
@@ -1279,12 +1280,12 @@ export const CartDrawer: React.FC = () => {
                       </button>
                     </div>
                   )}
-                  <div className="flex justify-between">
+                  {confirmedOrder.totalWeight > 0 && <div className="flex justify-between">
                     <span className="text-slate-300">مجموع وزن طلا:</span>
                     <span className="font-bold text-[#D4AF37]">
                       {formatWeight(confirmedOrder.totalWeight)}
                     </span>
-                  </div>
+                  </div>}
                   <div className="flex justify-between">
                     <span className="text-slate-300">مبلغ نهایی فاکتور:</span>
                     <span className="font-bold text-white">
@@ -1342,10 +1343,10 @@ export const CartDrawer: React.FC = () => {
             <div className="p-5 border-t border-[#D4AF37]/25 bg-[#0A1224] space-y-3">
               {/* Weight & Total summary */}
               <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between text-slate-300">
+                {hasGoldProducts && <div className="flex justify-between text-slate-300">
                   <span>مجموع وزن طلای ۱۸ عیار:</span>
                   <span className="font-semibold text-slate-100">{formatWeight(totalWeight)}</span>
-                </div>
+                </div>}
                 <div className="flex justify-between items-baseline pt-2 border-t border-slate-700/80">
                   <span className="text-sm font-bold text-white">مبلغ قابل پرداخت:</span>
                   <span className="text-lg sm:text-xl font-extrabold text-white gold-gradient-text">
@@ -1370,7 +1371,7 @@ export const CartDrawer: React.FC = () => {
                   className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all shadow-[0_4px_20px_rgba(212,175,55,0.3)] text-sm cursor-pointer disabled:opacity-75"
                 >
                   {isReserving ? (
-                    <span>در حال بررسی و رزرو قطعه طلا...</span>
+                    <span>در حال بررسی و رزرو محصول...</span>
                   ) : (
                     <>
                       {!isAuthenticated && <Lock className="w-4 h-4 text-slate-950" />}

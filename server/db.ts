@@ -25,5 +25,12 @@ export function createDb(store: Store) {
   if (!store.map('products').size) products.forEach(p => saveProductToDb(structuredClone(p)));
   store.set('migrations', 'initialProducts', true);
  };
- return { getAllProductsFromDb, getProductByIdFromDb, saveProductToDb, saveAllProductsToDb, deleteProductFromDb, getAllOrdersFromDb, getOrderByIdOrTrackingFromDb, saveOrderToDb, deleteOrderFromDb, deleteOrdersBulkFromDb, getIdempotentOrderFromDb, saveIdempotencyKeyToDb, runDbTransaction, seedDatabaseIfEmpty };
+ const seedProductsOnce = (migrationKey: string, products: Product[]) => {
+  if (store.get('migrations', migrationKey)) return;
+  for (const product of products) {
+   if (!store.get('products', product.id)) saveProductToDb(structuredClone(product));
+  }
+  store.set('migrations', migrationKey, true);
+ };
+ return { getAllProductsFromDb, getProductByIdFromDb, saveProductToDb, saveAllProductsToDb, deleteProductFromDb, getAllOrdersFromDb, getOrderByIdOrTrackingFromDb, saveOrderToDb, deleteOrderFromDb, deleteOrdersBulkFromDb, getIdempotentOrderFromDb, saveIdempotencyKeyToDb, runDbTransaction, seedDatabaseIfEmpty, seedProductsOnce };
 }

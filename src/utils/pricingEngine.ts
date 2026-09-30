@@ -25,6 +25,27 @@ export function calculateProductPrice(
   goldPricePerGram: number,
   settings: PricingSettings = DEFAULT_SETTINGS
 ): CalculatedPriceBreakdown {
+  if (product.pricingMode === 'fixed') {
+    const fixedPrice = Number.isFinite(product.fixedPrice) ? Math.max(0, product.fixedPrice || 0) : 0;
+    const discountPercent = Math.min(90, Math.max(0, product.discountPercent || 0));
+    const discountAmount = fixedPrice * discountPercent / 100;
+    const finalPrice = Math.round(fixedPrice - discountAmount);
+    return {
+      baseGoldValue: 0,
+      effectiveMakingChargePercent: 0,
+      makingChargeAmount: 0,
+      profitPercent: 0,
+      profitAmount: 0,
+      taxPercent: 0,
+      taxAmount: 0,
+      additionalCosts: 0,
+      stoneCost: 0,
+      discountPercent,
+      discountAmount: Math.round(discountAmount),
+      finalPrice,
+      rawFinalPrice: fixedPrice - discountAmount,
+    };
+  }
   const weight = product.weight || 0;
   const currentGoldPrice = goldPricePerGram > 0 ? goldPricePerGram : 14850000;
 

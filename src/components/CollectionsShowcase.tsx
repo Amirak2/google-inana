@@ -40,13 +40,13 @@ export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit,
           <div className="flex items-center justify-center gap-3 mb-2">
             <span className="hidden sm:inline-block h-[1px] w-8 sm:w-12 bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
             <h2 className="text-2xl sm:text-4xl font-extrabold gold-gradient-text tracking-wide">
-              روایت‌هایی درخشان از هنر زرگری
+              روایت‌هایی از هنر طلا و مروارید
             </h2>
             <span className="hidden sm:inline-block h-[1px] w-8 sm:w-12 bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
           </div>
 
           <p className="text-slate-300 text-xs sm:text-sm mt-2 font-light leading-relaxed max-w-xl mx-auto">
-            هر کالکشن تجسمی از هویت معماری باستانی، خطوط مدرن و خلوص طلای ۱۸ عیار استاندارد است.
+            از طلای ۱۸ عیار تا مرواریدهای خاص، هر کالکشن روایت خودش را دارد.
           </p>
         </div>
 

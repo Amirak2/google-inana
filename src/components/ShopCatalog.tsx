@@ -80,7 +80,7 @@ export const ShopCatalog: React.FC = () => {
         }
 
         // Weight filter
-        if (p.weight > maxWeight) {
+        if (p.pricingMode !== 'fixed' && p.weight > maxWeight) {
           return false;
         }
 
@@ -159,20 +159,19 @@ export const ShopCatalog: React.FC = () => {
         <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-12">
           <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#E6CA65] uppercase tracking-widest mb-3 px-4 py-1.5 rounded-full bg-[#0B152B] border border-[#D4AF37]/35 shadow-sm">
             <Layers className="w-3.5 h-3.5 text-[#D4AF37]" />
-            <span>گالری انحصاری زیورآلات ۱۸ عیار</span>
+            <span>گالری طلا و مروارید اینانا</span>
           </div>
 
           <div className="flex items-center justify-center gap-3 mb-2">
             <span className="hidden sm:inline-block h-[1px] w-8 sm:w-12 bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
             <h1 className="text-2xl sm:text-4xl font-extrabold gold-gradient-text tracking-wide">
-              ویترین طلای لوکس اینانا
+              ویترین زیورآلات اینانا
             </h1>
             <span className="hidden sm:inline-block h-[1px] w-8 sm:w-12 bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
           </div>
 
           <p className="text-slate-300 text-xs sm:text-sm mt-2 font-light leading-relaxed max-w-lg mx-auto">
-            مجموعه‌ای کم‌نظیر از پلاک‌های حروف، مدال‌های معماری زیگورات، دستبند و گوشواره با محاسبه
-            لحظه‌ای قیمت طلا.
+            مجموعه‌ای از زیورآلات طلا با قیمت روز و مرواریدهای منتخب با قیمت ثابت.
           </p>
         </div>
 

@@ -2,6 +2,16 @@ import { CollectionInfo, Product } from '../types';
 
 export const INITIAL_COLLECTIONS: CollectionInfo[] = [
   {
+    id: 'inana-pearls',
+    name: 'INANA PEARLS',
+    titleFa: 'کالکشن مروارید',
+    subtitleFa: 'درخشش طبیعی رنگ‌ها در زیورآلات مرواریدی',
+    description: 'گردنبندهای مرواریدی اینانا با قیمت ثابت و مشخصات شفاف هر قطعه.',
+    coverImage: '/products/pearls/p3-white.png',
+    accentQuote: 'ظرافتی به رنگ مروارید',
+    tag: 'PEARLS',
+  },
+  {
     id: 'inana-signature',
     name: 'INANA SIGNATURE',
     titleFa: 'کالکشن اختصاصی اینانا',
@@ -64,6 +74,7 @@ export const INITIAL_COLLECTIONS: CollectionInfo[] = [
 ];
 
 export const CATEGORIES_LIST = [
+  'گردنبند مروارید',
   'پلاک طلا',
   'حروف انگلیسی',
   'گردنبند',
@@ -77,7 +88,37 @@ export const CATEGORIES_LIST = [
   'کالکشن‌های ویژه',
 ];
 
+export const PEARL_PRODUCTS: Product[] = [
+  {
+    id: 'pearl-p3',
+    title: 'مروارید شامپاینی خلالی',
+    slug: 'pearl-champagne-p3',
+    category: 'گردنبند مروارید',
+    collection: 'INANA PEARLS',
+    pricingMode: 'fixed',
+    fixedPrice: 7_000_000,
+    weight: 0,
+    purity: 'مروارید',
+    customMakingChargePercent: 0,
+    customProfitPercent: 0,
+    additionalCost: 0,
+    stoneCost: 0,
+    discountPercent: 0,
+    images: ['/products/pearls/p3-white.png'],
+    description: 'گردنبند مروارید شامپاینی خلالی با کیفیت 4A+ و قفل نقره‌ای.',
+    features: ['کیفیت: 4A+', 'قفل: نقره‌ای', 'طول گردنبند: ۴۳ تا ۴۷ سانتی‌متر', 'سایز: ۲۸'],
+    dimensions: 'طول ۴۳ تا ۴۷ سانتی‌متر؛ سایز ۲۸',
+    sku: 'p3',
+    stock: 1,
+    isNewArrival: true,
+    isBestSeller: false,
+    isFeatured: true,
+    createdAt: '2026-09-30T00:00:00.000Z',
+  },
+];
+
 export const INITIAL_PRODUCTS: Product[] = [
+  ...PEARL_PRODUCTS,
   {
     id: 'inana-test-ring-2qty',
     title: 'انگشتر طلای ۱۸ عیار اینانا (موجودی ۲ عدد)',

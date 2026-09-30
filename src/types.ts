@@ -47,6 +47,8 @@ export interface Product {
   slug: string;
   category: string;
   collection: string;
+  pricingMode?: 'gold' | 'fixed';
+  fixedPrice?: number; // Toman; independent of the gold rate, making charge and gold profit.
   weight: number; // in grams (e.g. 0.450 or 2.300)
   purity: string; // '18 عیار'
   customMakingChargePercent?: number | null; // if specified, overrides global

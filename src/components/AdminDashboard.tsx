@@ -73,7 +73,7 @@ export const AdminDashboard: React.FC = () => {
 
   // Direct Product Pricing State
   const [selectedProductId, setSelectedProductId] = useState<string>(
-    products[0]?.id || 'inana-letter-f'
+    products.find((product) => product.pricingMode !== 'fixed')?.id || 'inana-letter-f'
   );
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -167,6 +167,7 @@ export const AdminDashboard: React.FC = () => {
   const [productFormError, setProductFormError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<Partial<Product>>({
+    pricingMode: 'gold',
     title: '',
     titleEn: '',
     category: 'پلاک حروف (INANA LETTERS)',
@@ -188,8 +189,9 @@ export const AdminDashboard: React.FC = () => {
   });
 
   // Keep selected product in sync
+  const goldProducts = products.filter((product) => product.pricingMode !== 'fixed');
   const selectedProduct =
-    products.find((p) => p.id === selectedProductId) || products[0] || null;
+    goldProducts.find((p) => p.id === selectedProductId) || goldProducts[0] || null;
 
   useEffect(() => {
     if (selectedProduct) {
@@ -287,8 +289,13 @@ export const AdminDashboard: React.FC = () => {
   const handleSaveProductFull = async (e: React.FormEvent) => {
     e.preventDefault();
     setProductFormError(null);
-    if (!productForm.title?.trim() || !productForm.weight || Number(productForm.weight) <= 0) {
+    const isFixedPrice = productForm.pricingMode === 'fixed';
+    if (!productForm.title?.trim() || (!isFixedPrice && (!productForm.weight || Number(productForm.weight) <= 0))) {
       setProductFormError('لطفاً عنوان و وزن معتبر برای محصول را وارد فرمایید.');
+      return;
+    }
+    if (isFixedPrice && (!Number.isFinite(productForm.fixedPrice) || Number(productForm.fixedPrice) <= 0)) {
+      setProductFormError('برای محصول با قیمت ثابت، مبلغ معتبر وارد کنید.');
       return;
     }
 
@@ -303,10 +310,12 @@ export const AdminDashboard: React.FC = () => {
         slug: productForm.title?.toLowerCase().replace(/\s+/g, '-') || `prod-${Date.now()}`,
         category: productForm.category || 'پلاک و مدال',
         collection: productForm.collection || 'INANA SIGNATURE',
-        weight: Number(productForm.weight) || 1,
-        purity: '18 عیار',
-        customMakingChargePercent: Number(productForm.customMakingChargePercent) || 20,
-        customProfitPercent:
+        pricingMode: isFixedPrice ? 'fixed' : 'gold',
+        fixedPrice: isFixedPrice ? Number(productForm.fixedPrice) : undefined,
+        weight: isFixedPrice ? 0 : Number(productForm.weight) || 1,
+        purity: isFixedPrice ? 'مروارید' : '18 عیار',
+        customMakingChargePercent: isFixedPrice ? 0 : Number(productForm.customMakingChargePercent) || 20,
+        customProfitPercent: isFixedPrice ? 0 :
           productForm.customProfitPercent !== undefined && productForm.customProfitPercent !== null
             ? Number(productForm.customProfitPercent)
             : null,
@@ -314,7 +323,7 @@ export const AdminDashboard: React.FC = () => {
         stoneCost: 0,
         stock: Number(productForm.stock) || 1,
         description: productForm.description || '',
-        features: productForm.features || ['طلای ۱۸ عیار ۷۵۰'],
+        features: productForm.features || (isFixedPrice ? [] : ['طلای ۱۸ عیار ۷۵۰']),
         images:
           productForm.images && productForm.images.length > 0
             ? productForm.images
@@ -335,6 +344,7 @@ export const AdminDashboard: React.FC = () => {
     setIsEditingProduct(false);
     setProductForm({
       title: '',
+      pricingMode: 'gold',
       category: 'پلاک حروف (INANA LETTERS)',
       collection: 'INANA LETTERS',
       weight: 1.0,
@@ -575,7 +585,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
   };
 
   // Filtered products for selection
-  const filteredProducts = products.filter((p) => {
+  const filteredProducts = goldProducts.filter((p) => {
     const matchesSearch =
       p.title.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
       p.sku.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
@@ -1172,7 +1182,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-base font-bold text-white">
-                    جدول سریع اجرت و سود تمام طلاهای ویترین ({toPersianDigits(products.length)})
+                    جدول سریع اجرت و سود تمام طلاهای ویترین ({toPersianDigits(goldProducts.length)})
                   </h3>
                   <span className="text-xs text-slate-400">
                     می‌توانید روی هر سطر کلیک کنید یا مستقیماً درصد اجرت و سود آن را تغییر دهید.
@@ -1194,7 +1204,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   </tr>
                 </thead>
                 <tbody>
-                  {products.map((p) => {
+                  {goldProducts.map((p) => {
                     const isSelected = p.id === selectedProductId;
                     const priceBreakdown = calculateProductPrice(
                       p,
@@ -1291,6 +1301,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     onClick={() => {
                       setIsEditingProduct(false);
                       setProductForm({
+                        pricingMode: 'gold',
                         title: '',
                         weight: 1.0,
                         customMakingChargePercent: 20,
@@ -1313,6 +1324,28 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <span>{productFormError}</span>
                   </div>
                 )}
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">نوع قیمت‌گذاری:</label>
+                  <select
+                    value={productForm.pricingMode || 'gold'}
+                    onChange={(e) => {
+                      const mode = e.target.value as 'gold' | 'fixed';
+                      setProductForm({
+                        ...productForm,
+                        pricingMode: mode,
+                        category: mode === 'fixed' ? 'گردنبند مروارید' : 'پلاک طلا',
+                        collection: mode === 'fixed' ? 'INANA PEARLS' : 'INANA SIGNATURE',
+                        weight: mode === 'fixed' ? 0 : 1,
+                        customMakingChargePercent: mode === 'fixed' ? 0 : 20,
+                        customProfitPercent: mode === 'fixed' ? 0 : 7,
+                      });
+                    }}
+                    className="w-full bg-[#060B14] border border-slate-700 rounded-xl px-3.5 py-2.5 text-white"
+                  >
+                    <option value="gold">طلا؛ محاسبه با نرخ روز</option>
+                    <option value="fixed">مروارید؛ قیمت ثابت</option>
+                  </select>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-slate-300 font-semibold mb-1">
@@ -1359,8 +1392,22 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   </div>
                 </div>
 
-                {/* Key Financial Inputs: Weight, Making Charge %, Profit %, Discount %, Stock, Letter */}
+                {/* Fixed-price products never use the gold rate, making charge or gold profit. */}
                 <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 bg-[#060B14] p-4 rounded-2xl border border-slate-800">
+                  {productForm.pricingMode === 'fixed' ? (
+                    <div className="col-span-2 sm:col-span-3">
+                      <label className="block text-[#D4AF37] font-bold mb-1">قیمت ثابت (تومان): *</label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        required
+                        value={productForm.fixedPrice ?? ''}
+                        onChange={(e) => setProductForm({ ...productForm, fixedPrice: Number(e.target.value) })}
+                        className="w-full bg-[#0A1120] border border-[#D4AF37]/50 rounded-xl px-3 py-2 text-white font-bold"
+                      />
+                    </div>
+                  ) : <>
                   <div>
                     <label className="block text-[#D4AF37] font-bold mb-1">وزن خالص (گرم): *</label>
                     <input
@@ -1409,6 +1456,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                       className="w-full bg-[#0A1120] border border-emerald-500/50 focus:border-emerald-400 rounded-xl px-3 py-2 text-white font-bold outline-none"
                     />
                   </div>
+                  </>}
 
                   <div>
                     <label className="block text-rose-400 font-bold mb-1">درصد تخفیف (%):</label>
@@ -1512,7 +1560,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <th className="py-3 px-2">وزن طلا</th>
                     <th className="py-3 px-2 text-[#D4AF37] font-bold">اجرت</th>
                     <th className="py-3 px-2 text-emerald-400 font-bold">سود</th>
-                    <th className="py-3 px-2">قیمت روز</th>
+                    <th className="py-3 px-2">قیمت</th>
                     <th className="py-3 px-2">موجودی</th>
                     <th className="py-3 px-2 text-center">عملیات</th>
                   </tr>
@@ -1547,11 +1595,11 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                         <td className="py-2.5 px-2 font-semibold text-white">{p.title}</td>
                         <td className="py-2.5 px-2 text-slate-400">{p.sku}</td>
                         <td className="py-2.5 px-2 text-[#D4AF37]">{p.category}</td>
-                        <td className="py-2.5 px-2 font-medium">{formatWeight(p.weight)}</td>
-                        <td className="py-2.5 px-2 font-bold text-[#D4AF37]">{makingCharge}٪</td>
-                        <td className="py-2.5 px-2 font-bold text-emerald-400">{profit}٪</td>
+                        <td className="py-2.5 px-2 font-medium">{p.pricingMode === 'fixed' ? '—' : formatWeight(p.weight)}</td>
+                        <td className="py-2.5 px-2 font-bold text-[#D4AF37]">{p.pricingMode === 'fixed' ? '—' : `${makingCharge}٪`}</td>
+                        <td className="py-2.5 px-2 font-bold text-emerald-400">{p.pricingMode === 'fixed' ? '—' : `${profit}٪`}</td>
                         <td className="py-2.5 px-2 font-bold text-white">
-                          {formatToman(priceBreakdown.finalPrice)}
+                          {formatToman(priceBreakdown.finalPrice)}{p.pricingMode === 'fixed' ? ' (ثابت)' : ''}
                         </td>
                         <td className="py-2.5 px-2">
                           <span
@@ -2531,8 +2579,8 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                   className="flex justify-between items-center text-[11px] py-1 border-b border-slate-800/40 last:border-0"
                                 >
                                   <span>
-                                    {it.productTitle} ({toPersianDigits(it.quantity)} عدد) - وزن:{' '}
-                                    {formatWeight(it.weight)}
+                                    {it.productTitle} ({toPersianDigits(it.quantity)} عدد)
+                                    {it.weight > 0 ? ` - وزن: ${formatWeight(it.weight)}` : ' - قیمت ثابت'}
                                   </span>
                                   <span className="font-bold text-white">{formatToman(it.totalPrice)}</span>
                                 </div>
@@ -2542,9 +2590,9 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                             {/* Summary & Actions Bar */}
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-slate-800">
                               <div className="flex items-center gap-4">
-                                <span className="text-slate-400">
+                                {ord.totalWeight > 0 && <span className="text-slate-400">
                                   مجموع وزن: <strong className="text-white">{formatWeight(ord.totalWeight)}</strong>
-                                </span>
+                                </span>}
                                 <div className="h-4 w-px bg-slate-800"></div>
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-slate-400">مبلغ کل فاکتور:</span>
