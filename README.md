@@ -46,8 +46,8 @@ exported from its original server for a separate verified import.
 
 Use Bun and the committed `bun.lock`. Run `bun install --frozen-lockfile`,
 `bun run build`, and `bun run lint`. `scripts/build.mjs` emits a bundled Worker,
-client assets and generated Drizzle migrations. `esbuild-wasm` avoids a native
-filesystem resolver issue in restricted Windows environments.
+client assets and generated Drizzle migrations. Liara uses native `esbuild` on
+Linux; restricted Windows environments use `esbuild-wasm`.
 
 `node --require ./scripts/windows-os.cjs scripts/verify.mjs` exercises the Worker
 in Miniflare: authentication, checkout, idempotency, concurrent last-unit orders,

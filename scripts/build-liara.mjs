@@ -1,4 +1,3 @@
-import { build } from 'esbuild-wasm';
 import { build as viteBuild } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -6,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const { build } = await import(process.platform === 'win32' ? 'esbuild-wasm' : 'esbuild');
 
 await viteBuild({
   configFile: false,
