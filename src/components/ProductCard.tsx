@@ -5,6 +5,7 @@ import { Product } from '../types';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { formatToman, formatWeight } from '../utils/persianFormatter';
 import { calculateProductPrice } from '../utils/pricingEngine';
+import { productPath } from '../utils/siteRoutes';
 
 interface ProductCardProps {
   product: Product;
@@ -110,7 +111,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       <div className="p-4 sm:p-5 flex flex-col flex-1 justify-between bg-gradient-to-b from-[#0A1325] to-[#060B15] transition-colors duration-500 group-hover:from-[#0D1830] group-hover:to-[#070D1B]">
         <div>
           <h3 className="text-sm sm:text-base font-bold text-white line-clamp-1 group-hover:text-[#F5E8C7] transition-colors duration-300">
-            {product.title}
+            <a href={productPath(product.id)} onClick={event => {
+              event.stopPropagation();
+              if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              handleQuickView(event);
+            }}>{product.title}</a>
           </h3>
           {isFixed ? (
             <p className="mt-2 text-xs text-slate-300">{product.category}</p>

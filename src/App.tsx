@@ -17,10 +17,25 @@ import { AuthModal } from './components/AuthModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { FavoritesView } from './components/FavoritesView';
 import { DynamicBackgroundMotion } from './components/DynamicBackgroundMotion';
+import { PAGE_PATHS, productPath } from './utils/siteRoutes';
 
 const MainLayout: React.FC = () => {
   const { activeTab, setActiveTab, quickViewProduct, setQuickViewProduct } = useGoldStore();
   const { isAdmin, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    const titles: Record<string, string> = { home: 'اینانا گلد', shop: 'ویترین زیورآلات', 'gold-price': 'نرخ طلا', collections: 'کالکشن‌ها', favorites: 'علاقه‌مندی‌ها', about: 'درباره اینانا', contact: 'تماس با اینانا', admin: 'مدیریت' };
+    const title = `${quickViewProduct?.title || titles[activeTab] || 'اینانا گلد'} | INANA GOLD`;
+    const description = quickViewProduct?.description || `گالری اینانا گلد؛ ${titles[activeTab] || 'زیورآلات طلا و مروارید'}`;
+    document.title = title;
+    const setMeta = (selector: string, content: string) => document.querySelector(selector)?.setAttribute('content', content);
+    setMeta('meta[name="description"]', description);
+    setMeta('meta[property="og:title"]', title);
+    setMeta('meta[property="og:description"]', description);
+    let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) { canonical = document.createElement('link'); canonical.rel = 'canonical'; document.head.appendChild(canonical); }
+    canonical.href = new URL(quickViewProduct ? productPath(quickViewProduct.id) : PAGE_PATHS[activeTab] || '/', window.location.origin).href;
+  }, [activeTab, quickViewProduct?.id, quickViewProduct?.title, quickViewProduct?.description]);
 
   // Strict guard: Ordinary users are never shown the admin panel and are routed to home
   useEffect(() => {
@@ -116,6 +131,7 @@ const MainLayout: React.FC = () => {
       {/* Global Modals & Drawers */}
       <CartDrawer />
       <ProductDetailModal
+        key={quickViewProduct?.id || 'closed'}
         product={quickViewProduct}
         onClose={() => setQuickViewProduct(null)}
       />

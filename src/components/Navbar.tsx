@@ -20,6 +20,7 @@ import { InanaLogo } from './InanaLogo';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { useAuth } from '../context/AuthContext';
 import { formatToman, formatPercent } from '../utils/persianFormatter';
+import { PAGE_PATHS } from '../utils/siteRoutes';
 
 export const Navbar: React.FC = () => {
   const {
@@ -68,6 +69,12 @@ export const Navbar: React.FC = () => {
     }
     setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleNavLink = (event: React.MouseEvent<HTMLAnchorElement>, tabId: string) => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    handleNavClick(tabId);
   };
 
   return (
@@ -200,9 +207,10 @@ export const Navbar: React.FC = () => {
               {navLinks.map((link) => {
                 const isActive = activeTab === link.id;
                 return (
-                  <button
+                  <a
                     key={link.id}
-                    onClick={() => handleNavClick(link.id)}
+                    href={PAGE_PATHS[link.id]}
+                    onClick={event => handleNavLink(event, link.id)}
                     className={`relative py-2 text-sm font-medium transition-colors duration-300 ${
                       isActive ? 'text-[#F5E8C7] font-bold' : 'text-slate-300 hover:text-[#D4AF37]'
                     }`}
@@ -211,7 +219,7 @@ export const Navbar: React.FC = () => {
                     {isActive && (
                       <span className="absolute bottom-0 right-0 left-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent rounded-full shadow-[0_0_8px_#D4AF37]" />
                     )}
-                  </button>
+                  </a>
                 );
               })}
             </nav>
@@ -380,9 +388,10 @@ export const Navbar: React.FC = () => {
               const Icon = link.icon;
               const isActive = activeTab === link.id;
               return (
-                <button
+                <a
                   key={link.id}
-                  onClick={() => handleNavClick(link.id)}
+                  href={PAGE_PATHS[link.id]}
+                  onClick={event => handleNavLink(event, link.id)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl text-right font-medium text-base transition-all ${
                     isActive
                       ? 'bg-[#D4AF37]/20 text-[#F5E8C7] border border-[#D4AF37]/40 font-bold'
@@ -391,7 +400,7 @@ export const Navbar: React.FC = () => {
                 >
                   <Icon className={`w-5 h-5 ${isActive ? 'text-[#D4AF37]' : 'text-slate-400'}`} />
                   <span>{link.label}</span>
-                </button>
+                </a>
               );
             })}
 

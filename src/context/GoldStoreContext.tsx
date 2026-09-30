@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { INITIAL_COLLECTIONS } from '../data/seedData';
 import {
   CartItem,
@@ -11,6 +11,7 @@ import { DEFAULT_SETTINGS } from '../utils/pricingEngine';
 import { getAuthHeaders } from '../utils/authHelper';
 import { useAuth } from './AuthContext';
 import { NAVIGATION_KEY, readNavigationState, saveSessionValue } from '../utils/navigationState';
+import { buildSiteRoute, parseSiteRoute } from '../utils/siteRoutes';
 
 interface GoldStoreContextType {
   goldPrice: GoldPriceData;
@@ -94,16 +95,43 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   });
   const [favorites, setFavorites] = useState<string[]>([]);
 
-  const [initialNavigation] = useState(readNavigationState);
-  const [activeTab, setActiveTab] = useState<string>(initialNavigation.activeTab);
+  const [initialNavigation] = useState(() => ({ ...readNavigationState(), ...parseSiteRoute(window.location.pathname, window.location.search) }));
+  const [activeTab, setActiveTabState] = useState<string>(initialNavigation.activeTab);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(initialNavigation.selectedCategory);
   const [selectedCollection, setSelectedCollection] = useState<string | null>(initialNavigation.selectedCollection);
   const [searchQuery, setSearchQuery] = useState<string>(initialNavigation.searchQuery);
   const [quickViewProductId, setQuickViewProductId] = useState<string | null>(initialNavigation.quickViewProductId);
   const quickViewProduct = products.find(product => product.id === quickViewProductId) || null;
   const setQuickViewProduct = (product: Product | null) => setQuickViewProductId(product?.id || null);
+  const setActiveTab = (tab: string) => {
+    setActiveTabState(tab);
+    setQuickViewProductId(null);
+  };
   const [isCartOpen, setIsCartOpen] = useState<boolean>(initialNavigation.isCartOpen);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const lastRoute = useRef<string | null>(null);
+
+  useEffect(() => {
+    const route = buildSiteRoute({ activeTab, selectedCategory, selectedCollection, searchQuery, quickViewProductId });
+    if (lastRoute.current === route) return;
+    if (lastRoute.current === null) window.history.replaceState(null, '', route);
+    else window.history.pushState(null, '', route);
+    lastRoute.current = route;
+  }, [activeTab, selectedCategory, selectedCollection, searchQuery, quickViewProductId]);
+
+  useEffect(() => {
+    const restoreRoute = () => {
+      const route = parseSiteRoute(window.location.pathname, window.location.search);
+      lastRoute.current = buildSiteRoute(route);
+      setActiveTabState(route.activeTab);
+      setSelectedCategory(route.selectedCategory);
+      setSelectedCollection(route.selectedCollection);
+      setSearchQuery(route.searchQuery);
+      setQuickViewProductId(route.quickViewProductId);
+    };
+    window.addEventListener('popstate', restoreRoute);
+    return () => window.removeEventListener('popstate', restoreRoute);
+  }, []);
 
   useEffect(() => {
     saveSessionValue(NAVIGATION_KEY, { activeTab, selectedCategory, selectedCollection, searchQuery, quickViewProductId, isCartOpen });

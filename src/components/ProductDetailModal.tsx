@@ -13,11 +13,13 @@ import {
   ChevronRight,
   Send,
   MessageCircle,
+  Link,
 } from 'lucide-react';
 import { Product } from '../types';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
 import { calculateProductPrice } from '../utils/pricingEngine';
+import { productPath } from '../utils/siteRoutes';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -32,6 +34,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   const [rotationAngle, setRotationAngle] = useState(0);
   const [showFormulaBreakdown, setShowFormulaBreakdown] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [linkMessage, setLinkMessage] = useState('');
 
   if (!product) return null;
 
@@ -77,6 +80,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
             <span className="text-xs text-slate-400">کد محصول: {product.sku}</span>
           </div>
 
+          <div className="flex items-center gap-2">
+          <button type="button" title="کپی لینک محصول" aria-label="کپی لینک محصول" className="flex items-center gap-1 p-2 text-xs text-[#E6CA65]" onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(new URL(productPath(product.id), window.location.origin).href);
+              setLinkMessage('لینک کپی شد');
+            } catch { setLinkMessage('لینک را از نوار آدرس کپی کنید'); }
+          }}><Link className="w-4 h-4" />{linkMessage || 'کپی لینک'}</button>
+          <span className="sr-only" role="status">{linkMessage}</span>
           <button
             onClick={onClose}
             className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-[#0B152B] transition-colors"
@@ -84,6 +95,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           >
             <X className="w-5 h-5" />
           </button>
+          </div>
         </div>
 
         {/* Scrollable Content Body */}
