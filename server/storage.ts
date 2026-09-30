@@ -63,7 +63,7 @@ export class Store {
   private prune() {
     const now = Date.now();
     for (const bucket of ['otp', 'phoneOtp', 'quotes', 'revoked', 'rateLimits']) {
-      for (const [key, value] of this.map(bucket)) if ((value.expiresAt ?? value.resetAt ?? Infinity) < now) this.map(bucket).delete(key);
+      for (const [key, value] of this.map(bucket)) if ((bucket === 'quotes' ? (value.retainUntil ?? value.expiresAt + 86400000) : (value.expiresAt ?? value.resetAt ?? Infinity)) < now) this.map(bucket).delete(key);
     }
     for (const [key, list] of this.map('reservations')) {
       const active = list.filter((r: any) => r.expiresAt > now);

@@ -94,6 +94,15 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   });
   const [favorites, setFavorites] = useState<string[]>([]);
+  const favoritesRef = useRef<string[]>([]);
+  const favoriteQueue = useRef<Promise<void>>(Promise.resolve());
+  const favoriteVersions = useRef(new Map<string, number>());
+  const favoriteMutation = useRef(0);
+  const favoriteUser = useRef(currentUser?.uid);
+  favoriteUser.current = currentUser?.uid;
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  const applyFavorites = (next: string[]) => { favoritesRef.current = next; setFavorites(next); };
+
 
   const [initialNavigation] = useState(() => ({ ...readNavigationState(), ...parseSiteRoute(window.location.pathname, window.location.search) }));
   const [activeTab, setActiveTabState] = useState<string>(initialNavigation.activeTab);
@@ -154,20 +163,22 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     if (authLoading) return;
+    let cancelled = false;
+    const mutation = favoriteMutation.current;
+    setFavoriteError(null);
+    applyFavorites([]);
     if (!currentUser) {
-      try {
-        const saved = localStorage.getItem('inana_favorites_guest');
-        setFavorites(saved ? JSON.parse(saved) : []);
-      } catch { setFavorites([]); }
+      try { applyFavorites(JSON.parse(localStorage.getItem('inana_favorites_guest') || '[]')); } catch { applyFavorites([]); }
       return;
     }
-    fetch('/api/user/favorites')
-      .then(async (res) => {
+    fetch('/api/user/favorites', { headers: getAuthHeaders() })
+      .then(async res => {
         if (!res.ok) throw new Error('favorites');
         const data = await res.json();
-        setFavorites(Array.isArray(data.favorites) ? data.favorites : []);
+        if (!cancelled && mutation === favoriteMutation.current) applyFavorites(Array.isArray(data.favorites) ? data.favorites : []);
       })
-      .catch(() => setFavorites([]));
+      .catch(() => { if (!cancelled) setFavoriteError('دریافت علاقه‌مندی‌ها انجام نشد. دوباره وارد این صفحه شوید.'); });
+    return () => { cancelled = true; };
   }, [currentUser?.uid, authLoading]);
 
   useEffect(() => {
@@ -317,18 +328,31 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const toggleFavorite = (productId: string) => {
-    setFavorites((prev) => {
-      const next = prev.includes(productId)
-        ? prev.filter((id) => id !== productId)
-        : [...prev, productId];
-      if (currentUser) {
-        fetch('/api/user/favorites', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ favorites: next }),
-        }).catch(() => {});
+    const wasFavorite = favoritesRef.current.includes(productId);
+    const next = wasFavorite ? favoritesRef.current.filter(id => id !== productId) : [...favoritesRef.current, productId];
+    const version = ++favoriteMutation.current;
+    favoriteVersions.current.set(productId, version);
+    applyFavorites(next);
+    setFavoriteError(null);
+    if (!currentUser) return;
+    const uid = currentUser.uid;
+    const headers = { 'Content-Type': 'application/json', ...getAuthHeaders() };
+    favoriteQueue.current = favoriteQueue.current.then(async () => {
+      if (favoriteUser.current !== uid) return;
+      try {
+        const response = await fetch('/api/user/favorites', {
+          method: 'PATCH', headers,
+          body: JSON.stringify({ productId, action: wasFavorite ? 'remove' : 'add' }),
+        });
+        if (!response.ok) throw new Error('favorites');
+      } catch {
+        if (favoriteUser.current !== uid) return;
+        if (favoriteVersions.current.get(productId) === version) {
+          const current = favoritesRef.current.filter(id => id !== productId);
+          applyFavorites(wasFavorite ? [...current, productId] : current);
+        }
+        setFavoriteError('تغییر علاقه‌مندی ذخیره نشد. اتصال را بررسی کنید و دوباره تلاش کنید.');
       }
-      return next;
     });
   };
 
@@ -481,6 +505,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         deleteProduct,
       }}
     >
+      {favoriteError && <div role="alert" className="fixed top-20 inset-x-4 z-[200] mx-auto max-w-lg rounded-xl bg-rose-950 text-white p-3 text-sm shadow-lg flex gap-3 justify-between"><span>{favoriteError}</span><button type="button" aria-label="بستن پیام" onClick={() => setFavoriteError(null)}>×</button></div>}
       {children}
     </GoldStoreContext.Provider>
   );

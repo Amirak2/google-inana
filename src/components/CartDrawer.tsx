@@ -115,6 +115,10 @@ export const CartDrawer: React.FC = () => {
 
   // Request/refresh guaranteed 15-minute price quote from server
   const obtainPriceQuote = async () => {
+    if (paymentReceiptImage) {
+      setFormError('فیش پرداخت دارید؛ مبلغ قبلی تغییر نمی‌کند. فیش را برای بررسی مدیر ارسال کنید.');
+      return false;
+    }
     try {
       const res = await fetch('/api/orders/quote', {
         method: 'POST',
@@ -165,7 +169,8 @@ export const CartDrawer: React.FC = () => {
   useEffect(() => {
     if (isAuthenticated && showAuthRequiredModal) {
       setShowAuthRequiredModal(false);
-      setCheckoutStep('info');
+      setCheckoutStep('cart');
+      setFormError('وارد حساب شدید؛ برای رزرو کالا دکمه ادامه خرید را بزنید.');
     }
   }, [isAuthenticated, showAuthRequiredModal]);
 
@@ -297,34 +302,19 @@ export const CartDrawer: React.FC = () => {
     setIsReserving(true);
     setFormError(null);
     try {
-      const authHeaders = getAuthHeaders();
-      for (const item of cart) {
-        const res = await fetch('/api/cart/reserve', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders,
-          },
-          body: JSON.stringify({
-            productId: item.product.id,
-            quantity: item.quantity,
-          }),
-        });
-
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          setFormError(
-            errJson.message ||
-              `متأسفانه موجودی محصول «${item.product.title}» هم‌اکنون توسط خریدار دیگری در حال نهایی‌سازی است.`
-          );
-          setIsReserving(false);
-          return;
-        }
+      const res = await fetch('/api/cart/reserve-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ items: cart.map(item => ({ productId: item.product.id, quantity: item.quantity })) }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        setFormError(error.error || 'رزرو سبد انجام نشد. لطفاً دوباره تلاش کنید.');
+        return;
       }
       setCheckoutStep('info');
     } catch {
-      // Allow moving to info
-      setCheckoutStep('info');
+      setFormError('ارتباط با سرور قطع شد؛ رزرو تأیید نشده است. دوباره تلاش کنید.');
     } finally {
       setIsReserving(false);
     }
@@ -393,6 +383,11 @@ export const CartDrawer: React.FC = () => {
       return;
     }
 
+    if (!activeQuote) {
+      setFormError('پیش‌فاکتور این پرداخت در دسترس نیست. دوباره واریز نکنید؛ برای بررسی فیش با پشتیبانی تماس بگیرید.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -448,8 +443,7 @@ export const CartDrawer: React.FC = () => {
       } else {
         const errJson = await response.json().catch(() => ({}));
         if (errJson.quoteExpired) {
-          setFormError('مهلت ۱۵ دقیقه‌ای پیش‌فاکتور طلا به پایان رسیده است. در حال دریافت پیش‌فاکتور جدید...');
-          await obtainPriceQuote();
+          setFormError('مهلت ثبت پرداخت پایان یافته است. مبلغ و فیش قبلی حفظ شده؛ برای بررسی پرداخت با پشتیبانی تماس بگیرید.');
         } else {
           setFormError(
             errJson.message ||
@@ -503,7 +497,7 @@ export const CartDrawer: React.FC = () => {
             <button
               onClick={() => {
                 setIsCartOpen(false);
-                setCheckoutStep('cart');
+                if (checkoutStep === 'success') setCheckoutStep('cart');
               }}
               className="p-1.5 rounded-full text-slate-300 hover:text-white hover:bg-[#0B152B] transition-colors"
             >
@@ -516,6 +510,7 @@ export const CartDrawer: React.FC = () => {
             <div className="flex items-center justify-between px-5 py-2.5 bg-[#040810] border-b border-[#D4AF37]/20 text-[11px]">
               <button
                 type="button"
+                disabled={!!paymentReceiptImage}
                 onClick={() => setCheckoutStep('cart')}
                 className={`flex items-center gap-1.5 transition-colors ${
                   checkoutStep === 'cart'
@@ -538,7 +533,7 @@ export const CartDrawer: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  if (checkoutStep === 'payment') setCheckoutStep('info');
+                  if (checkoutStep === 'payment' && !paymentReceiptImage) setCheckoutStep('info');
                 }}
                 className={`flex items-center gap-1.5 transition-colors ${
                   checkoutStep === 'info'
@@ -945,18 +940,18 @@ export const CartDrawer: React.FC = () => {
                         <span className="text-[10px] opacity-80 block mt-0.5">
                           {quoteSecondsLeft !== null && quoteSecondsLeft > 0
                             ? `مهلت واریز با نرخ تضمین‌شده: ${toPersianDigits(Math.floor(quoteSecondsLeft / 60))}:${toPersianDigits(String(quoteSecondsLeft % 60).padStart(2, '0'))}`
-                            : 'مهلت پیش‌فاکتور منقضی شده است. لطفاً نرخ را بروزرسانی فرمایید.'}
+                            : 'مهلت واریز تمام شده؛ اگر پرداخت کرده‌اید، فیش را با مبلغ همین پیش‌فاکتور برای بررسی مدیر ارسال کنید.'}
                         </span>
                       </div>
                     </div>
-                    {quoteSecondsLeft === 0 && (
+                    {quoteSecondsLeft === 0 && !paymentReceiptImage && (
                       <button
                         type="button"
                         onClick={obtainPriceQuote}
                         className="px-2.5 py-1.5 bg-[#D4AF37] text-slate-950 rounded-lg font-bold text-[11px] flex items-center gap-1 hover:brightness-110 cursor-pointer"
                       >
                         <RotateCcw className="w-3 h-3" />
-                        <span>بروزرسانی نرخ</span>
+                        <span>واریز نکرده‌ام؛ دریافت نرخ جدید</span>
                       </button>
                     )}
                   </div>
@@ -971,6 +966,7 @@ export const CartDrawer: React.FC = () => {
                     </div>
                     <button
                       type="button"
+                      disabled={!!paymentReceiptImage}
                       onClick={() => setCheckoutStep('info')}
                       className="text-[#D4AF37] hover:text-[#F5E8C7] flex items-center gap-1 text-[11px] font-semibold transition-colors cursor-pointer"
                     >
@@ -1272,6 +1268,9 @@ export const CartDrawer: React.FC = () => {
                       <span className="font-mono text-white font-bold">{confirmedOrder.paymentTrackingNumber}</span>
                     </div>
                   )}
+                  {confirmedOrder.paymentReviewRequired && (
+                    <p role="status" className="p-3 text-amber-200 bg-amber-500/10 rounded-xl text-sm">پرداخت با مبلغ اصلی ثبت شد و نیازمند بررسی مدیر است؛ تا تأیید مدیر، تامین کالا قطعی نیست. دوباره واریز نکنید.</p>
+                  )}
                   {confirmedOrder.paymentReceiptImage && (
                     <div className="flex justify-between items-center pt-1 border-t border-slate-700/60">
                       <span className="text-slate-300">عکس فیش ضمیمه:</span>
@@ -1407,7 +1406,8 @@ export const CartDrawer: React.FC = () => {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setCheckoutStep('info')}
+                    disabled={!!paymentReceiptImage}
+                      onClick={() => setCheckoutStep('info')}
                     className="flex-1 py-3 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
                   >
                     ویرایش مشخصات
@@ -1418,7 +1418,7 @@ export const CartDrawer: React.FC = () => {
                     disabled={isSubmitting || isReadingReceipt || !paymentReceiptImage}
                     className="flex-[2] flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3 rounded-xl hover:brightness-110 active:scale-98 transition-all text-xs shadow-md cursor-pointer disabled:opacity-75"
                   >
-                    <span>{isSubmitting ? 'در حال ثبت سفارش...' : isReadingReceipt ? 'در حال آماده‌سازی فیش...' : paymentReceiptImage ? 'تأیید نهایی و ارسال فیش' : 'ابتدا عکس فیش را بارگذاری کنید'}</span>
+                    <span>{isSubmitting ? 'در حال ثبت سفارش...' : isReadingReceipt ? 'در حال آماده‌سازی فیش...' : paymentReceiptImage ? (quoteSecondsLeft === 0 ? 'ارسال پرداخت با مبلغ قبلی برای بررسی مدیر' : 'تأیید نهایی و ارسال فیش') : 'ابتدا عکس فیش را بارگذاری کنید'}</span>
                   </button>
                 </div>
               )}

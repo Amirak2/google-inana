@@ -129,6 +129,7 @@ export interface Order {
   goldPriceAtCheckout: number;
   status: OrderStatus;
   inventoryReleased?: boolean;
+  paymentReviewRequired?: boolean;
   idempotencyKey?: string;
   quoteId?: string;
   paymentMethod?: 'card_to_card' | 'online' | 'cash';

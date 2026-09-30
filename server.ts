@@ -1,3 +1,4 @@
+import { cartQuantities, boundedLogDetails } from './server/checkoutSafety';
 import { BRS_USER_AGENT, parseBrsGold } from './server/brsGold';
 import { validateReceipt } from './server/receiptValidation';
 import express from './server/router';
@@ -912,6 +913,18 @@ app.get('/api/user/favorites', requireAuth, (req: AuthenticatedRequest, res: Res
   res.json({ favorites });
 });
 
+app.patch('/api/user/favorites', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  const { productId, action } = req.body;
+  if (typeof productId !== 'string' || productId.length > 120 || !['add', 'remove'].includes(action) || (action === 'add' && !productsList.some(p => p.id === productId))) {
+    res.status(400).json({ error: 'محصول یا عملیات علاقه‌مندی نامعتبر است.' }); return;
+  }
+  const favorites = new Set<string>(store.get('favorites', req.user!.uid) || []);
+  if (action === 'add') favorites.add(productId); else favorites.delete(productId);
+  if (favorites.size > 200) { res.status(400).json({ error: 'حداکثر ۲۰۰ محصول قابل ذخیره است.' }); return; }
+  store.set('favorites', req.user!.uid, [...favorites]);
+  res.json({ success: true, favorites: [...favorites] });
+});
+
 app.put('/api/user/favorites', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const favorites: string[] | null = Array.isArray(req.body?.favorites)
     ? [...new Set<string>(req.body.favorites.filter((id: unknown): id is string => typeof id === 'string' && id.length <= 120))].slice(0, 200)
@@ -924,6 +937,34 @@ app.put('/api/user/favorites', requireAuth, (req: AuthenticatedRequest, res: Res
   const validated = favorites.filter((id) => validProductIds.has(id));
   store.set('favorites', req.user!.uid, validated);
   res.json({ favorites: validated });
+});
+
+// All-or-nothing checkout reservation. No writes happen until every item passes.
+function reserveCart(items: unknown, owner: string, expiresAt: number) {
+  const quantities = cartQuantities(items);
+  const deadlines = new Map<string, number>();
+  for (const [id, quantity] of quantities) {
+    const existing = (stockReservations.get(id) || []).find(r => r.userId === owner && r.expiresAt > Date.now());
+    const protectedQuantity = Math.max(quantity, existing?.quantity || 0);
+    quantities.set(id, protectedQuantity);
+    deadlines.set(id, Math.max(expiresAt, existing?.expiresAt || 0));
+    const product = productsList.find(p => p.id === id);
+    if (!product || getAvailableStock(product, owner) < protectedQuantity) throw new Error('موجودی یکی از محصولات سبد کافی نیست. لطفاً سبد را بررسی کنید.');
+  }
+  for (const [id, quantity] of quantities) {
+    const remaining = (stockReservations.get(id) || []).filter(r => r.userId !== owner && r.expiresAt > Date.now());
+    stockReservations.set(id, [...remaining, { productId: id, quantity, userId: owner, expiresAt: deadlines.get(id)! }]);
+  }
+}
+app.post('/api/cart/reserve-batch', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  if (!checkRateLimit(`reserve_batch_${req.user!.uid}`, 15, 60000).allowed) {
+    res.status(429).json({ error: 'درخواست رزرو بیش از حد مجاز است.' }); return;
+  }
+  try {
+    const reservedUntil = Date.now() + 15 * 60000;
+    reserveCart(req.body.items, `usr_${req.user!.uid}`, reservedUntil);
+    res.json({ success: true, reservedUntil });
+  } catch (error: any) { res.status(409).json({ error: error.message }); }
 });
 
 // Temporary stock reservation endpoint during checkout step (10 minutes TTL)
@@ -980,8 +1021,8 @@ app.post('/api/cart/reserve', authenticateUser, (req: AuthenticatedRequest, res:
   const existingIdx = list.findIndex((r) => r.userId === uId);
   const expiresAt = Date.now() + 10 * 60 * 1000;
   if (existingIdx >= 0) {
-    list[existingIdx].quantity = qty;
-    list[existingIdx].expiresAt = expiresAt;
+    list[existingIdx].quantity = Math.max(qty, list[existingIdx].quantity);
+    list[existingIdx].expiresAt = Math.max(expiresAt, list[existingIdx].expiresAt);
   } else {
     list.push({ productId, quantity: qty, userId: uId, expiresAt });
   }
@@ -1330,6 +1371,7 @@ interface ServerPriceQuote {
   goldPriceAtQuote: number;
   expiresAt: number;
   createdAt: number;
+  retainUntil?: number;
   userId?: string;
 }
 
@@ -1402,8 +1444,14 @@ app.get('/api/orders/track/:trackingCode', (req: Request, res: Response) => {
 });
 
 // Server-Side Price Quote generation with 15-minute price lock
-app.post('/api/orders/quote', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
+app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const { items } = req.body;
+  const nowForQuote = Date.now();
+  const ownerQuotes = [...quotesMap.values()].filter(q => q.userId === req.user!.uid && (q.retainUntil ?? q.expiresAt + 86400000) > nowForQuote);
+  if (!checkRateLimit(`quote_user_${req.user!.uid}`, 10, 60000).allowed || !checkRateLimit(`quote_ip_${req.ip}`, 30, 60000).allowed || ownerQuotes.filter(q => q.expiresAt > nowForQuote).length >= 3 || ownerQuotes.length >= 20) {
+    res.status(429).json({ error: 'سقف پیش‌فاکتورهای شما پر شده است. از پیش‌فاکتور فعلی استفاده کنید یا کمی بعد تلاش کنید.' }); return;
+  }
+  try { cartQuantities(items); } catch (error: any) { res.status(400).json({ error: error.message }); return; }
   if (!items || !Array.isArray(items) || items.length === 0) {
     res.status(400).json({ error: 'اقلام پیش‌فاکتور نامعتبر است.' });
     return;
@@ -1454,6 +1502,8 @@ app.post('/api/orders/quote', authenticateUser, (req: AuthenticatedRequest, res:
   const quoteTtlMs = 15 * 60 * 1000;
   const expiresAt = Date.now() + quoteTtlMs;
 
+  try { reserveCart(items, `usr_${req.user!.uid}`, expiresAt); }
+  catch (error: any) { res.status(409).json({ error: error.message }); return; }
   const quoteRecord: ServerPriceQuote = {
     quoteId,
     items: quoteItems,
@@ -1462,7 +1512,8 @@ app.post('/api/orders/quote', authenticateUser, (req: AuthenticatedRequest, res:
     goldPriceAtQuote: currentGoldPrice,
     expiresAt,
     createdAt: Date.now(),
-    userId: req.user?.uid,
+    retainUntil: expiresAt + 86400000,
+    userId: req.user!.uid,
   };
 
   quotesMap.set(quoteId, quoteRecord);
@@ -1470,7 +1521,7 @@ app.post('/api/orders/quote', authenticateUser, (req: AuthenticatedRequest, res:
   // Expired quotes housekeeping
   const now = Date.now();
   for (const [k, q] of quotesMap.entries()) {
-    if (now > q.expiresAt + 60 * 60 * 1000) {
+    if (now > (q.retainUntil ?? q.expiresAt + 86400000)) {
       quotesMap.delete(k);
     }
   }
@@ -1561,6 +1612,8 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
       }
 
       // B. Authoritative Quote & Items Matching INSIDE transaction (Issue #2 Fix)
+      let paymentReviewRequired = false;
+      let inventoryUnavailable = false;
       let effectiveGoldPrice = currentGoldState.pricePerGram;
       let validatedItems: Order['items'] = [];
       let computedTotalWeight = 0;
@@ -1569,12 +1622,14 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
 
       if (quoteId && typeof quoteId === 'string') {
         const activeQuote = quotesMap.get(quoteId.trim());
-        if (!activeQuote || Date.now() > activeQuote.expiresAt) {
+        if (!activeQuote || Date.now() > (activeQuote.retainUntil ?? activeQuote.expiresAt + 86400000)) {
           const err: any = new Error('پیش‌فاکتور قیمت طلا منقضی گردیده است. لطفاً مجدداً پیش‌فاکتور دریافت نمایید.');
           err.statusCode = 400;
           err.quoteExpired = true;
           throw err;
         }
+
+        paymentReviewRequired = Date.now() > activeQuote.expiresAt;
 
         // Strict ownership verification: A user cannot submit or steal another user's quote
         if (activeQuote.userId && activeQuote.userId !== orderUserId) {
@@ -1678,6 +1733,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
       // D. Verify stock availability INSIDE transaction (Issue #2 Fix)
       for (const [pId, totalRequestedQty] of aggregatedQuantities.entries()) {
         const product = productsList.find((p) => p.id === pId);
+        if (!product && paymentReviewRequired) { inventoryUnavailable = true; continue; }
         if (!product) {
           const err: any = new Error(`محصول با شناسه ${pId} یافت نشد.`);
           err.statusCode = 404;
@@ -1685,6 +1741,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
         }
         const available = getAvailableStock(product, uId);
         if (product.stock !== undefined && available < totalRequestedQty) {
+          if (paymentReviewRequired) { inventoryUnavailable = true; continue; }
           const err: any = new Error(`متأسفانه مجموع تعداد درخواستی قطعه «${product.title}» (${totalRequestedQty} عدد) بیش از موجودی قابل سفارش (${available} عدد) است.`);
           err.statusCode = 409;
           err.productId = product.id;
@@ -1697,7 +1754,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
       // E. Deduct stock atomically in SQLite DB & in-memory cache (Issue #2 & #3 Fix)
       for (const [pId, totalQty] of aggregatedQuantities.entries()) {
         const product = productsList.find((p) => p.id === pId);
-        if (product && product.stock !== undefined) {
+        if (!inventoryUnavailable && product && product.stock !== undefined) {
           product.stock = Math.max(0, product.stock - totalQty);
           saveProductToDb(product); // Atomic write to SQLite products table
         }
@@ -1718,7 +1775,8 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
         customerPhone: phoneVal.phone,
         customerAddress: addressVal.value,
         contactMethod: safeContactMethod,
-        notes,
+        notes: paymentReviewRequired ? `${String(notes || '').slice(0, 500)}\nپرداخت پس از پایان مهلت: بررسی فیش با مبلغ اصلی پیش‌فاکتور الزامی است.${inventoryUnavailable ? ' موجودی تخصیص نیافته؛ تامین کالا یا بازگشت وجه باید بررسی شود.' : ''}` : notes,
+        paymentReviewRequired,
         items: validatedItems,
         totalWeight: Number(computedTotalWeight.toFixed(3)),
         totalPrice: computedTotalPrice,
@@ -1729,7 +1787,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
         paymentReceiptImage: paymentReceiptImage || '',
         paymentDate: new Date().toISOString(),
         createdAt: new Date().toISOString(),
-        inventoryReleased: false,
+        inventoryReleased: inventoryUnavailable,
         idempotencyKey: idempotencyKey || undefined,
         quoteId: quoteId || undefined,
       };
@@ -1845,7 +1903,7 @@ async function handleOrderStatusUpdate(
         order.inventoryReleased = true;
       }
       // 2. Transition from Rejected/Cancelled to Active status: Deduct inventory again if available
-      else if (status !== undefined && !isRejecting && wasRejected && order.inventoryReleased) {
+      else if (status !== undefined && !isRejecting && (wasRejected || (order.paymentReviewRequired && status !== 'در انتظار بررسی')) && order.inventoryReleased) {
         for (const [productId, quantity] of quantities) {
           const prod = productsList.find((p) => p.id === productId);
           if (!prod || getAvailableStock(prod) < quantity) {
@@ -1864,6 +1922,7 @@ async function handleOrderStatusUpdate(
         order.inventoryReleased = false;
       }
 
+      if (status && !isRejecting && status !== 'در انتظار بررسی') order.paymentReviewRequired = false;
       if (status) {
         order.status = status;
         order.reviewedAt = new Date().toISOString();
@@ -2261,11 +2320,7 @@ app.post('/api/logs', (req: Request, res: Response) => {
   const safeLevel = (['info', 'warn', 'error', 'security', 'order'] as const).includes(level) ? level : 'info';
   const allowedModules: SystemLogModule[] = ['API', 'AUTH', 'ADMIN', 'ORDERS', 'GOLD_PRICE', 'INVENTORY', 'CLIENT', 'SYSTEM'];
   const safeModule: SystemLogModule = allowedModules.includes(module as SystemLogModule) ? (module as SystemLogModule) : 'CLIENT';
-  const safeDetails = details
-    ? typeof details === 'object'
-      ? JSON.parse(JSON.stringify(details).slice(0, 2000))
-      : String(details).slice(0, 2000)
-    : undefined;
+  const safeDetails = boundedLogDetails(details);
 
   const log = logger.addLog({
     level: safeLevel,
