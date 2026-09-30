@@ -37,7 +37,7 @@ export const AuthModal: React.FC = () => {
     updateUserProfileData,
   } = useAuth();
 
-  const [mode, setMode] = useState<'otp' | 'password' | 'profile'>('otp');
+  const [mode, setMode] = useState<'otp' | 'register' | 'password' | 'profile'>('otp');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [credentialCode, setCredentialCode] = useState('');
@@ -72,7 +72,7 @@ export const AuthModal: React.FC = () => {
       setDisplayName(userProfile?.displayName || currentUser.displayName || '');
       setAddress(userProfile?.address || '');
     } else {
-      setMode('otp'); // Default to convenient SMS OTP
+      setMode(authModalMode === 'register' ? 'register' : 'otp');
       setUsername('');
       setOtpStep('phone');
       setOtpCode('');
@@ -138,6 +138,17 @@ export const AuthModal: React.FC = () => {
 
   if (!isAuthModalOpen) return null;
 
+  const registrationFields = (
+    <div className="space-y-2">
+      <label htmlFor="register-username" className="block text-xs text-slate-300">نام کاربری</label>
+      <input id="register-username" dir="ltr" autoComplete="username" required minLength={3} maxLength={32} value={username} onChange={event => setUsername(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
+      <p className="text-[11px] text-slate-400">۳ تا ۳۲ کاراکتر انگلیسی با شروع حرف؛ عدد، نقطه، خط تیره و زیرخط مجازند.</p>
+      <label htmlFor="register-password" className="block text-xs text-slate-300">رمز عبور</label>
+      <input id="register-password" type="password" dir="ltr" autoComplete="new-password" required minLength={12} maxLength={128} value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-xl border border-slate-700 bg-[#0A1120] px-3 py-2.5 text-sm text-white" />
+      <p className="text-[11px] text-slate-400">حداقل ۱۲ کاراکتر. پس از تأیید شماره، ورود با رمز هم فعال می‌شود.</p>
+    </div>
+  );
+
   const normalizeDigits = (num: string) =>
     num
       .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
@@ -155,6 +166,10 @@ export const AuthModal: React.FC = () => {
   const handleSendOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const cleanPhone = normalizePhone(mobileNumber);
+    if (mode === 'register' && (!/^[a-z][a-z0-9._-]{2,31}$/i.test(username.trim()) || password.length < 12 || password.length > 128)) {
+      setErrorMsg('نام کاربری انگلیسی ۳ تا ۳۲ کاراکتر با شروع حرف و رمز عبور ۱۲ تا ۱۲۸ کاراکتر وارد کنید.');
+      return;
+    }
     if (!cleanPhone || cleanPhone.length !== 11 || !cleanPhone.startsWith('09')) {
       setErrorMsg('لطفاً شماره موبایل ۱۱ رقمی معتبر با فرمت ...۰۹ وارد کنید.');
       return;
@@ -191,7 +206,8 @@ export const AuthModal: React.FC = () => {
     setSubmitting(true);
     setErrorMsg(null);
     try {
-      const result = await verifySmsOtp(cleanPhone, cleanCode, otpDisplayName);
+      const result = await verifySmsOtp(cleanPhone, cleanCode, otpDisplayName, isOtpNewUser ? { username: username.trim(), password } : undefined);
+      setPassword('');
       setSuccessMsg(
         result.isNewUser
           ? 'خوش آمدید! حساب کاربری شما با موفقیت فعال شد.'
@@ -325,7 +341,7 @@ export const AuthModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-base font-bold text-white">
-                {mode === 'profile' ? 'حساب کاربری اینانا' : mode === 'password' ? 'ورود با نام کاربری' : 'ورود و ثبت‌نام با شماره موبایل'}
+                {mode === 'profile' ? 'حساب کاربری اینانا' : mode === 'register' ? 'ثبت‌نام در اینانا' : mode === 'password' ? 'ورود با نام کاربری' : 'ورود با شماره موبایل'}
               </h2>
               <span className="text-[11px] text-[#E6CA65]">
                 {mode === 'profile'
@@ -361,7 +377,8 @@ export const AuthModal: React.FC = () => {
           )}
 
           {!currentUser && (
-            <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl bg-[#0A1120] p-1" role="tablist" aria-label="روش ورود">
+            <div className="mb-5 grid grid-cols-3 gap-2 rounded-xl bg-[#0A1120] p-1" role="tablist" aria-label="ورود و ثبت‌نام">
+              <button type="button" role="tab" aria-selected={mode === 'register'} onClick={() => { setMode('register'); setOtpStep('phone'); setErrorMsg(null); setSuccessMsg(null); }} className={`rounded-lg px-2 py-2 text-xs ${mode === 'register' ? 'bg-[#D4AF37] font-bold text-slate-950' : 'text-slate-300'}`}>ثبت‌نام</button>
               <button type="button" role="tab" aria-selected={mode === 'otp'} onClick={() => { setMode('otp'); setErrorMsg(null); }} className={`rounded-lg px-2 py-2 text-xs ${mode === 'otp' ? 'bg-[#D4AF37] font-bold text-slate-950' : 'text-slate-300'}`}>پیامک</button>
               <button type="button" role="tab" aria-selected={mode === 'password'} onClick={() => { setMode('password'); setErrorMsg(null); }} className={`rounded-lg px-2 py-2 text-xs ${mode === 'password' ? 'bg-[#D4AF37] font-bold text-slate-950' : 'text-slate-300'}`}>نام کاربری و رمز</button>
             </div>
@@ -381,10 +398,11 @@ export const AuthModal: React.FC = () => {
           {/* ============================================================== */}
           {/* 1. OTP AUTHENTICATION VIEW */}
           {/* ============================================================== */}
-          {mode === 'otp' && !currentUser && (
+          {(mode === 'otp' || mode === 'register') && !currentUser && (
             <div>
               {otpStep === 'phone' ? (
                 <form onSubmit={handleSendOtp} className="space-y-4">
+                  {mode === 'register' && registrationFields}
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                       شماره تلفن همراه خود را وارد نمایید
@@ -430,6 +448,7 @@ export const AuthModal: React.FC = () => {
                 </form>
               ) : (
                 <form onSubmit={handleVerifyOtp} className="space-y-4">
+                  {isOtpNewUser && mode === 'otp' && registrationFields}
                   <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                     <div className="text-xs text-slate-300">
                       <span>ارسال به شماره: </span>

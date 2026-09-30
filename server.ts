@@ -2141,14 +2141,14 @@ app.post('/api/auth/otp/verify', (req: Request, res: Response) => {
   }
 
   try {
-    const { mobile, code, displayName } = req.body;
+    const { mobile, code, displayName, username, password } = req.body;
     const phoneVal = validatePhoneNumber(mobile);
     if (!phoneVal.isValid || !code) {
       res.status(400).json({ success: false, error: 'شماره موبایل و کد تایید ۵ رقمی الزامی هستند.' });
       return;
     }
 
-    const result = verifySmsOtpAndAuthenticate(phoneVal.phone, String(code).trim(), displayName);
+    const result = verifySmsOtpAndAuthenticate(phoneVal.phone, String(code).trim(), displayName, { username, password });
     setAuthCookie(res, result.token);
     logger.security(
       'AUTH',

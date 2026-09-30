@@ -183,7 +183,7 @@ function verifySessionToken(token: string): UserProfile | null {
     if (!payloadB64 || !signature) return null;
 
     const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(payloadB64).digest('base64url');
-    
+
     // Constant-time HMAC comparison to prevent timing attacks
     const expBuf = Buffer.from(expectedSig);
     const sigBuf = Buffer.from(signature);
@@ -234,6 +234,14 @@ function findUserByMobile(mobile: string): StoredUser | undefined {
 
 function normalizeUsername(value: string): string {
   return String(value || '').trim().toLowerCase();
+}
+
+function validateCredentials(username: string | undefined, password: string | undefined, uid?: string): string {
+  const normalized = normalizeUsername(username);
+  if (!/^[a-z][a-z0-9._-]{2,31}$/.test(normalized)) throw new Error('نام کاربری باید ۳ تا ۳۲ کاراکتر انگلیسی باشد و با حرف شروع شود.');
+  if (typeof password !== 'string' || password.length < 12 || password.length > 128) throw new Error('رمز عبور باید بین ۱۲ تا ۱۲۸ کاراکتر باشد.');
+  if ([...usersCache.values()].some(candidate => candidate.uid !== uid && candidate.username?.toLowerCase() === normalized)) throw new Error('این نام کاربری قبلاً انتخاب شده است.');
+  return normalized;
 }
 
 function setPasswordCredentials(uid: string, username: string, password: string, code: string): { user: UserProfile; token: string } {
@@ -424,7 +432,7 @@ function updateUser(
   }
 
   if (updates.displayName !== undefined) targetUser.displayName = updates.displayName.trim();
-  
+
   // Issue #6 Fix: Bypassing SMS OTP for phone change is strictly prevented.
   // Direct modification of phoneNumber is prohibited.
   if (updates.phoneNumber !== undefined && updates.phoneNumber.trim() !== (targetUser.phoneNumber || '')) {
@@ -554,7 +562,8 @@ async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
 function verifySmsOtpAndAuthenticate(
   mobile: string,
   code: string,
-  displayName?: string
+  displayName?: string,
+  credentials?: { username: string; password: string }
 ): { user: UserProfile; token: string; isNewUser: boolean } {
   const cleanMobile = normalizeIranianMobile(mobile);
   const cleanCode = (code || '').trim().replace(/\D/g, '');
@@ -590,13 +599,17 @@ function verifySmsOtpAndAuthenticate(
     throw new Error(`کد تایید اشتباه است. (${remainingAttempts} تلاش دیگر باقی مانده)`);
   }
 
+  const existingUser = findSmsLoginUser(cleanMobile);
+  // New accounts require both credentials; SMS login must never reset an existing password.
+  const registrationUsername = !existingUser ? validateCredentials(credentials?.username, credentials?.password) : undefined;
+
   // OTP is correct! Clear it from cache
   otpCache.delete(cleanMobile);
 
   const isMasterAdmin = cleanMobile === normalizeIranianMobile(PRIMARY_ADMIN_PHONE);
 
   // The designated admin phone always resolves to the same email-backed account.
-  let user = findSmsLoginUser(cleanMobile);
+  let user = existingUser;
   let isNewUser = false;
 
   if (!user) {
@@ -614,6 +627,11 @@ function verifySmsOtpAndAuthenticate(
       address: '',
       createdAt: new Date().toISOString(),
     };
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    user.username = registrationUsername;
+    user.salt = salt;
+    user.passwordHash = hashPassword(credentials!.password, salt);
 
     usersCache.set(user.email.toLowerCase(), user);
     saveUsers();

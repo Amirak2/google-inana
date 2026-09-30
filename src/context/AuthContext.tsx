@@ -19,7 +19,7 @@ interface AuthContextType {
   openAuthModal: (mode?: 'login' | 'register' | 'profile') => void;
   closeAuthModal: () => void;
   sendSmsOtp: (mobile: string) => Promise<{ expiresInSeconds: number; isRegistered: boolean }>;
-  verifySmsOtp: (mobile: string, code: string, displayName?: string) => Promise<{ isNewUser: boolean }>;
+  verifySmsOtp: (mobile: string, code: string, displayName?: string, credentials?: { username: string; password: string }) => Promise<{ isNewUser: boolean }>;
   loginWithPassword: (username: string, password: string) => Promise<void>;
   setPasswordCredentials: (username: string, password: string, code: string) => Promise<void>;
   requestPhoneChange: (newMobile: string) => Promise<void>;
@@ -95,7 +95,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const verifySmsOtp = async (
     mobile: string,
     code: string,
-    displayName?: string
+    displayName?: string,
+    credentials?: { username: string; password: string }
   ): Promise<{ isNewUser: boolean }> => {
     const res = await fetch('/api/auth/otp/verify', {
       method: 'POST',
@@ -104,6 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         mobile: mobile.trim(),
         code: code.trim(),
         displayName: displayName?.trim(),
+        username: credentials?.username,
+        password: credentials?.password,
       }),
     });
 

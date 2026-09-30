@@ -35,7 +35,7 @@ try {
   const firstCode = store.map('otp').get(phone).code;
   assert.throws(() => auth.verifySmsOtpAndAuthenticate(phone, firstCode.slice(0, 4)), /۵ رقم/);
   assert.equal(store.map('otp').get(phone).attempts, 0);
-  const newAccount = auth.verifySmsOtpAndAuthenticate(phone, firstCode, 'مشتری آزمایشی');
+  const newAccount = auth.verifySmsOtpAndAuthenticate(phone, firstCode, 'مشتری آزمایشی', { username: 'initial_buyer', password: 'Initial-password-123' });
   assert.equal(newAccount.isNewUser, true);
   assert.equal(newAccount.user.phoneNumber, phone);
   assert.equal(store.map('otp').has(phone), false);
@@ -52,7 +52,7 @@ try {
   assert.throws(() => auth.loginWithUsername('buyer_one', 'wrong-password'), /نادرست/);
   const secondPhone = '09120000006';
   await auth.sendSmsOtpCode(secondPhone);
-  const secondUser = auth.verifySmsOtpAndAuthenticate(secondPhone, store.map('otp').get(secondPhone).code);
+  const secondUser = auth.verifySmsOtpAndAuthenticate(secondPhone, store.map('otp').get(secondPhone).code, undefined, { username: 'second_buyer', password: 'Another-password-123' });
   const secondCode = '54321';
   store.map('otp').set(secondPhone, { code: secondCode, expiresAt: Date.now() + 180000, attempts: 0 });
   assert.throws(() => auth.setPasswordCredentials(secondUser.user.uid, 'buyer_one', 'another-long-password-123', secondCode), /قبلاً/);
