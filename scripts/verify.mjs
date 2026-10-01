@@ -22,7 +22,7 @@ assert.equal(profile.status, 200); assert.equal(profile.body.user.displayName, '
 const items = [{ productId: products.body.find(p => p.stock > 0).id, quantity: 1 }];
 assert.equal((await request('/api/cart/reserve-batch', 'POST', { items })).status, 200);
 const quote = await request('/api/orders/quote', 'POST', { items }); assert.equal(quote.status, 200);
-const body = { items, quoteId: quote.body.quoteId, idempotencyKey: 'full-flow', customerName: 'مشتری تست', customerPhone: mobile, customerAddress: 'تهران خیابان آزمایشی پلاک یک', paymentReceiptImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=' };
+const body = { items, quoteId: quote.body.quoteId, idempotencyKey: 'full-flow', customerName: 'مشتری تست', customerPhone: mobile, customerAddress: 'تهران خیابان آزمایشی پلاک یک', paymentReceiptImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAACXBIWXMAAAPoAAAD6AG1e1JrAAABKUlEQVR4nO3RMQEAAAyDsPk33cnIQwxwcAt1Np8GYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1oBZD5TpSzIEvJyiAAAAAElFTkSuQmCC' };
 const order = await request('/api/orders', 'POST', body); assert.equal(order.status, 201);
 assert.equal((await request('/api/orders', 'POST', body)).body.order.id, order.body.order.id);
 assert.ok((await request('/api/orders')).body.some(row => row.id === order.body.order.id));

@@ -1,4 +1,6 @@
-export function validateReceipt(value: unknown): string | null {
+import sharp from 'sharp';
+
+export async function validateReceipt(value: unknown): Promise<string | null> {
   if (typeof value !== 'string' || !value.trim()) {
     return 'برای ثبت سفارش، بارگذاری عکس فیش بانکی الزامی است.';
   }
@@ -14,5 +16,14 @@ export function validateReceipt(value: unknown): string | null {
     : match[1] === 'webp' ? bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP'
     : ['GIF87a', 'GIF89a'].includes(bytes.toString('ascii', 0, 6));
   if (!valid) return 'تصویر فیش معتبر نیست. لطفاً عکس فیش را دوباره بارگذاری کنید.';
+  try {
+    const image = sharp(bytes, { failOn: 'warning', limitInputPixels: 4_000_000, limitInputChannels: 4 });
+    const metadata = await image.metadata();
+    if (metadata.format !== match[1] || (metadata.width || 0) < 128 || (metadata.height || 0) < 128 || (metadata.pages || 1) !== 1) throw new Error('Invalid receipt image');
+    // Decoding, rather than metadata/signature alone, rejects truncated pixel data.
+    await image.timeout({ seconds: 3 }).raw().toBuffer();
+  } catch {
+    return 'تصویر فیش ناقص یا نامعتبر است. لطفاً یک عکس سالم با ابعاد کوچک‌تر بارگذاری کنید.';
+  }
   return null;
 }

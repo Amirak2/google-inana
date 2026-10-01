@@ -4,10 +4,10 @@ import { createApp } from '../server.ts';
 import { createAuthStore } from '../server/authStore.ts';
 import { validateReceipt } from '../server/receiptValidation.ts';
 
-const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=';
+const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAACXBIWXMAAAPoAAAD6AG1e1JrAAABKUlEQVR4nO3RMQEAAAyDsPk33cnIQwxwcAt1Np8GYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1oBZD5TpSzIEvJyiAAAAAElFTkSuQmCC';
 const rejected = [undefined, null, '', '   ', 123, {}, 'https://example.com/receipt.jpg', '/api/receipts/another-user', 'data:image/png;base64,aGVsbG8=', 'data:image/png;base64,' + 'A'.repeat(800000)];
-for (const value of rejected) assert.ok(validateReceipt(value));
-assert.equal(validateReceipt(png), null);
+for (const value of rejected) assert.ok(await validateReceipt(value));
+assert.equal(await validateReceipt(png), null);
 
 const env = { SESSION_SECRET: 'isolated-test-secret-longer-than-32-characters', NODE_ENV: 'test' };
 const store = new Store(env);

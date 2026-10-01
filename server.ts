@@ -1,4 +1,5 @@
 import { createReservationEngine } from './server/reservations';
+import { createInventoryPolicy, expireUnreviewedInventory } from './server/inventoryPolicy';
 import { cartQuantities, boundedLogDetails } from './server/checkoutSafety';
 import { BRS_USER_AGENT, parseBrsGold } from './server/brsGold';
 import { validateReceipt } from './server/receiptValidation';
@@ -298,6 +299,9 @@ let pricingSettings: PricingSettings = {
 };
 let productsList: Product[] = getAllProductsFromDb();
 let ordersList: Order[] = getAllOrdersFromDb();
+const holdHours = Math.min(48, Math.max(1, Number(env.UNREVIEWED_ORDER_HOLD_HOURS) || 24));
+expireUnreviewedInventory(store, productsList, ordersList, holdHours);
+const inventoryPolicy = createInventoryPolicy(store);
 function saveProductsToDb(products: Product[]): void { saveAllProductsToDb(products); }
 function saveOrdersToDb(orders: Order[]): void { store.replaceMap('orders', new Map(orders.map(o => [o.id, o]))); }
 // -------------------------------------------------------------
@@ -922,11 +926,15 @@ function reserveDraft(req: AuthenticatedRequest, res: Response, items: unknown) 
     res.status(429).json({ error: 'درخواست رزرو بیش از حد مجاز است.' }); return;
   }
   try {
-    const reservedUntil = Date.now() + 15 * 60000;
+    inventoryPolicy.assertOrderLimit(req.user!.uid);
     const reservationId = `cart_usr_${req.user!.uid}`;
+    const existingUntil = [...stockReservations.values()].flat().filter(r => r.reservationId === reservationId && r.expiresAt > Date.now()).reduce((min, r) => Math.min(min, r.expiresAt), Infinity);
+    const deadline = inventoryPolicy.reserveDeadline(req.user!.uid, Date.now() + 15 * 60000, existingUntil);
+    const reservedUntil = deadline.until;
     reserveCart(items, `usr_${req.user!.uid}`, reservedUntil, reservationId);
+    inventoryPolicy.touchOwner(req.user!.uid, deadline.window);
     res.json({ success: true, reservedUntil, reservationId });
-  } catch (error: any) { res.status(409).json({ error: error.message }); }
+  } catch (error: any) { res.status(error.statusCode || 409).json({ error: error.message }); }
 }
 app.post('/api/cart/reserve-batch', requireAuth, (req: AuthenticatedRequest, res: Response) => reserveDraft(req, res, req.body.items));
 app.post('/api/cart/reserve', requireAuth, (req: AuthenticatedRequest, res: Response) => reserveDraft(req, res, [{ productId: req.body.productId, quantity: req.body.quantity }]));
@@ -1395,8 +1403,13 @@ app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Resp
   const quoteTtlMs = 15 * 60 * 1000;
   const expiresAt = Date.now() + quoteTtlMs;
 
-  try { reserveCart(items, `usr_${req.user!.uid}`, expiresAt, quoteId, `cart_usr_${req.user!.uid}`); }
-  catch (error: any) { res.status(409).json({ error: error.message }); return; }
+  try {
+    inventoryPolicy.assertOrderLimit(req.user!.uid, true);
+    const deadline = inventoryPolicy.reserveDeadline(req.user!.uid, expiresAt);
+    reserveCart(items, `usr_${req.user!.uid}`, expiresAt, quoteId, `cart_usr_${req.user!.uid}`);
+    inventoryPolicy.touchOwner(req.user!.uid, deadline.window);
+  }
+  catch (error: any) { res.status(error.statusCode || 409).json({ error: error.message }); return; }
   const quoteRecord: ServerPriceQuote = {
     quoteId,
     reservationId: quoteId,
@@ -1480,7 +1493,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
     ? String(contactMethod) as 'telegram' | 'phone' | 'sms'
     : 'phone';
 
-  const receiptError = validateReceipt(paymentReceiptImage);
+  const receiptError = await validateReceipt(paymentReceiptImage);
   if (receiptError) {
     res.status(400).json({
       error: receiptError,
@@ -1507,6 +1520,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
         }
       }
 
+      inventoryPolicy.assertOrderLimit(orderUserId);
       // B. Authoritative Quote & Items Matching INSIDE transaction (Issue #2 Fix)
       let effectiveReservationId = `cart_${uId}`;
       let paymentReviewRequired = false;
@@ -1629,6 +1643,11 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
       }
 
       // D. Verify stock availability INSIDE transaction (Issue #2 Fix)
+      try { inventoryPolicy.assertCapacity(orderUserId, aggregatedQuantities, effectiveReservationId); }
+      catch (error) {
+        if (!paymentReviewRequired) throw error;
+        inventoryUnavailable = true; // Retain an already-paid expired quote without monopolizing stock.
+      }
       for (const [pId, totalRequestedQty] of aggregatedQuantities.entries()) {
         const product = productsList.find((p) => p.id === pId);
         if (!product && paymentReviewRequired) { inventoryUnavailable = true; continue; }
@@ -1686,12 +1705,14 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
         paymentDate: new Date().toISOString(),
         createdAt: new Date().toISOString(),
         inventoryReleased: inventoryUnavailable,
+        inventoryHoldExpiresAt: new Date(Date.now() + holdHours * 3600000).toISOString(),
         idempotencyKey: idempotencyKey || undefined,
         quoteId: quoteId || undefined,
       };
 
       ordersList.unshift(newOrder);
       saveOrderToDb(newOrder); // Atomic write to SQLite orders table
+      inventoryPolicy.touchOwner(orderUserId);
 
       // G. Store idempotency key with unique constraint in SQLite (Issue #4 Fix)
       if (idempotencyKey) {
@@ -1824,6 +1845,10 @@ async function handleOrderStatusUpdate(
       if (status) {
         order.status = status;
         order.reviewedAt = new Date().toISOString();
+        if (status === 'در انتظار بررسی' && !order.inventoryReleased) {
+          order.inventoryHoldExpiresAt = new Date(Date.now() + holdHours * 3600000).toISOString();
+          delete order.inventoryHoldExpiredAt;
+        }
       }
       if (rejectionReason !== undefined) {
         order.rejectionReason = String(rejectionReason).slice(0, 500);
@@ -1982,11 +2007,14 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
 
 // 7. Authentication endpoint
 app.post('/api/auth/logout', (req: Request, res: Response) => {
+  clearAuthCookie(res);
+  if (!checkRateLimit(`logout_${req.ip}`, 30, 60000).allowed) {
+    res.status(429).json({ error: 'تعداد درخواست خروج بیش از حد مجاز است.' }); return;
+  }
   const token = extractToken(req);
   if (token) {
     revokeSessionToken(token);
   }
-  clearAuthCookie(res);
   res.json({ success: true, message: 'خروج موفقیت‌آمیز بود.' });
 });
 
@@ -2180,16 +2208,15 @@ app.post('/api/logs', (req: Request, res: Response) => {
     return;
   }
 
-  const safeLevel = (['info', 'warn', 'error', 'security', 'order'] as const).includes(level) ? level : 'info';
-  const allowedModules: SystemLogModule[] = ['API', 'AUTH', 'ADMIN', 'ORDERS', 'GOLD_PRICE', 'INVENTORY', 'CLIENT', 'SYSTEM'];
-  const safeModule: SystemLogModule = allowedModules.includes(module as SystemLogModule) ? (module as SystemLogModule) : 'CLIENT';
+  // Browser reports can never impersonate trusted server audit events.
+  const safeLevel = (['info', 'warn', 'error'] as const).includes(level) ? level : 'info';
   const safeDetails = boundedLogDetails(details);
 
   const log = logger.addLog({
     level: safeLevel,
-    module: safeModule,
+    module: 'CLIENT',
     message: msgVal.value,
-    details: safeDetails,
+    details: { clientReported: true, reportedData: safeDetails },
     ip: clientIp,
   });
   res.status(201).json({ success: true, log });

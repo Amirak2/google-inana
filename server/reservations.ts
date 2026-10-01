@@ -1,6 +1,7 @@
 import type { Store } from './storage';
 import type { Product } from '../src/types';
 import { cartQuantities } from './checkoutSafety';
+import { createInventoryPolicy } from './inventoryPolicy';
 
 export interface StockReservation {
   productId: string;
@@ -38,6 +39,8 @@ export function createReservationEngine(store: Store, products: () => Product[])
 
   function reserveCart(items: unknown, owner: string, expiresAt: number, reservationId: string, replaceId = reservationId) {
     const quantities = cartQuantities(items);
+    const policy = createInventoryPolicy(store);
+    policy.assertCapacity(owner.replace(/^usr_/, ''), quantities, replaceId);
     for (const [id, quantity] of quantities) {
       const product = products().find(p => p.id === id);
       if (!product || getAvailableStock(product, replaceId) < quantity) throw new Error('موجودی یکی از محصولات سبد کافی نیست. لطفاً سبد را بررسی کنید.');
@@ -49,6 +52,7 @@ export function createReservationEngine(store: Store, products: () => Product[])
     for (const [id, quantity] of quantities) {
       stockReservations.set(id, [...(stockReservations.get(id) || []), { productId: id, quantity, userId: owner, reservationId, expiresAt }]);
     }
+    policy.touchOwner(owner.replace(/^usr_/, ''));
   }
   return { stockReservations, getAvailableStock, reserveCart };
 }

@@ -17,7 +17,10 @@ export function createDb(store: Store) {
  };
  const deleteOrderFromDb = (id: string) => { const order = getOrderByIdOrTrackingFromDb(id); return order ? store.map('orders').delete(order.id) : false; };
  const deleteOrdersBulkFromDb = (ids: string[]) => ids.reduce((n,id) => n + Number(deleteOrderFromDb(id)), 0);
- const getIdempotentOrderFromDb = (userId: string, key: string): Order | null => store.get('idempotency', JSON.stringify([userId,key])) || null;
+ const getIdempotentOrderFromDb = (userId: string, key: string): Order | null => {
+  const saved = store.get<Order>('idempotency', JSON.stringify([userId,key]));
+  return saved ? store.get<Order>('orders', saved.id) || saved : null;
+ };
  const saveIdempotencyKeyToDb = (userId: string, key: string, _orderId: string, order: Order) => store.set('idempotency', JSON.stringify([userId,key]), order);
  const runDbTransaction = async <T>(action: () => T | Promise<T>): Promise<T> => {
   const snapshot = store.checkpoint();

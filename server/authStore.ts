@@ -167,13 +167,15 @@ function createSessionToken(user: StoredUser): string {
 }
 
 function revokeSessionToken(token: string): void {
-  if (!token || typeof token !== 'string') return;
-  revokedTokensSet.add(token.trim());
+  if (!verifySessionToken(token)) return;
+  const cleanToken = token.trim();
+  const payload = JSON.parse(Buffer.from(cleanToken.split('.')[0], 'base64url').toString('utf8'));
+  store.set('revoked', cleanToken, { expiresAt: payload.exp });
 }
 
 function verifySessionToken(token: string): UserProfile | null {
   try {
-    if (!token || typeof token !== 'string') return null;
+    if (!token || typeof token !== 'string' || token.length > 4096) return null;
     const cleanToken = token.trim();
     if (revokedTokensSet.has(cleanToken)) return null;
 

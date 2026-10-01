@@ -59,7 +59,7 @@ const originalPrice = q.totalPrice;
 store.set('market', 'gold', { pricePerGram: 30000000, isManualOverride: true });
 a.stock = 0;
 app = createApp(store, env);
-const payload = { customerName: 'مشتری تست', customerPhone: '09120000001', customerAddress: 'تهران خیابان آزمایشی پلاک یک', items, quoteId: q.quoteId, idempotencyKey: 'test-paid-expiration', paymentReceiptImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=' };
+const payload = { customerName: 'مشتری تست', customerPhone: '09120000001', customerAddress: 'تهران خیابان آزمایشی پلاک یک', items, quoteId: q.quoteId, idempotencyKey: 'test-paid-expiration', paymentReceiptImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAACXBIWXMAAAPoAAAD6AG1e1JrAAABKUlEQVR4nO3RMQEAAAyDsPk33cnIQwxwcAt1Np8GYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1oBZD5TpSzIEvJyiAAAAAElFTkSuQmCC' };
 const paid = await request('/api/orders', payload);
 assert.equal(paid.status, 201, JSON.stringify(paid.body));
 assert.equal(paid.body.order.totalPrice, originalPrice);
@@ -85,11 +85,11 @@ const longDetails = { text: 'x'.repeat(2100), nested: { values: Array(200).fill(
 assert.ok(JSON.stringify(boundedLogDetails(longDetails)).length <= 2000);
 assert.equal((await request('/api/logs', { message: 'long detail test', details: longDetails })).status, 201);
 
-// Three active quotes maximum, even if rate requests come from another IP.
+// Two active checkout slots maximum, even if requests come from another IP.
 store.map('quotes').clear(); store.map('rateLimits').clear(); store.get('products', a.id).stock = 4;
-for (let i = 0; i < 3; i++) assert.equal((await request('/api/orders/quote', { items })).status, 200);
+for (let i = 0; i < 2; i++) assert.equal((await request('/api/orders/quote', { items })).status, 200);
 assert.equal((await request('/api/orders/quote', { items })).status, 429);
-assert.equal(store.map('quotes').size, 3);
+assert.equal(store.map('quotes').size, 2);
 // A smaller new quote must not shorten an earlier quote's reserved quantity/deadline.
 store.map('quotes').clear(); store.map('reservations').clear(); store.map('rateLimits').clear();
 const large = await request('/api/orders/quote', { items: [{ productId: a.id, quantity: 3 }] });

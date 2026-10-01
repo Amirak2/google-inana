@@ -130,6 +130,8 @@ export interface Order {
   status: OrderStatus;
   inventoryReleased?: boolean;
   paymentReviewRequired?: boolean;
+  inventoryHoldExpiresAt?: string;
+  inventoryHoldExpiredAt?: string;
   idempotencyKey?: string;
   quoteId?: string;
   paymentMethod?: 'card_to_card' | 'online' | 'cash';

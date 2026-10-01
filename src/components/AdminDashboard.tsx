@@ -2520,7 +2520,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 {/* Receipt Image Button / Thumbnail */}
                                 <div className="bg-[#060B14] p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-2.5 overflow-hidden">
-                                    {ord.paymentReviewRequired && <p className="text-xs text-amber-300 p-2" role="status">پرداخت دیرهنگام؛ مبلغ پیش‌فاکتور اصلی حفظ شده است. {ord.inventoryReleased ? 'موجودی تخصیص نیافته؛ پیش از تایید تامین کالا یا بازگشت وجه را بررسی کنید.' : 'فیش و مبلغ واریز را بررسی کنید.'}</p>}
+                                    {ord.paymentReviewRequired && <p className="text-xs text-amber-300 p-2" role="status">{ord.inventoryHoldExpiredAt ? 'مهلت نگه‌داشتن موجودی پایان یافته؛ سفارش و فیش برای بررسی پرداخت حفظ شده‌اند.' : 'پرداخت دیرهنگام؛ مبلغ پیش‌فاکتور اصلی حفظ شده است.'} {ord.inventoryReleased ? 'موجودی تخصیص نیافته؛ پیش از تایید تامین کالا یا بازگشت وجه را بررسی کنید.' : 'فیش و مبلغ واریز را بررسی کنید.'}</p>}
                                     {ord.paymentReceiptImage ? (
                                       <div
                                         onClick={() => setViewingReceiptOrder(ord)}

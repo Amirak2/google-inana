@@ -246,20 +246,26 @@ class LoggerService {
   }
 
   public exportCsv(): string {
+    // Apply escaping to EVERY cell, including IDs, users and IPs, not just messages.
+    const cell = (value: unknown) => {
+      const text = String(value ?? '');
+      const dangerous = /^[\s\u0000-\u001f\ufeff]*[=+@\-＝＋－＠]/u.test(text) || /^[\t\r\n]/.test(text);
+      return `"${(dangerous ? `\t'${text}` : text).replace(/"/g, '""')}"`;
+    };
     const headers = ['شناسه', 'زمان میلادی', 'زمان شمسی', 'سطح', 'ماژول', 'پیام', 'آدرس IP', 'کاربر', 'جزئیات'];
     const rows = logsMemory.map((l) => [
       l.id,
       l.timestamp,
-      `"${l.jalaliTimestamp}"`,
+      l.jalaliTimestamp,
       l.level,
       l.module,
-      `"${(l.message || '').replace(/"/g, '""')}"`,
+      l.message || '',
       l.ip || '-',
       l.userEmail || l.userId || '-',
-      `"${JSON.stringify(l.details || {}).replace(/"/g, '""')}"`,
+      JSON.stringify(l.details || {}),
     ]);
 
-    return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    return [headers.map(cell).join(','), ...rows.map((r) => r.map(cell).join(','))].join('\r\n');
   }
 }
 

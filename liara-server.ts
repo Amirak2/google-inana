@@ -7,8 +7,11 @@ import { PostgresStore, PostgresConflictError } from './server/postgresStorage';
 import { getMediaObject } from './server/objectStorage';
 import { configureTrustedProxy, normalizeClientIp } from './server/clientIp';
 import { runPostgresRequest } from './server/postgresRequest';
+import { securityHeaders } from './server/securityHeaders';
 
 const app = express();
+app.disable('x-powered-by');
+app.use(securityHeaders);
 configureTrustedProxy(app, process.env.TRUSTED_PROXY_CIDRS);
 app.use(express.raw({ type: '*/*', limit: '4mb' }));
 

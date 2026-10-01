@@ -27,7 +27,7 @@ assert.notEqual(first.body.quoteId, second.body.quoteId);
 assert.equal(store.get('reservations', product.id).length, 2);
 await request('/api/cart/release-reservation', { productId: product.id });
 assert.equal(store.get('reservations', product.id).length, 2, 'draft release must not affect either quote');
-const payload = { items, customerName: 'مشتری تست', customerPhone: '09120000701', customerAddress: 'تهران خیابان آزمایشی پلاک یک', paymentReceiptImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=' };
+const payload = { items, customerName: 'مشتری تست', customerPhone: '09120000701', customerAddress: 'تهران خیابان آزمایشی پلاک یک', paymentReceiptImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAAACXBIWXMAAAPoAAAD6AG1e1JrAAABKUlEQVR4nO3RMQEAAAyDsPk33cnIQwxwcAt1Np8GYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1gCsAVgDsAZgDcAagDUAawDWAKwBWAOwBmANwBqANQBrANYArAFYA7AGYA3AGoA1AGsA1oBZD5TpSzIEvJyiAAAAAElFTkSuQmCC' };
 assert.equal((await request('/api/orders', { ...payload, quoteId: first.body.quoteId })).status, 201);
 assert.deepEqual(store.get('reservations', product.id).map(r => r.reservationId), [second.body.quoteId]);
 assert.equal((await request('/api/cart/reserve', { ...items[0] }, two.token)).status, 200);

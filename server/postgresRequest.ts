@@ -41,7 +41,7 @@ export function requestBuckets(pathname: string): string[] {
   const buckets = ['products', 'migrations', 'market', 'settings', 'collections', 'users', 'logs', 'revoked', 'rateLimits', 'media', 'phoneClaims'];
   if (pathname.startsWith('/api/auth/')) buckets.push('otp', 'phoneOtp');
   if (pathname.includes('/favorites')) buckets.push('favorites');
-  if (/^\/api\/(orders|cart|products|admin)/.test(pathname)) buckets.push('orders', 'idempotency', 'quotes', 'quoteOwners', 'reservations', 'trackingCodes');
+  if (/^\/api\/(orders|cart|products|admin)/.test(pathname)) buckets.push('orders', 'idempotency', 'quotes', 'quoteOwners', 'reservations', 'trackingCodes', 'inventoryHolds');
   return buckets;
 }
 
