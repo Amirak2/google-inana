@@ -47,9 +47,13 @@ const second = {...first, uid: 'second', email: 'second@local.test', displayName
 let serverUser = first;
 let pendingProfile, pendingOrder;
 let delayProfile = false, delayOrder = false;
+let delayMe = false, pendingMe;
 const json = (data) => new Response(JSON.stringify(data), {status: 200});
 globalThis.fetch = async (url, options = {}) => {
-  if (url === '/api/auth/me') return json({user: serverUser});
+  if (url === '/api/auth/me') {
+    if (delayMe) return new Promise(resolve => {pendingMe = () => resolve(json({user: first}));});
+    return json({user: serverUser});
+  }
   if (url === '/api/auth/profile') {
     const result = json({success: true, user: {...serverUser, ...JSON.parse(options.body)}});
     if (delayProfile) return new Promise(resolve => {pendingProfile = () => resolve(result);});
@@ -126,6 +130,14 @@ try {
   await act(async () => {pendingOrder(); await settle();});
   assert.equal(clearCount, before);
   assert.equal(document.body.textContent.includes('FIRST-ORDER'), false);
+  delayMe = true;
+  await act(async () => {root.render(React.createElement(Harness, {key: 'reload'})); await settle();});
+  assert.equal(authHarness.loading, true);
+  await act(async () => {await authHarness.verifySmsOtp(second.phoneNumber, '12345');});
+  assert.equal(authHarness.loading, false, 'Successful login must finish loading before slow restoration');
+  await act(async () => {pendingMe(); await settle();});
+  assert.equal(authHarness.currentUser.uid, second.uid, 'Old restored account must not overwrite a new login');
+  assert.equal(authHarness.loading, false);
   console.log('PASS: cookie-only profile edit, checkout privacy on account switch, stale profile and order responses.');
 } finally {
   await act(async () => root.unmount());

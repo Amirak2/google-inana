@@ -68,13 +68,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const epoch = authEpoch.current;
     restoreLocalSession().then((hasSession) => {
+      setLoading(false);
       if (epoch !== authEpoch.current) return;
       if (!hasSession) {
         setCurrentUser(null);
         setUserProfile(null);
         setIsAdmin(false);
       }
-      setLoading(false);
     });
   }, []);
 
@@ -129,6 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(authUser);
     setUserProfile(u);
     setIsAdmin(u.role === 'admin');
+    setLoading(false);
     closeAuthModal();
 
     return { isNewUser: Boolean(data.isNewUser) };
@@ -175,6 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(null);
     setUserProfile(null);
     setIsAdmin(false);
+    setLoading(false);
     closeAuthModal();
   };
 
