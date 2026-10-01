@@ -382,6 +382,10 @@ function recordHourlyGoldPoint(): void {
   if (!Number.isFinite(currentGoldState.pricePerGram) || currentGoldState.pricePerGram <= 0) return;
   const now = Date.now();
   const hourKey = Math.floor(now / CACHE_LIFETIME_MS);
+  // Reading an unchanged price must not rewrite the shared history timestamp.
+  // Keep the existing point until its price changes or the next hour begins.
+  const existingPoint = hourlyGoldHistory.find((item) => Math.floor(item.timestamp / CACHE_LIFETIME_MS) === hourKey);
+  if (existingPoint?.price === currentGoldState.pricePerGram && existingPoint.isEstimated === false) return;
   const point: HourlyGoldPoint = {
     timestamp: now,
     time: new Date(now).toLocaleTimeString('fa-IR', {
@@ -656,6 +660,7 @@ app.post('/api/admin/gold-price', requireAdminAuth, (req: AuthenticatedRequest, 
   }
 
   currentGoldState.timestamp = new Date().toISOString();
+  recordHourlyGoldPoint();
   logger.security('ADMIN', `تغییر نرخ طلا توسط مدیر: ${currentGoldState.pricePerGram.toLocaleString('fa-IR')} تومان`, {
     admin: req.user?.email,
     newPrice: currentGoldState.pricePerGram,
