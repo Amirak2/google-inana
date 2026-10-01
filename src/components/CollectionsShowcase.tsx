@@ -8,12 +8,10 @@ interface CollectionsShowcaseProps {
 }
 
 export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit, showViewAll = false }) => {
-  const { collections, setSelectedCollection, setActiveTab, setSelectedCategory } = useGoldStore();
+  const { collections, openCatalog, setActiveTab } = useGoldStore();
 
   const handleCollectionSelect = (colName: string) => {
-    setSelectedCollection(colName);
-    setSelectedCategory(null);
-    setActiveTab('shop');
+    openCatalog({ selectedCollection: colName });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

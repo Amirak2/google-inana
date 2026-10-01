@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { NAVIGATION_KEY, PAGE_TABS, readNavigationState, readAdminTab, saveSessionValue } from '../src/utils/navigationState.ts';
+import { DEFAULT_CATALOG_FILTERS } from '../src/utils/catalogFilters.ts';
 
 const values = new Map();
 globalThis.sessionStorage = {
@@ -7,7 +8,7 @@ globalThis.sessionStorage = {
   setItem: (key, value) => values.set(key, value),
 };
 for (const activeTab of PAGE_TABS) {
-  const expected = { activeTab, selectedCategory: 'necklace', selectedCollection: 'pearls', searchQuery: 'p9', quickViewProductId: 'pearl-p9', isCartOpen: true };
+  const expected = { ...DEFAULT_CATALOG_FILTERS, activeTab, selectedCategory: 'necklace', selectedCollection: 'pearls', searchQuery: 'p9', maxWeight: 12, onlyInStock: true, sortBy: 'weight-desc', quickViewProductId: 'pearl-p9', isCartOpen: true };
   saveSessionValue(NAVIGATION_KEY, expected);
   assert.deepEqual(readNavigationState(), expected);
 }

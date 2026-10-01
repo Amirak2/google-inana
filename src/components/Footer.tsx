@@ -13,7 +13,7 @@ import {
 import { CATEGORIES_LIST } from '../data/seedData';
 
 export const Footer: React.FC = () => {
-  const { setActiveTab, setSelectedCategory, setSelectedCollection } = useGoldStore();
+  const { setActiveTab, openCatalog } = useGoldStore();
   const { isAdmin } = useAuth();
 
   const scrollToTop = () => {
@@ -21,16 +21,12 @@ export const Footer: React.FC = () => {
   };
 
   const handleCategoryClick = (cat: string) => {
-    setSelectedCategory(cat);
-    setSelectedCollection(null);
-    setActiveTab('shop');
+    openCatalog({ selectedCategory: cat });
     scrollToTop();
   };
 
   const handleCollectionClick = (col: string) => {
-    setSelectedCollection(col);
-    setSelectedCategory(null);
-    setActiveTab('shop');
+    openCatalog({ selectedCollection: col });
     scrollToTop();
   };
 
@@ -116,7 +112,7 @@ export const Footer: React.FC = () => {
               <li>
                 <button
                   onClick={() => {
-                    setActiveTab('shop');
+                    openCatalog();
                     scrollToTop();
                   }}
                   className="hover:text-[#F5E8C7] transition-colors"

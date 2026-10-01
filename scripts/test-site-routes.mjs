@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { PAGE_PATHS, buildSiteRoute, parseSiteRoute, productPath } from '../src/utils/siteRoutes.ts';
+import { DEFAULT_CATALOG_FILTERS } from '../src/utils/catalogFilters.ts';
 
 for (const [tab, path] of Object.entries(PAGE_PATHS)) {
   const route = parseSiteRoute(path);
@@ -7,7 +8,7 @@ for (const [tab, path] of Object.entries(PAGE_PATHS)) {
   assert.equal(buildSiteRoute(route), path);
   assert.deepEqual(parseSiteRoute(`${path === '/' ? '' : path}/`), route);
 }
-const filtered = { activeTab: 'shop', selectedCategory: 'گردنبند', selectedCollection: 'مروارید', searchQuery: 'p9 & کلاسیک', quickViewProductId: null };
+const filtered = { ...DEFAULT_CATALOG_FILTERS, activeTab: 'shop', selectedCategory: 'گردنبند', selectedCollection: 'مروارید', searchQuery: 'p9 & کلاسیک', maxWeight: 0.3, onlyInStock: true, sortBy: 'price-desc', quickViewProductId: null };
 const filteredUrl = new URL(buildSiteRoute(filtered), 'https://inanagold.ir');
 assert.deepEqual(parseSiteRoute(filteredUrl.pathname, filteredUrl.search), filtered);
 for (const id of ['pearl-p9', 'کد محصول', 'part/one?#']) {

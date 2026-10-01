@@ -5,7 +5,7 @@ import { calculateCustomGoldQuotation } from '../utils/pricingEngine';
 import { formatToman, toPersianDigits, formatWeight } from '../utils/persianFormatter';
 
 export const GoldCalculator: React.FC = () => {
-  const { goldPrice, settings, setActiveTab } = useGoldStore();
+  const { goldPrice, settings, openCatalog } = useGoldStore();
 
   // Inputs
   const [weightGrams, setWeightGrams] = useState<number>(2.5);
@@ -265,7 +265,7 @@ export const GoldCalculator: React.FC = () => {
             <div className="mt-6 flex flex-col gap-3">
               <button
                 onClick={() => {
-                  setActiveTab('shop');
+                  openCatalog();
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all shadow-md text-sm cursor-pointer"

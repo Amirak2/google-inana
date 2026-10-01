@@ -32,8 +32,7 @@ export const Navbar: React.FC = () => {
     setIsCartOpen,
     searchQuery,
     setSearchQuery,
-    setSelectedCategory,
-    setSelectedCollection,
+    openCatalog,
   } = useGoldStore();
 
   const { currentUser, userProfile, isAdmin, openAuthModal, logout } = useAuth();
@@ -62,11 +61,9 @@ export const Navbar: React.FC = () => {
   ];
 
   const handleNavClick = (tabId: string) => {
-    setActiveTab(tabId);
     if (tabId === 'shop') {
-      setSelectedCategory(null);
-      setSelectedCollection(null);
-    }
+      openCatalog();
+    } else setActiveTab(tabId);
     setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

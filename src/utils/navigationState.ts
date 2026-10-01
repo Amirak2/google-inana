@@ -1,3 +1,5 @@
+import { normalizeCatalogFilters } from './catalogFilters';
+
 export const PAGE_TABS = ['home', 'shop', 'gold-price', 'collections', 'favorites', 'about', 'contact', 'admin'];
 export const ADMIN_TABS = ['direct-pricing', 'products', 'gold-rate', 'calculator', 'orders', 'logs'] as const;
 export type AdminTab = typeof ADMIN_TABS[number];
@@ -16,9 +18,7 @@ export function readNavigationState() {
   const text = (key: string) => typeof saved?.[key] === 'string' ? saved[key] as string : null;
   return {
     activeTab: PAGE_TABS.includes(text('activeTab') || '') ? text('activeTab')! : 'home',
-    selectedCategory: text('selectedCategory'),
-    selectedCollection: text('selectedCollection'),
-    searchQuery: text('searchQuery') || '',
+    ...normalizeCatalogFilters(saved || {}),
     quickViewProductId: text('quickViewProductId'),
     isCartOpen: saved?.isCartOpen === true,
   };

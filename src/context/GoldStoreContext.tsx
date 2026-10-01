@@ -12,8 +12,9 @@ import { getAuthHeaders } from '../utils/authHelper';
 import { useAuth } from './AuthContext';
 import { NAVIGATION_KEY, readNavigationState, saveSessionValue } from '../utils/navigationState';
 import { buildSiteRoute, parseSiteRoute } from '../utils/siteRoutes';
+import { DEFAULT_CATALOG_FILTERS, normalizeCatalogFilters, type CatalogFilters, type CatalogSort } from '../utils/catalogFilters';
 
-interface GoldStoreContextType {
+interface GoldStoreContextType extends CatalogFilters {
   goldPrice: GoldPriceData;
   settings: PricingSettings;
   products: Product[];
@@ -33,6 +34,12 @@ interface GoldStoreContextType {
   setSelectedCategory: (cat: string | null) => void;
   setSelectedCollection: (col: string | null) => void;
   setSearchQuery: (query: string) => void;
+  setSelectedLetter: (letter: string | null) => void;
+  setMaxWeight: (weight: number | null) => void;
+  setOnlyInStock: (only: boolean) => void;
+  setSortBy: (sort: CatalogSort) => void;
+  resetCatalogFilters: () => void;
+  openCatalog: (filters?: Partial<CatalogFilters>) => void;
   setQuickViewProduct: (product: Product | null) => void;
   setIsCartOpen: (open: boolean) => void;
   addToCart: (product: Product, quantity?: number) => void;
@@ -106,9 +113,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const [initialNavigation] = useState(() => ({ ...readNavigationState(), ...parseSiteRoute(window.location.pathname, window.location.search) }));
   const [activeTab, setActiveTabState] = useState<string>(initialNavigation.activeTab);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(initialNavigation.selectedCategory);
-  const [selectedCollection, setSelectedCollection] = useState<string | null>(initialNavigation.selectedCollection);
-  const [searchQuery, setSearchQuery] = useState<string>(initialNavigation.searchQuery);
+  const [catalogFilters, setCatalogFilters] = useState<CatalogFilters>(() => normalizeCatalogFilters(initialNavigation));
+  const { selectedCategory, selectedCollection, searchQuery } = catalogFilters;
+  const updateCatalogFilters = (updates: Partial<CatalogFilters>) => setCatalogFilters(previous => normalizeCatalogFilters({ ...previous, ...updates }));
+  const setSelectedCategory = (category: string | null) => updateCatalogFilters({ selectedCategory: category, selectedLetter: null });
+  const setSelectedCollection = (collection: string | null) => updateCatalogFilters({ selectedCollection: collection, selectedLetter: null });
+  const setSearchQuery = (query: string) => updateCatalogFilters({ searchQuery: query });
+  const setSelectedLetter = (letter: string | null) => updateCatalogFilters({ selectedLetter: letter });
+  const setMaxWeight = (weight: number | null) => updateCatalogFilters({ maxWeight: weight });
+  const setOnlyInStock = (only: boolean) => updateCatalogFilters({ onlyInStock: only });
+  const setSortBy = (sort: CatalogSort) => updateCatalogFilters({ sortBy: sort });
+  const resetCatalogFilters = () => setCatalogFilters({ ...DEFAULT_CATALOG_FILTERS });
   const [quickViewProductId, setQuickViewProductId] = useState<string | null>(initialNavigation.quickViewProductId);
   const quickViewProduct = products.find(product => product.id === quickViewProductId) || null;
   const setQuickViewProduct = (product: Product | null) => setQuickViewProductId(product?.id || null);
@@ -116,26 +131,28 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setActiveTabState(tab);
     setQuickViewProductId(null);
   };
+  const openCatalog = (filters: Partial<CatalogFilters> = {}) => {
+    setCatalogFilters(normalizeCatalogFilters({ ...DEFAULT_CATALOG_FILTERS, ...filters }));
+    setActiveTab('shop');
+  };
   const [isCartOpen, setIsCartOpen] = useState<boolean>(initialNavigation.isCartOpen);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const lastRoute = useRef<string | null>(null);
 
   useEffect(() => {
-    const route = buildSiteRoute({ activeTab, selectedCategory, selectedCollection, searchQuery, quickViewProductId });
+    const route = buildSiteRoute({ activeTab, ...catalogFilters, quickViewProductId });
     if (lastRoute.current === route) return;
     if (lastRoute.current === null) window.history.replaceState(null, '', route);
     else window.history.pushState(null, '', route);
     lastRoute.current = route;
-  }, [activeTab, selectedCategory, selectedCollection, searchQuery, quickViewProductId]);
+  }, [activeTab, catalogFilters, quickViewProductId]);
 
   useEffect(() => {
     const restoreRoute = () => {
       const route = parseSiteRoute(window.location.pathname, window.location.search);
       lastRoute.current = buildSiteRoute(route);
       setActiveTabState(route.activeTab);
-      setSelectedCategory(route.selectedCategory);
-      setSelectedCollection(route.selectedCollection);
-      setSearchQuery(route.searchQuery);
+      setCatalogFilters(normalizeCatalogFilters(route));
       setQuickViewProductId(route.quickViewProductId);
     };
     window.addEventListener('popstate', restoreRoute);
@@ -143,8 +160,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   useEffect(() => {
-    saveSessionValue(NAVIGATION_KEY, { activeTab, selectedCategory, selectedCollection, searchQuery, quickViewProductId, isCartOpen });
-  }, [activeTab, selectedCategory, selectedCollection, searchQuery, quickViewProductId, isCartOpen]);
+    saveSessionValue(NAVIGATION_KEY, { activeTab, ...catalogFilters, quickViewProductId, isCartOpen });
+  }, [activeTab, catalogFilters, quickViewProductId, isCartOpen]);
 
   useEffect(() => {
     if (!productsLoading && !productsError && quickViewProductId && !products.some(product => product.id === quickViewProductId)) {
@@ -475,6 +492,10 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         selectedCategory,
         selectedCollection,
         searchQuery,
+        selectedLetter: catalogFilters.selectedLetter,
+        maxWeight: catalogFilters.maxWeight,
+        onlyInStock: catalogFilters.onlyInStock,
+        sortBy: catalogFilters.sortBy,
         quickViewProduct,
         isCartOpen,
         isLoading,
@@ -484,6 +505,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setSelectedCategory,
         setSelectedCollection,
         setSearchQuery,
+        setSelectedLetter,
+        setMaxWeight,
+        setOnlyInStock,
+        setSortBy,
+        resetCatalogFilters,
+        openCatalog,
         setQuickViewProduct,
         setIsCartOpen,
         addToCart,

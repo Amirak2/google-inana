@@ -3,7 +3,7 @@ import { Home, Layers, TrendingUp, Heart, ShoppingBag } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
 
 export const MobileBottomNav: React.FC = () => {
-  const { activeTab, setActiveTab, cart, favorites, setIsCartOpen } = useGoldStore();
+  const { activeTab, setActiveTab, openCatalog, cart, favorites, setIsCartOpen } = useGoldStore();
 
   const totalCartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
@@ -19,7 +19,8 @@ export const MobileBottomNav: React.FC = () => {
     if (id === 'cart-action') {
       setIsCartOpen(true);
     } else {
-      setActiveTab(id);
+      if (id === 'shop') openCatalog();
+      else setActiveTab(id);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };

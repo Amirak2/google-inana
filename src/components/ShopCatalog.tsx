@@ -1,20 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
-  Search,
-  Filter,
-  SlidersHorizontal,
   ArrowUpDown,
   Sparkles,
   X,
   Layers,
-  ChevronDown,
 } from 'lucide-react';
 import { CATEGORIES_LIST } from '../data/seedData';
 import { ProductCard } from './ProductCard';
 import { useGoldStore } from '../context/GoldStoreContext';
-import { Product } from '../types';
-import { formatToman, toPersianDigits, formatWeight } from '../utils/persianFormatter';
-import { calculateProductPrice } from '../utils/pricingEngine';
+import { toPersianDigits, formatWeight } from '../utils/persianFormatter';
+import { catalogCategoryCounts, catalogWeightBounds, filterCatalogProducts, sortCatalogProducts, type CatalogSort } from '../utils/catalogFilters';
 
 export const ShopCatalog: React.FC = () => {
   const {
@@ -32,115 +27,32 @@ export const ShopCatalog: React.FC = () => {
     searchQuery,
     setSearchQuery,
     setQuickViewProduct,
+    selectedLetter, setSelectedLetter,
+    maxWeight, setMaxWeight,
+    onlyInStock, setOnlyInStock,
+    sortBy, setSortBy, resetCatalogFilters,
   } = useGoldStore();
 
-  const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
-  const [maxWeight, setMaxWeight] = useState<number>(10);
-  const [onlyInStock, setOnlyInStock] = useState<boolean>(false);
-  const [sortBy, setSortBy] = useState<
-    'newest' | 'bestseller' | 'price-asc' | 'price-desc' | 'weight-asc' | 'weight-desc'
-  >('newest');
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
-
-  const alphabetLetters = [
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
+  const filters = useMemo(() => ({ selectedCategory, selectedCollection, searchQuery, selectedLetter, maxWeight, onlyInStock, sortBy }),
+    [selectedCategory, selectedCollection, searchQuery, selectedLetter, maxWeight, onlyInStock, sortBy]);
+  const filteredProducts = useMemo(() => sortCatalogProducts(filterCatalogProducts(products, filters), sortBy, goldPrice.pricePerGram, settings),
+    [products, filters, sortBy, goldPrice.pricePerGram, settings]);
+  const categoryCounts = useMemo(() => catalogCategoryCounts(products, filters), [products, filters]);
+  const categoryTotal = [...categoryCounts.values()].reduce((total, count) => total + count, 0);
+  const letterProducts = useMemo(() => filterCatalogProducts(products, { ...filters, selectedLetter: null }), [products, filters]);
+  const weightBounds = useMemo(() => catalogWeightBounds(products, filters), [products, filters]);
+  const alphabetLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const clearAllFilters = resetCatalogFilters;
+  const collectionTitle = collections.find(collection => collection.name === selectedCollection)?.titleFa || selectedCollection;
+  const activeFilters = [
+    ...(selectedCollection ? [{ label: collectionTitle!, clear: () => setSelectedCollection(null) }] : []),
+    ...(selectedCategory ? [{ label: `دسته: ${selectedCategory}`, clear: () => setSelectedCategory(null) }] : []),
+    ...(selectedLetter ? [{ label: `حرف: ${selectedLetter}`, clear: () => setSelectedLetter(null) }] : []),
+    ...(searchQuery.trim() ? [{ label: `جستجو: ${searchQuery}`, clear: () => setSearchQuery('') }] : []),
+    ...(maxWeight !== null ? [{ label: `وزن طلا تا ${formatWeight(maxWeight)}`, clear: () => setMaxWeight(null) }] : []),
+    ...(onlyInStock ? [{ label: 'فقط موجود', clear: () => setOnlyInStock(false) }] : []),
   ];
-
-  // Filter & Sort Logic
-  const filteredProducts = useMemo(() => {
-    return products
-      .filter((p) => {
-        // Search query
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase().trim();
-          const matchesTitle = p.title.toLowerCase().includes(q);
-          const matchesCategory = p.category.toLowerCase().includes(q);
-          const matchesCollection = p.collection.toLowerCase().includes(q);
-          const matchesSku = p.sku.toLowerCase().includes(q);
-          const matchesLetter = p.letter?.toLowerCase() === q;
-          if (!matchesTitle && !matchesCategory && !matchesCollection && !matchesSku && !matchesLetter) {
-            return false;
-          }
-        }
-
-        // Category filter
-        if (selectedCategory && p.category !== selectedCategory) {
-          return false;
-        }
-
-        // Collection filter
-        if (selectedCollection && p.collection !== selectedCollection) {
-          return false;
-        }
-
-        // Letter filter
-        if (selectedLetter && p.letter?.toUpperCase() !== selectedLetter.toUpperCase()) {
-          return false;
-        }
-
-        // Weight filter
-        if (p.pricingMode !== 'fixed' && p.weight > maxWeight) {
-          return false;
-        }
-
-        // Stock filter
-        if (onlyInStock && (p.availableStock ?? p.stock ?? 0) <= 0) {
-          return false;
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        const priceA = calculateProductPrice(a, goldPrice.pricePerGram, settings).finalPrice;
-        const priceB = calculateProductPrice(b, goldPrice.pricePerGram, settings).finalPrice;
-
-        switch (sortBy) {
-          case 'newest':
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-          case 'bestseller':
-            return (b.isBestSeller ? 1 : 0) - (a.isBestSeller ? 1 : 0);
-          case 'price-asc':
-            return priceA - priceB;
-          case 'price-desc':
-            return priceB - priceA;
-          case 'weight-asc':
-            return a.weight - b.weight;
-          case 'weight-desc':
-            return b.weight - a.weight;
-          default:
-            return 0;
-        }
-      });
-  }, [
-    products,
-    searchQuery,
-    selectedCategory,
-    selectedCollection,
-    selectedLetter,
-    maxWeight,
-    onlyInStock,
-    sortBy,
-    goldPrice.pricePerGram,
-    settings,
-  ]);
-
-  const clearAllFilters = () => {
-    setSelectedCategory(null);
-    setSelectedCollection(null);
-    setSelectedLetter(null);
-    setSearchQuery('');
-    setMaxWeight(10);
-    setOnlyInStock(false);
-  };
-
-  const hasActiveFilters =
-    Boolean(selectedCategory) ||
-    Boolean(selectedCollection) ||
-    Boolean(selectedLetter) ||
-    Boolean(searchQuery) ||
-    maxWeight < 10 ||
-    onlyInStock;
+  const hasActiveFilters = activeFilters.length > 0 || sortBy !== 'newest';
 
   return (
     <section
@@ -178,6 +90,7 @@ export const ShopCatalog: React.FC = () => {
         {/* Categories Chips Bar */}
         <div className="flex items-center gap-2 overflow-x-auto pb-3 no-scrollbar mb-6 sm:mb-8 w-full max-w-full min-w-0">
           <button
+            aria-pressed={selectedCategory === null}
             onClick={() => {
               setSelectedCategory(null);
               setSelectedLetter(null);
@@ -188,14 +101,15 @@ export const ShopCatalog: React.FC = () => {
                 : 'bg-[#0B152B] text-slate-300 hover:text-white border border-[#D4AF37]/20 hover:border-[#D4AF37]/50'
             }`}
           >
-            همه دسته‌ها ({toPersianDigits(products.length)})
+            همه دسته‌ها ({toPersianDigits(categoryTotal)})
           </button>
           {CATEGORIES_LIST.map((cat) => {
-            const count = products.filter((p) => p.category === cat).length;
+            const count = categoryCounts.get(cat) || 0;
             const isSelected = selectedCategory === cat;
             return (
               <button
                 key={cat}
+                aria-pressed={isSelected}
                 onClick={() => {
                   const nextCategory = isSelected ? null : cat;
                   setSelectedCategory(nextCategory);
@@ -209,7 +123,7 @@ export const ShopCatalog: React.FC = () => {
                     : 'bg-[#0B152B] text-slate-300 hover:text-white border border-[#D4AF37]/20 hover:border-[#D4AF37]/50'
                 }`}
               >
-                {cat} {count > 0 && `(${toPersianDigits(count)})`}
+                {cat} ({toPersianDigits(count)})
               </button>
             );
           })}
@@ -235,12 +149,13 @@ export const ShopCatalog: React.FC = () => {
             <div className="flex flex-wrap gap-1.5 sm:gap-2">
               {alphabetLetters.map((char) => {
                 const isSelected = selectedLetter === char;
-                const hasProduct = products.some(
+                const hasProduct = letterProducts.some(
                   (p) => p.letter?.toUpperCase() === char.toUpperCase()
                 );
                 return (
                   <button
                     key={char}
+                    aria-pressed={isSelected}
                     onClick={() => setSelectedLetter(isSelected ? null : char)}
                     className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-bold font-serif-brand transition-all flex items-center justify-center ${
                       isSelected
@@ -267,6 +182,12 @@ export const ShopCatalog: React.FC = () => {
             <span className="text-slate-300 font-medium">
               نمایش {toPersianDigits(filteredProducts.length)} محصول
             </span>
+            {activeFilters.map(filter => (
+              <button key={filter.label} onClick={filter.clear} aria-label={`حذف ${filter.label}`}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 py-1 text-[#E6CA65]">
+                <span className="break-words">{filter.label}</span><X className="h-3 w-3 shrink-0" />
+              </button>
+            ))}
             {hasActiveFilters && (
               <button
                 onClick={clearAllFilters}
@@ -281,19 +202,23 @@ export const ShopCatalog: React.FC = () => {
           {/* Controls: Weight Slider, In-Stock, Sort */}
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
             {/* Weight Filter */}
-            <div className="flex items-center gap-2 bg-[#050B17] border border-[#D4AF37]/25 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs flex-1 sm:flex-initial">
-              <span className="text-slate-300">حداکثر وزن:</span>
-              <span className="font-bold text-[#D4AF37]">{toPersianDigits(maxWeight)} گرم</span>
+            {weightBounds && <div className="flex items-center gap-2 bg-[#050B17] border border-[#D4AF37]/25 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs flex-1 sm:flex-initial">
+              <span className="text-slate-300">حداکثر وزن طلا:</span>
+              <span className="font-bold text-[#D4AF37]">{maxWeight === null ? 'همه وزن‌ها' : formatWeight(maxWeight)}</span>
               <input
                 type="range"
-                min="0.5"
-                max="10"
-                step="0.5"
-                value={maxWeight}
-                onChange={(e) => setMaxWeight(parseFloat(e.target.value))}
+                aria-label="حداکثر وزن طلا"
+                min={weightBounds.min}
+                max={weightBounds.max}
+                step={weightBounds.step}
+                value={maxWeight ?? weightBounds.max}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  setMaxWeight(value >= weightBounds.max ? null : value);
+                }}
                 className="w-14 sm:w-24 h-1 bg-slate-700 rounded-lg accent-[#D4AF37]"
               />
-            </div>
+            </div>}
 
             {/* In-Stock Toggle */}
             <label className="flex items-center gap-2 bg-[#050B17] border border-[#D4AF37]/25 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs text-slate-200 cursor-pointer hover:border-[#D4AF37]/50">
@@ -310,8 +235,9 @@ export const ShopCatalog: React.FC = () => {
             <div className="flex items-center gap-1.5 bg-[#050B17] border border-[#D4AF37]/25 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs text-slate-200">
               <ArrowUpDown className="w-3.5 h-3.5 text-[#D4AF37]" />
               <select
+                aria-label="مرتب‌سازی محصولات"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) => setSortBy(e.target.value as CatalogSort)}
                 className="bg-transparent text-slate-100 outline-none cursor-pointer text-xs"
               >
                 <option value="newest" className="bg-[#050B17]">

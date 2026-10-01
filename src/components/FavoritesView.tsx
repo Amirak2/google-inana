@@ -4,7 +4,7 @@ import { useGoldStore } from '../context/GoldStoreContext';
 import { ProductCard } from './ProductCard';
 
 export const FavoritesView: React.FC = () => {
-  const { favorites, products, setActiveTab, clearFavorites } = useGoldStore();
+  const { favorites, products, openCatalog, clearFavorites } = useGoldStore();
 
   const favoriteProducts = products.filter((p) => favorites.includes(p.id));
 
@@ -62,7 +62,7 @@ export const FavoritesView: React.FC = () => {
               و خرید بعدی ذخیره نمایید.
             </p>
             <button
-              onClick={() => setActiveTab('shop')}
+              onClick={() => openCatalog()}
               className="bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#B38A30] text-slate-950 font-bold px-6 py-2.5 rounded-xl text-xs hover:brightness-110 transition-all flex items-center justify-center gap-2 mx-auto shadow-md"
             >
               <span>مشاهده ویترین محصولات</span>

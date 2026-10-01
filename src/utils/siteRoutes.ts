@@ -1,8 +1,7 @@
-export interface SiteRoute {
+import { normalizeCatalogFilters, type CatalogFilters } from './catalogFilters';
+
+export interface SiteRoute extends CatalogFilters {
   activeTab: string;
-  selectedCategory: string | null;
-  selectedCollection: string | null;
-  searchQuery: string;
   quickViewProductId: string | null;
 }
 
@@ -26,9 +25,15 @@ export function parseSiteRoute(pathname: string, search = ''): SiteRoute {
   }
   return {
     activeTab, quickViewProductId,
-    selectedCategory: params.get('category') || null,
-    selectedCollection: params.get('collection') || null,
-    searchQuery: params.get('q') || '',
+    ...normalizeCatalogFilters({
+      selectedCategory: params.get('category') || null,
+      selectedCollection: params.get('collection') || null,
+      searchQuery: params.get('q') || '',
+      selectedLetter: params.get('letter'),
+      maxWeight: params.has('maxWeight') ? Number(params.get('maxWeight')) : null,
+      onlyInStock: params.get('inStock') === '1',
+      sortBy: params.get('sort'),
+    }),
   };
 }
 
@@ -36,10 +41,15 @@ export function buildSiteRoute(route: SiteRoute): string {
   const params = new URLSearchParams();
   const path = route.quickViewProductId ? productPath(route.quickViewProductId) : PAGE_PATHS[route.activeTab] || '/';
   if (route.quickViewProductId && route.activeTab !== 'shop') params.set('page', route.activeTab);
-  if (['home', 'shop', 'collections', 'gold-price'].includes(route.activeTab)) {
-    if (route.selectedCategory) params.set('category', route.selectedCategory);
-    if (route.selectedCollection) params.set('collection', route.selectedCollection);
-    if (route.searchQuery) params.set('q', route.searchQuery);
+  if (route.quickViewProductId || ['home', 'shop', 'collections', 'gold-price'].includes(route.activeTab)) {
+    const filters = normalizeCatalogFilters(route);
+    if (filters.selectedCategory) params.set('category', filters.selectedCategory);
+    if (filters.selectedCollection) params.set('collection', filters.selectedCollection);
+    if (filters.searchQuery) params.set('q', filters.searchQuery);
+    if (filters.selectedLetter) params.set('letter', filters.selectedLetter);
+    if (filters.maxWeight !== null) params.set('maxWeight', String(filters.maxWeight));
+    if (filters.onlyInStock) params.set('inStock', '1');
+    if (filters.sortBy !== 'newest') params.set('sort', filters.sortBy);
   }
   return path + (params.size ? `?${params}` : '');
 }
