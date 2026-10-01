@@ -59,7 +59,7 @@ async function click(node) {assert.ok(node); await act(async () => {node.click()
 async function update(operation) {await act(async () => {operation(); await settle();});}
 try {
   await act(async () => {root.render(React.createElement(Harness)); await settle();});
-  assert.equal(ids().length, 7);
+  assert.equal(ids().length, 13);
   await click(category('حروف انگلیسی'));
   await click([...catalog().querySelectorAll('button')].find(button => button.textContent.trim() === 'A'));
   assert.equal(ids().length, 1);
@@ -67,12 +67,12 @@ try {
   await click(shopLink);
   assert.equal(catalogHarness.selectedLetter, null);
   assert.equal(catalogHarness.selectedCategory, null);
-  assert.equal(ids().length, 7, 'Navbar reset must include the former local letter filter');
+  assert.equal(ids().length, 13, 'Navbar reset must include the former local letter filter');
 
   const pearlTile = [...document.querySelectorAll('#collections-showcase-section h3')]
     .find(node => node.textContent.includes('کالکشن مروارید')).closest('.group');
   await click(pearlTile);
-  assert.equal(ids().length, 3);
+  assert.equal(ids().length, 9);
   assert.equal(category('حروف انگلیسی').textContent.trim(), 'حروف انگلیسی (۰)');
   const removePearls = catalog().querySelector('button[aria-label="حذف کالکشن مروارید"]');
   assert.ok(removePearls, 'Selected collection must be visible and removable');
@@ -93,22 +93,22 @@ try {
     await settle();
   });
   assert.equal(catalogHarness.maxWeight, 0.3);
-  assert.equal(ids().length, 5, 'A real slider movement must filter sub-0.5g gold');
+  assert.equal(ids().length, 11, 'A real slider movement must filter sub-0.5g gold');
   const heavy = {...products.find(product => product.letter === 'M'), id: 'local-heavy', title: 'طلای تست ۱۲ گرمی', weight: 12};
   products.push(heavy);
   await act(async () => {await catalogHarness.refreshProducts();});
   assert.equal(ids().includes(heavy.id), false);
   await click([...catalog().querySelectorAll('button')].find(button => button.textContent.includes('حذف همه فیلترها')));
   assert.equal(catalogHarness.maxWeight, null);
-  assert.equal(ids().length, 8);
+  assert.equal(ids().length, 14);
   assert.ok(ids().includes(heavy.id), 'Show all must include the locally added 12g product');
   assert.equal(Number(catalog().querySelector('input[type="range"]').max), 12);
   await update(() => catalogHarness.openCatalog({selectedCategory: 'حروف انگلیسی', maxWeight: 0.001}));
   assert.equal(ids().length, 0);
   await click([...catalog().querySelectorAll('button')].find(button => button.textContent.trim() === 'مشاهده همه محصولات'));
-  assert.equal(ids().length, 8, 'Empty-state show-all must also remove the weight ceiling');
+  assert.equal(ids().length, 14, 'Empty-state show-all must also remove the weight ceiling');
   await click(catalog().querySelector('input[type="checkbox"]'));
-  assert.equal(ids().length, 7);
+  assert.equal(ids().length, 13);
   assert.equal(new URL(window.location.href).searchParams.get('inStock'), '1');
   await click(catalog().querySelector('input[type="checkbox"]'));
   const sort = catalog().querySelector('select');
@@ -121,9 +121,9 @@ try {
   assert.equal(new URL(window.location.href).searchParams.get('sort'), 'weight-desc');
 
   await update(() => catalogHarness.setSearchQuery('مرواريد'));
-  assert.equal(ids().length, 3);
+  assert.equal(ids().length, 8);
   await update(() => catalogHarness.setSearchQuery('مروارید'));
-  assert.equal(ids().length, 3);
+  assert.equal(ids().length, 8);
   await update(() => catalogHarness.openCatalog({selectedCategory: 'حروف انگلیسی', selectedCollection: 'INANA LETTERS',
     selectedLetter: 'A', maxWeight: 0.3, onlyInStock: true, sortBy: 'price-desc', searchQuery: 'پلاک'}));
   assert.equal(ids().length, 1);

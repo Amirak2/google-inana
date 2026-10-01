@@ -293,6 +293,12 @@ seedDatabaseIfEmpty(INITIAL_PRODUCTS, []);
 seedProductsOnce('pearlProductsV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p3'));
 seedProductsOnce('pearlClass10V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-class10'));
 seedProductsOnce('pearlP9V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p9'));
+seedProductsOnce('pearlGooshware1V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-gooshware1'));
+seedProductsOnce('pearlAphroditeV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-aphrodite'));
+seedProductsOnce('pearlAshkiV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-ashki'));
+seedProductsOnce('pearlShirazA3V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-a3'));
+seedProductsOnce('pearlTak5V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-tak5'));
+seedProductsOnce('pearlP6V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p6'));
 let pricingSettings: PricingSettings = {
   ...(store.get('settings', 'pricing') || DEFAULT_SETTINGS),
   taxPercent: 0,

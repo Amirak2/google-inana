@@ -8,6 +8,7 @@ import { getMediaObject } from './server/objectStorage';
 import { configureTrustedProxy, normalizeClientIp } from './server/clientIp';
 import { runPostgresRequest } from './server/postgresRequest';
 import { securityHeaders } from './server/securityHeaders';
+import { PEARL_PRODUCTS } from './src/data/seedData';
 
 const app = express();
 app.disable('x-powered-by');
@@ -78,14 +79,17 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
 app.all(['/api/*', '/media/*'], (req, res) => { void handleRequest(req, res); });
 
 // Preserve existing product URLs while serving their bytes from the private bucket.
+const pearlMediaFiles = new Set(PEARL_PRODUCTS.flatMap(product => product.images)
+  .filter(url => url.startsWith('/products/pearls/'))
+  .map(url => url.slice('/products/pearls/'.length)));
 app.get('/products/pearls/:filename', async (req, res) => {
-  if (!['p3-white.png', 'class10-white.png', 'p9-white.png'].includes(req.params.filename)) {
+  if (!pearlMediaFiles.has(req.params.filename)) {
     res.sendStatus(404); return;
   }
   try {
     const data = await getMediaObject(`products/pearls/${req.params.filename}`);
     if (!data) { res.sendStatus(404); return; }
-    res.set('Content-Type', 'image/png');
+    res.set('Content-Type', req.params.filename.endsWith('.webp') ? 'image/webp' : 'image/png');
     res.set('Cache-Control', 'public, max-age=86400');
     res.set('X-Content-Type-Options', 'nosniff');
     res.send(data);
