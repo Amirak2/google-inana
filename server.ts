@@ -2008,10 +2008,12 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
 // 7. Authentication endpoint
 app.post('/api/auth/logout', (req: Request, res: Response) => {
   clearAuthCookie(res);
-  if (!checkRateLimit(`logout_${req.ip}`, 30, 60000).allowed) {
+  const token = extractToken(req);
+  const validSession = token ? verifySessionToken(token) : null;
+  // A shared IP's anonymous quota must not prevent a real session from logging out.
+  if (!checkRateLimit(`logout_${req.ip}`, 30, 60000).allowed && !validSession) {
     res.status(429).json({ error: 'تعداد درخواست خروج بیش از حد مجاز است.' }); return;
   }
-  const token = extractToken(req);
   if (token) {
     revokeSessionToken(token);
   }

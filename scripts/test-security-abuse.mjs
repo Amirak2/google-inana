@@ -138,7 +138,7 @@ try {
   const inspect = await PostgresStore.load(false);
   assert.equal(inspect.map('revoked').size, 0);
   await inspect.release();
-  assert.equal((await request('/api/auth/logout', 'POST', {}, tokens[5], '198.51.100.241')).status, 200);
+  assert.equal((await request('/api/auth/logout', 'POST', {}, tokens[5], '198.51.100.240')).status, 200, 'A real session must be able to log out despite an exhausted shared-IP anonymous quota');
   assert.ok(db.get('revoked', tokens[5]));
   assert.equal((await request('/api/auth/me', 'GET', undefined, tokens[5])).status, 401);
   await request('/api/auth/logout', 'POST', {}, tokens[5], '198.51.100.241');
