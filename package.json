@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "build": "node scripts/build-liara.mjs",
+    "build": "node scripts/release-check.mjs",
     "build:sites": "node scripts/build.mjs",
     "start": "node dist/server.js",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "migrate": "drizzle-kit generate"
+    "migrate": "drizzle-kit generate",
+    "test": "node scripts/test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.972.0",
@@ -21,27 +22,28 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260911.1",
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/pg": "^8.15.5",
+    "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
+    "canvas-confetti": "^1.9.4",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "esbuild": "^0.25.0",
     "esbuild-wasm": "^0.28.2",
-    "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "wrangler": "^4.131.1",
-    "@tailwindcss/vite": "^4.1.14",
-    "@types/canvas-confetti": "^1.9.0",
-    "@vitejs/plugin-react": "^5.0.4",
-    "canvas-confetti": "^1.9.4",
+    "jsdom": "^26.1.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^6.2.3"
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3",
+    "wrangler": "^4.131.1"
   },
   "engines": {
     "node": "22.x"

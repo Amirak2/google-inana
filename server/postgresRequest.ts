@@ -36,6 +36,15 @@ async function clearFailedOtp(sms: Sms, load: typeof PostgresStore.load) {
   }
 }
 
+/** Exclude unrelated private datasets from request snapshots. */
+export function requestBuckets(pathname: string): string[] {
+  const buckets = ['products', 'migrations', 'market', 'settings', 'collections', 'users', 'logs', 'revoked', 'rateLimits', 'media', 'phoneClaims'];
+  if (pathname.startsWith('/api/auth/')) buckets.push('otp', 'phoneOtp');
+  if (pathname.includes('/favorites')) buckets.push('favorites');
+  if (/^\/api\/(orders|cart|products|admin)/.test(pathname)) buckets.push('orders', 'idempotency', 'quotes', 'quoteOwners', 'reservations', 'trackingCodes');
+  return buckets;
+}
+
 export async function runPostgresRequest(
   method: string, pathname: string, env: Record<string, any>,
   operation: (store: Store, requestEnv: Record<string, any>) => Promise<Response>,
@@ -48,7 +57,7 @@ export async function runPostgresRequest(
   const publicRead = !writable && ['/api/collections', '/api/settings'].includes(pathname);
   const marketFetch = cachedMarketFetch();
   for (let attempt = 0; attempt < 4; attempt++) {
-    const store = await load(writable, publicRead);
+    const store = await load(writable, publicRead, requestBuckets(pathname));
     const messages: Sms[] = [];
     try {
       let response = await operation(store as unknown as Store, {

@@ -60,7 +60,7 @@ try {
     item.stock--;
     store.set('testSales', id, { purchased: true });
     return Response.json({ purchased: true }, { status: 201 });
-  }, deps);
+  }, { ...deps, load: (write, publicRead) => PostgresStore.load(write, publicRead) });
   const purchases = await Promise.all([purchase('one'), purchase('two')]);
   assert.deepEqual(purchases.map(response => response.status).sort(), [201, 409]);
   assert.equal(db.get('testInventory', 'last-item').stock, 0);

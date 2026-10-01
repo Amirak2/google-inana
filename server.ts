@@ -1,3 +1,4 @@
+import { createReservationEngine } from './server/reservations';
 import { cartQuantities, boundedLogDetails } from './server/checkoutSafety';
 import { BRS_USER_AGENT, parseBrsGold } from './server/brsGold';
 import { validateReceipt } from './server/receiptValidation';
@@ -303,36 +304,7 @@ function saveOrdersToDb(orders: Order[]): void { store.replaceMap('orders', new 
 // Real-time Stock Lock & Concurrency Reservation Engine
 // Prevents overselling & race conditions for unique jewelry pieces
 // -------------------------------------------------------------
-interface StockReservation {
-  productId: string;
-  quantity: number;
-  userId: string;
-  expiresAt: number;
-}
-const stockReservations: Map<string, StockReservation[]> = store.map('reservations');
-
-function cleanExpiredReservations(): void {
-  const now = Date.now();
-  for (const [pId, resList] of stockReservations.entries()) {
-    const valid = resList.filter((r) => r.expiresAt > now);
-    if (valid.length === 0) stockReservations.delete(pId);
-    else stockReservations.set(pId, valid);
-  }
-}
-
-function getReservedStock(productId: string, excludeUserId?: string): number {
-  cleanExpiredReservations();
-  const list = stockReservations.get(productId) || [];
-  return list
-    .filter((r) => !excludeUserId || r.userId !== excludeUserId)
-    .reduce((sum, r) => sum + r.quantity, 0);
-}
-
-function getAvailableStock(product: Product, excludeUserId?: string): number {
-  const baseStock = product.stock !== undefined ? product.stock : 5;
-  const reserved = getReservedStock(product.id, excludeUserId);
-  return Math.max(0, baseStock - reserved);
-}
+const { stockReservations, getAvailableStock, reserveCart } = createReservationEngine(store, () => productsList);
 
 // Helper to parse numbers from Rial to Toman (1 Toman = 10 Rials)
 function parseRialToToman(val: any): number {
@@ -939,112 +911,26 @@ app.put('/api/user/favorites', requireAuth, (req: AuthenticatedRequest, res: Res
   res.json({ favorites: validated });
 });
 
-// All-or-nothing checkout reservation. No writes happen until every item passes.
-function reserveCart(items: unknown, owner: string, expiresAt: number) {
-  const quantities = cartQuantities(items);
-  const deadlines = new Map<string, number>();
-  for (const [id, quantity] of quantities) {
-    const existing = (stockReservations.get(id) || []).find(r => r.userId === owner && r.expiresAt > Date.now());
-    const protectedQuantity = Math.max(quantity, existing?.quantity || 0);
-    quantities.set(id, protectedQuantity);
-    deadlines.set(id, Math.max(expiresAt, existing?.expiresAt || 0));
-    const product = productsList.find(p => p.id === id);
-    if (!product || getAvailableStock(product, owner) < protectedQuantity) throw new Error('موجودی یکی از محصولات سبد کافی نیست. لطفاً سبد را بررسی کنید.');
-  }
-  for (const [id, quantity] of quantities) {
-    const remaining = (stockReservations.get(id) || []).filter(r => r.userId !== owner && r.expiresAt > Date.now());
-    stockReservations.set(id, [...remaining, { productId: id, quantity, userId: owner, expiresAt: deadlines.get(id)! }]);
-  }
-}
-app.post('/api/cart/reserve-batch', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-  if (!checkRateLimit(`reserve_batch_${req.user!.uid}`, 15, 60000).allowed) {
+// Draft carts and each quote own separate reservations; only that ID is consumed.
+function reserveDraft(req: AuthenticatedRequest, res: Response, items: unknown) {
+  if (!checkRateLimit(`reserve_cart_${req.user!.uid}`, 15, 60000).allowed) {
     res.status(429).json({ error: 'درخواست رزرو بیش از حد مجاز است.' }); return;
   }
   try {
     const reservedUntil = Date.now() + 15 * 60000;
-    reserveCart(req.body.items, `usr_${req.user!.uid}`, reservedUntil);
-    res.json({ success: true, reservedUntil });
+    const reservationId = `cart_usr_${req.user!.uid}`;
+    reserveCart(items, `usr_${req.user!.uid}`, reservedUntil, reservationId);
+    res.json({ success: true, reservedUntil, reservationId });
   } catch (error: any) { res.status(409).json({ error: error.message }); }
-});
-
-// Temporary stock reservation endpoint during checkout step (10 minutes TTL)
-app.post('/api/cart/reserve', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
-  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
-  const rl = checkRateLimit(`reserve_stock_${clientIp}`, 25, 60 * 1000);
-  if (!rl.allowed) {
-    res.status(429).json({ error: 'تعداد درخواست‌های رزرو بیش از حد مجاز است. لطفاً کمی صبر فرمایید.' });
-    return;
-  }
-
-  const { productId, quantity } = req.body;
-  if (!productId) {
-    res.status(400).json({ error: 'شناسه محصول الزامی است.' });
-    return;
-  }
-  const product = productsList.find((p) => p.id === productId);
-  if (!product) {
-    res.status(404).json({ error: 'محصول یافت نشد.' });
-    return;
-  }
-
-  const qty = Number(quantity);
-  if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
-    res.status(400).json({ error: 'تعداد رزرو باید یک عدد صحیح بین ۱ تا ۲۰ باشد.' });
-    return;
-  }
-
-  // Derive secure identity: authenticated UID or cryptographically sound reservationToken
-  let uId: string;
-  let reservationToken = String(req.headers['x-reservation-token'] || req.body.reservationToken || '').trim();
-  if (req.user?.uid) {
-    uId = `usr_${req.user.uid}`;
-  } else {
-    if (!reservationToken || reservationToken.length < 16) {
-      reservationToken = `rst_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
-    }
-    uId = `anon_${reservationToken}`;
-  }
-
-  const available = getAvailableStock(product, uId);
-
-  if (available < qty) {
-    res.status(409).json({
-      success: false,
-      error: 'موجودی ناکافی',
-      message: `این قطعه طلا هم‌اکنون توسط خریدار دیگری در حال نهایی‌سازی است.`,
-      availableStock: available,
-    });
-    return;
-  }
-
-  const list = stockReservations.get(productId) || [];
-  const existingIdx = list.findIndex((r) => r.userId === uId);
-  const expiresAt = Date.now() + 10 * 60 * 1000;
-  if (existingIdx >= 0) {
-    list[existingIdx].quantity = Math.max(qty, list[existingIdx].quantity);
-    list[existingIdx].expiresAt = Math.max(expiresAt, list[existingIdx].expiresAt);
-  } else {
-    list.push({ productId, quantity: qty, userId: uId, expiresAt });
-  }
-  stockReservations.set(productId, list);
-
-  res.json({
-    success: true,
-    reservedUntil: expiresAt,
-    reservationToken: req.user ? undefined : reservationToken,
-    availableStock: getAvailableStock(product, uId),
-  });
-});
-
-app.post('/api/cart/release-reservation', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
-  const { productId } = req.body;
-  const reservationToken = String(req.headers['x-reservation-token'] || req.body.reservationToken || '').trim();
-  const uId = req.user?.uid ? `usr_${req.user.uid}` : reservationToken ? `anon_${reservationToken}` : null;
-
-  if (productId && uId && stockReservations.has(productId)) {
-    const list = (stockReservations.get(productId) || []).filter((r) => r.userId !== uId);
-    if (list.length > 0) stockReservations.set(productId, list);
-    else stockReservations.delete(productId);
+}
+app.post('/api/cart/reserve-batch', requireAuth, (req: AuthenticatedRequest, res: Response) => reserveDraft(req, res, req.body.items));
+app.post('/api/cart/reserve', requireAuth, (req: AuthenticatedRequest, res: Response) => reserveDraft(req, res, [{ productId: req.body.productId, quantity: req.body.quantity }]));
+app.post('/api/cart/release-reservation', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  // Public release can release only the authenticated user's draft, never a paid quote.
+  const draftId = `cart_usr_${req.user!.uid}`;
+  for (const [id, list] of stockReservations) {
+    const remaining = list.filter(r => (r.reservationId || `cart_${r.userId}`) !== draftId);
+    if (remaining.length) stockReservations.set(id, remaining); else stockReservations.delete(id);
   }
   res.json({ success: true });
 });
@@ -1372,6 +1258,7 @@ interface ServerPriceQuote {
   expiresAt: number;
   createdAt: number;
   retainUntil?: number;
+  reservationId?: string;
   userId?: string;
 }
 
@@ -1447,6 +1334,7 @@ app.get('/api/orders/track/:trackingCode', (req: Request, res: Response) => {
 app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const { items } = req.body;
   const nowForQuote = Date.now();
+  store.get('quoteOwners', req.user!.uid);
   const ownerQuotes = [...quotesMap.values()].filter(q => q.userId === req.user!.uid && (q.retainUntil ?? q.expiresAt + 86400000) > nowForQuote);
   if (!checkRateLimit(`quote_user_${req.user!.uid}`, 10, 60000).allowed || !checkRateLimit(`quote_ip_${req.ip}`, 30, 60000).allowed || ownerQuotes.filter(q => q.expiresAt > nowForQuote).length >= 3 || ownerQuotes.length >= 20) {
     res.status(429).json({ error: 'سقف پیش‌فاکتورهای شما پر شده است. از پیش‌فاکتور فعلی استفاده کنید یا کمی بعد تلاش کنید.' }); return;
@@ -1502,10 +1390,11 @@ app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Resp
   const quoteTtlMs = 15 * 60 * 1000;
   const expiresAt = Date.now() + quoteTtlMs;
 
-  try { reserveCart(items, `usr_${req.user!.uid}`, expiresAt); }
+  try { reserveCart(items, `usr_${req.user!.uid}`, expiresAt, quoteId, `cart_usr_${req.user!.uid}`); }
   catch (error: any) { res.status(409).json({ error: error.message }); return; }
   const quoteRecord: ServerPriceQuote = {
     quoteId,
+    reservationId: quoteId,
     items: quoteItems,
     totalWeight: Number(computedTotalWeight.toFixed(3)),
     totalPrice: computedTotalPrice,
@@ -1516,6 +1405,8 @@ app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Resp
     userId: req.user!.uid,
   };
 
+  // Per-user guard prevents concurrent quote creation from bypassing the cap.
+  store.set('quoteOwners', req.user!.uid, quoteId);
   quotesMap.set(quoteId, quoteRecord);
 
   // Expired quotes housekeeping
@@ -1612,6 +1503,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
       }
 
       // B. Authoritative Quote & Items Matching INSIDE transaction (Issue #2 Fix)
+      let effectiveReservationId = `cart_${uId}`;
       let paymentReviewRequired = false;
       let inventoryUnavailable = false;
       let effectiveGoldPrice = currentGoldState.pricePerGram;
@@ -1629,7 +1521,8 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
           throw err;
         }
 
-        paymentReviewRequired = Date.now() > activeQuote.expiresAt;
+        effectiveReservationId = activeQuote.reservationId || `cart_${uId}`;
+        paymentReviewRequired = Date.now() > activeQuote.expiresAt || !activeQuote.reservationId;
 
         // Strict ownership verification: A user cannot submit or steal another user's quote
         if (activeQuote.userId && activeQuote.userId !== orderUserId) {
@@ -1739,7 +1632,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
           err.statusCode = 404;
           throw err;
         }
-        const available = getAvailableStock(product, uId);
+        const available = getAvailableStock(product, effectiveReservationId);
         if (product.stock !== undefined && available < totalRequestedQty) {
           if (paymentReviewRequired) { inventoryUnavailable = true; continue; }
           const err: any = new Error(`متأسفانه مجموع تعداد درخواستی قطعه «${product.title}» (${totalRequestedQty} عدد) بیش از موجودی قابل سفارش (${available} عدد) است.`);
@@ -1759,7 +1652,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
           saveProductToDb(product); // Atomic write to SQLite products table
         }
         if (product && stockReservations.has(product.id)) {
-          const remaining = (stockReservations.get(product.id) || []).filter((r) => r.userId !== uId);
+          const remaining = (stockReservations.get(product.id) || []).filter((r) => (r.reservationId || `cart_${r.userId}`) !== effectiveReservationId);
           if (remaining.length > 0) stockReservations.set(product.id, remaining);
           else stockReservations.delete(product.id);
         }

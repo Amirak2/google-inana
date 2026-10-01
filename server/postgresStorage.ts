@@ -67,31 +67,42 @@ async function ensureSchema(pool: Pool): Promise<void> {
   }
 }
 
+/** Track point reads, including absence; scanning a snapshot does not claim unrelated rows. */
+class RecordMap<T> extends Map<string, T> {
+  constructor(private observe: (key: string) => void, entries?: Iterable<readonly [string, T]>) { super(entries); }
+  get(key: string): T | undefined { this.observe(key); return super.get(key); }
+  has(key: string): boolean { this.observe(key); return super.has(key); }
+}
+
 export class PostgresStore {
   private buckets = new Map<string, Map<string, any>>();
   private original = new Map<string, string>();
+  private reads = new Set<string>();
   private client: PoolClient | null = null;
   private transactionOpen = false;
   private writable = false;
   private publicRead = false;
+  private scopeBuckets?: readonly string[];
 
   private selectQuery(): string {
-    return this.publicRead
-      ? "SELECT bucket, record_key, value_json FROM site_records WHERE bucket NOT IN ('orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits')"
-      : 'SELECT bucket, record_key, value_json FROM site_records';
+    const clauses: string[] = [];
+    if (this.scopeBuckets) clauses.push('bucket = ANY($1::text[])');
+    if (this.publicRead) clauses.push("bucket NOT IN ('orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits','phoneClaims','quoteOwners','trackingCodes')");
+    return 'SELECT bucket, record_key, value_json FROM site_records' + (clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '');
   }
 
-  static async load(writable = false, publicRead = false): Promise<PostgresStore> {
+  static async load(writable = false, publicRead = false, scopeBuckets?: readonly string[]): Promise<PostgresStore> {
     const store = new PostgresStore();
     store.writable = writable;
     store.publicRead = publicRead;
+    store.scopeBuckets = scopeBuckets;
     const pool = getPool();
     await ensureSchema(pool);
 
     try {
       // Request-local snapshot. No connection or database lock is held while
       // handlers call price providers or upload media.
-      const result = await pool.query(store.selectQuery());
+      const result = await pool.query(store.selectQuery(), scopeBuckets ? [scopeBuckets] : []);
       for (const row of result.rows) {
         // pg already decodes JSONB, including scalar strings.
         const value = row.value_json;
@@ -107,12 +118,12 @@ export class PostgresStore {
   }
 
   map<T = any>(bucket: string): Map<string, T> {
-    if (!this.buckets.has(bucket)) this.buckets.set(bucket, new Map());
+    if (!this.buckets.has(bucket)) this.buckets.set(bucket, new RecordMap(key => this.reads.add(JSON.stringify([bucket, key]))));
     return this.buckets.get(bucket)!;
   }
   get<T = any>(bucket: string, key: string): T | undefined { return this.map<T>(bucket).get(key); }
   set(bucket: string, key: string, value: any): void { this.map(bucket).set(key, value); }
-  replaceMap(bucket: string, values: Map<string, any>): void { this.buckets.set(bucket, values); }
+  replaceMap(bucket: string, values: Map<string, any>): void { this.buckets.set(bucket, new RecordMap(key => this.reads.add(JSON.stringify([bucket, key])), values)); }
   tokenSet(bucket: string) {
     return {
       has: (token: string) => this.map(bucket).has(token),
@@ -121,7 +132,8 @@ export class PostgresStore {
   }
   checkpoint() { return structuredClone(this.buckets); }
   restore(snapshot: Map<string, Map<string, any>>): void {
-    this.buckets = structuredClone(snapshot);
+    this.buckets.clear();
+    for (const [bucket, values] of snapshot) this.replaceMap(bucket, structuredClone(values));
   }
 
   private prune(): void {
@@ -151,12 +163,20 @@ export class PostgresStore {
     await this.client.query("SET LOCAL lock_timeout = '3s'");
     await this.client.query("SET LOCAL statement_timeout = '5s'");
     await this.client.query('SELECT pg_advisory_xact_lock($1)', [20260912]);
-    // Reject a stale decision, including new/deleted rows (phantoms). The
-    // caller re-runs validation against a fresh snapshot before responding.
-    const fresh = await this.client.query(this.selectQuery());
-    if (fresh.rows.length !== this.original.size || fresh.rows.some(row =>
-      this.original.get(JSON.stringify([row.bucket, row.record_key])) !== serializeRecord(row.value_json)
-    )) throw new PostgresConflictError();
+    // Validate only rows that informed this decision or will be changed.
+    // The short commit lock also protects absent keys against concurrent inserts.
+    const dependencies = new Set(this.reads);
+    for (const key of new Set([...current.keys(), ...this.original.keys()])) {
+      if (current.get(key) !== this.original.get(key)) dependencies.add(key);
+    }
+    const requested = [...dependencies].map(key => { const [bucket, record_key] = JSON.parse(key); return { bucket, record_key }; });
+    const fresh = await this.client.query(
+      `SELECT bucket, record_key, value_json FROM site_records
+       WHERE (bucket, record_key) IN (SELECT bucket, record_key FROM jsonb_to_recordset($1::jsonb) AS requested(bucket text, record_key text))`,
+      [JSON.stringify(requested)]
+    );
+    const freshValues = new Map<string, string>(fresh.rows.map(row => [JSON.stringify([row.bucket, row.record_key]), serializeRecord(row.value_json)]));
+    if ([...dependencies].some(key => freshValues.get(key) !== this.original.get(key))) throw new PostgresConflictError();
     const currentKeys = new Set<string>();
     for (const [bucket, values] of this.buckets) {
       for (const [key, value] of values) {

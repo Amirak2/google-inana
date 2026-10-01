@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { UserProfile } from '../types';
 
 export interface AuthUser {
@@ -32,6 +32,9 @@ const LOCAL_STORAGE_SESSION_KEY = 'inana_user_session';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const authEpoch = useRef(0);
+  const activeAccount = useRef<string | undefined>(undefined);
+  activeAccount.current = currentUser?.uid;
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -49,11 +52,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Restore stored session from server auth if available
   const restoreLocalSession = async (): Promise<boolean> => {
+    const epoch = authEpoch.current;
     localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
     try {
       const response = await fetch('/api/auth/me');
       const data = await response.json();
-      if (!response.ok || !data.user) return false;
+      if (epoch !== authEpoch.current || !response.ok || !data.user) return false;
       setCurrentUser(data.user);
       setUserProfile(data.user);
       setIsAdmin(data.user.role === 'admin');
@@ -62,7 +66,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    const epoch = authEpoch.current;
     restoreLocalSession().then((hasSession) => {
+      if (epoch !== authEpoch.current) return;
       if (!hasSession) {
         setCurrentUser(null);
         setUserProfile(null);
@@ -95,6 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     code: string,
     displayName?: string
   ): Promise<{ isNewUser: boolean }> => {
+    const epoch = ++authEpoch.current;
     const res = await fetch('/api/auth/otp/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -110,8 +117,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(data.error || 'کد تایید وارد شده نامعتبر یا منقضی است.');
     }
 
+    if (epoch !== authEpoch.current) throw new Error('عملیات ورود تغییر کرده است. دوباره تلاش کنید.');
     const u: UserProfile = data.user;
-    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user: u }));
 
     const authUser: AuthUser = {
       uid: u.uid,
@@ -140,6 +147,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const verifyPhoneChange = async (code: string): Promise<void> => {
+    const epoch = authEpoch.current;
+    const uid = currentUser?.uid;
     const res = await fetch('/api/auth/phone/change-verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -149,16 +158,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!res.ok || !data.success || !data.user) {
       throw new Error(data.error || 'تأیید شماره جدید انجام نشد.');
     }
+    if (epoch !== authEpoch.current || activeAccount.current !== uid) return;
     const user = data.user as UserProfile;
-    localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify({ user }));
     setUserProfile(user);
     setCurrentUser({ uid: user.uid, email: user.email, displayName: user.displayName, phoneNumber: user.phoneNumber });
     setIsAdmin(user.role === 'admin');
   };
 
   const logout = async () => {
+    const epoch = ++authEpoch.current;
     const response = await fetch('/api/auth/logout', { method: 'POST' });
     if (!response.ok) throw new Error('خروج از حساب انجام نشد. دوباره تلاش کنید.');
+    if (epoch !== authEpoch.current) return;
 
     localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
     setCurrentUser(null);
@@ -169,9 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateUserProfileData = async (data: Partial<UserProfile>) => {
     if (!currentUser || !userProfile) return;
-
-    const localSession = localStorage.getItem(LOCAL_STORAGE_SESSION_KEY);
-    if (!localSession) throw new Error('نشست کاربری معتبر نیست. لطفاً دوباره وارد شوید.');
+    const epoch = authEpoch.current;
 
     const res = await fetch('/api/auth/profile', {
       method: 'PUT',
@@ -185,11 +194,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error(resData.error || 'ذخیره اطلاعات حساب انجام نشد.');
     }
 
+    if (epoch !== authEpoch.current || activeAccount.current !== currentUser.uid) return;
     const updatedProfile = resData.user as UserProfile;
-    localStorage.setItem(
-      LOCAL_STORAGE_SESSION_KEY,
-      JSON.stringify({ user: updatedProfile })
-    );
     setUserProfile(updatedProfile);
     setCurrentUser({
       uid: updatedProfile.uid,

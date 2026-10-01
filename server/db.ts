@@ -9,6 +9,9 @@ export function createDb(store: Store) {
  const getAllOrdersFromDb = (): Order[] => [...store.map<Order>('orders').values()].sort((a,b) => b.createdAt.localeCompare(a.createdAt));
  const getOrderByIdOrTrackingFromDb = (id: string): Order | null => store.get('orders', id) || getAllOrdersFromDb().find(o => o.trackingCode === id) || null;
  const saveOrderToDb = (order: Order) => {
+  const existing = store.get<string>('trackingCodes', order.trackingCode);
+  if (existing && existing !== order.id) throw new Error('Duplicate tracking code');
+  store.set('trackingCodes', order.trackingCode, order.id);
   if (getAllOrdersFromDb().some(o => o.trackingCode === order.trackingCode && o.id !== order.id)) throw new Error('Duplicate tracking code');
   store.set('orders', order.id, order);
  };

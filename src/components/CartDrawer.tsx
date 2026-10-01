@@ -53,7 +53,7 @@ const normalizeIranianMobile = (value: string) => {
   return normalizedDigits;
 };
 
-export const CartDrawer: React.FC = () => {
+const AccountCartDrawer: React.FC = () => {
   const { cart, isCartOpen, setIsCartOpen, removeFromCart, updateCartQuantity, clearCart, goldPrice, settings, refreshProducts } =
     useGoldStore();
   const { userProfile, currentUser, openAuthModal } = useAuth();
@@ -91,6 +91,8 @@ export const CartDrawer: React.FC = () => {
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => generateIdempotencyKey());
   const [networkErrorOccurred, setNetworkErrorOccurred] = useState<boolean>(false);
 
+  const stillMounted = useRef(true);
+  useEffect(() => { stillMounted.current = true; return () => { stillMounted.current = false; }; }, []);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Invalidate price quote whenever items or quantities in cart change
@@ -418,8 +420,10 @@ export const CartDrawer: React.FC = () => {
         body: JSON.stringify(orderPayload),
       });
 
+      if (!stillMounted.current) return;
       if (response.ok) {
         const data = await response.json();
+        if (!stillMounted.current) return;
         const createdOrder: Order = data.order;
         setConfirmedOrder(createdOrder);
         setCheckoutStep('success');
@@ -1548,4 +1552,10 @@ export const CartDrawer: React.FC = () => {
       )}
     </div>
   );
+};
+
+// A different account gets an entirely fresh checkout, including pending async state.
+export const CartDrawer: React.FC = () => {
+  const { currentUser } = useAuth();
+  return <AccountCartDrawer key={currentUser?.uid || 'guest'} />;
 };

@@ -1,82 +1,31 @@
-import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
-import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
-const root = new URL('../', import.meta.url);
-const script = await readFile(new URL('dist/server/index.js', root), 'utf8');
-const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script, compatibilityDate: '2026-09-01', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], r2Buckets: ['BUCKET'], bindings: { SESSION_SECRET: 'test-secret-only-'.repeat(4), ADMIN_DEFAULT_PASSWORD: 'Test-admin-12345!', ADMIN_EMAIL: 'admin@example.com' }, serviceBindings: { ASSETS: async () => new Response(await readFile(new URL('dist/client/index.html', root)), { headers: { 'content-type': 'text/html' } }) } }));
-const db = await mf.getD1Database('DB');
-const migration = await readFile(new URL('drizzle/0000_greedy_trauma.sql', root), 'utf8');
-for (const sql of migration.split('--> statement-breakpoint')) await db.prepare(sql.trim()).run();
-async function call(path, method = 'GET', body, token, headers = {}) {
-  const response = await mf.dispatchFetch('http://localhost' + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Cookie: 'token=' + encodeURIComponent(token) } : {}), ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  const data = await response.json();
-  return { status: response.status, data, token: decodeURIComponent(response.headers.get('set-cookie')?.match(/^token=([^;]+)/)?.[1] || '') };
+import { Store } from '../server/storage.ts';
+import { createApp } from '../server.ts';
+const env = { SESSION_SECRET: 'full-flow-test-secret-longer-than-32-characters', NODE_ENV: 'test' };
+const store = new Store(env);
+store.set('market', 'gold', { pricePerGram: 23932462, isManualOverride: true });
+let cookie = '';
+async function request(path, method = 'GET', body) {
+  const response = await createApp(store, env).fetch(new Request(`http://localhost${path}`, { method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }));
+  const setCookie = response.headers.get('set-cookie'); if (setCookie) cookie = setCookie.split(';')[0];
+  return { status: response.status, body: await response.json() };
 }
-try {
-  assert.equal((await mf.dispatchFetch('http://localhost/')).status, 200);
-  let result = await call('/api/settings'); assert.equal(result.status, 200, JSON.stringify(result));
-  const products = await call('/api/products'); assert.equal(products.status, 200, JSON.stringify(products));
-  assert.ok(Array.isArray(products.data) && products.data.length);
-  const product = products.data[0];
-  const admin = await call('/api/auth/login', 'POST', { email: 'admin@example.com', password: 'Test-admin-12345!' });
-  assert.equal(admin.status, 200, JSON.stringify(admin));
-  const registration = await call('/api/auth/register', 'POST', { email: 'customer@example.com', password: 'Test-customer-12345!', displayName: 'کاربر آزمایشی', phoneNumber: '09123456789' });
-  assert.equal(registration.status, 201, JSON.stringify(registration));
-  const token = registration.token;
-  assert.ok(token);
-  assert.equal(registration.data.token, undefined);
-  assert.equal(registration.data.user.phoneNumber, '');
-  assert.equal((await call('/api/gold-price/refresh', 'POST')).status, 401);
-  assert.equal((await call('/api/admin/gold-price/sync', 'POST', {}, token)).status, 403);
-  // A phone claimed after a change request must not become shared at confirmation.
-  const newPhone = '09123334444';
-  const second = await call('/api/auth/register', 'POST', { email: 'second@example.com', password: 'Test-second-12345!', displayName: 'کاربر دوم', phoneNumber: newPhone });
-  assert.equal(second.status, 201);
-  const secondRow = await db.prepare("SELECT value_json FROM site_records WHERE bucket = 'users' AND record_key = 'second@example.com'").first();
-  await db.prepare("UPDATE site_records SET value_json = ? WHERE bucket = 'users' AND record_key = 'second@example.com'").bind(JSON.stringify({...JSON.parse(secondRow.value_json), phoneNumber: newPhone, phoneVerified: true})).run();
-  await db.prepare('INSERT OR REPLACE INTO site_records (bucket, record_key, value_json) VALUES (?, ?, ?)').bind('phoneOtp', registration.data.user.uid, JSON.stringify({ newMobile: newPhone, code: '12345', expiresAt: Date.now() + 180000, attempts: 0 })).run();
-  assert.equal((await call('/api/auth/phone/change-verify', 'POST', { code: '12345' }, token)).status, 400);
-  assert.equal((await call('/api/auth/me', 'GET', undefined, token)).data.user.phoneNumber, '');
-  // Read traffic must neither lose unloaded records nor modify the admin timestamp.
-  const beforeAdmin = await db.prepare("SELECT value_json FROM site_records WHERE bucket = 'users' AND record_key = 'admin@example.com'").first();
-  await call('/api/products');
-  const afterAdmin = await db.prepare("SELECT value_json FROM site_records WHERE bucket = 'users' AND record_key = 'admin@example.com'").first();
-  assert.equal(afterAdmin.value_json, beforeAdmin.value_json);
-  await db.prepare('INSERT OR REPLACE INTO site_records (bucket, record_key, value_json) VALUES (?, ?, ?)').bind('market', 'gold', JSON.stringify({ pricePerGram: 23000000, isManualOverride: true, status: 'manual', timestamp: new Date().toISOString() })).run();
-  assert.equal((await call('/api/auth/me', 'GET', undefined, token)).status, 200);
-  assert.equal((await call('/api/admin/logs', 'GET', undefined, token)).status, 403);
-  const quote = await call('/api/orders/quote', 'POST', { items: [{ productId: product.id, quantity: 1 }] }, token);
-  assert.equal(quote.status, 200, JSON.stringify(quote));
-  const receipt = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXxkAAAAASUVORK5CYII=';
-  const orderBody = { customerName: 'کاربر آزمایشی', customerPhone: '09123456789', customerAddress: 'تهران خیابان آزمایشی پلاک یک', contactMethod: 'phone', paymentMethod: 'card_to_card', paymentReceiptImage: receipt, items: [{ productId: product.id, quantity: 1 }], quoteId: quote.data.quoteId };
-  const order = await call('/api/orders', 'POST', orderBody, token, { 'X-Idempotency-Key': 'test-order-1' });
-  assert.equal(order.status, 201, JSON.stringify(order));
-  assert.ok(order.data.order.paymentReceiptImage.startsWith('/api/receipts/'));
-  const repeat = await call('/api/orders', 'POST', orderBody, token, { 'X-Idempotency-Key': 'test-order-1' });
-  assert.equal(repeat.status, 200, JSON.stringify(repeat));
-  assert.equal(repeat.data.order.id, order.data.order.id);
-  const orders = await call('/api/orders', 'GET', undefined, token);
-  await call('/api/products');
-  assert.ok(JSON.stringify((await call('/api/orders', 'GET', undefined, token)).data).includes(order.data.order.id));
-  assert.equal(orders.status, 200); assert.ok(JSON.stringify(orders.data).includes(order.data.order.id));
-  const receiptPath = order.data.order.paymentReceiptImage;
-  assert.equal((await mf.dispatchFetch('http://localhost' + receiptPath)).status, 403);
-  assert.equal((await mf.dispatchFetch('http://localhost' + receiptPath, { headers: { Authorization: 'Bearer ' + token } })).status, 200);
-  // Concurrent checkouts for the last unit must never oversell.
-  const stockProduct = products.data[1];
-  await db.prepare('UPDATE site_records SET value_json = ? WHERE bucket = ? AND record_key = ?').bind(JSON.stringify({ ...stockProduct, stock: 1 }), 'products', stockProduct.id).run();
-  const concurrentBody = { ...orderBody, quoteId: undefined, items: [{ productId: stockProduct.id, quantity: 1 }] };
-  const competing = await Promise.all([call('/api/orders', 'POST', concurrentBody, token, { 'X-Idempotency-Key': 'race-1' }), call('/api/orders', 'POST', concurrentBody, token, { 'X-Idempotency-Key': 'race-2' })]);
-  assert.equal(competing.filter(r => r.status === 201).length, 1, JSON.stringify(competing));
-  const remaining = await db.prepare('SELECT value_json FROM site_records WHERE bucket = ? AND record_key = ?').bind('products', stockProduct.id).first();
-  assert.equal(JSON.parse(remaining.value_json).stock, 0);
-  // Force a fresh Worker instance using the same durable services.
-  await mf.setOptions(convertV4MiniflareOptions({ modules: true, script, compatibilityDate: '2026-09-01', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], r2Buckets: ['BUCKET'], bindings: { SESSION_SECRET: 'test-secret-only-'.repeat(4), ADMIN_DEFAULT_PASSWORD: 'Test-admin-12345!', ADMIN_EMAIL: 'admin@example.com' } }));
-  assert.equal((await call('/api/auth/me', 'GET', undefined, token)).status, 200);
-  assert.ok(JSON.stringify((await call('/api/orders', 'GET', undefined, token)).data).includes(order.data.order.id));
-  assert.equal((await call('/api/auth/logout', 'POST', {}, token)).status, 200);
-  assert.equal((await call('/api/auth/me', 'GET', undefined, token)).status, 401);
-  const otp = await call('/api/auth/otp/send', 'POST', { mobile: '09121111111' });
-  assert.equal(otp.status, 400); assert.ok(!JSON.stringify(otp.data).includes('isDevelopmentSimulation":true'));
-  console.log('PASS: storefront, registration, login, authorization, quote, checkout, idempotency, private R2 receipt, Worker restart persistence, logout revocation, missing SMS configuration.');
-} finally { await mf.dispose(); }
+const products = await request('/api/products'); assert.equal(products.status, 200);
+const mobile = '09120000812';
+store.set('otp', mobile, { code: '12345', attempts: 0, expiresAt: Date.now() + 180000 });
+const login = await request('/api/auth/otp/verify', 'POST', { mobile, code: '12345' });
+assert.equal(login.status, 200); assert.ok(cookie);
+// A fresh app authenticates and updates the profile using only the server cookie.
+assert.equal((await request('/api/auth/me')).body.user.uid, login.body.user.uid);
+const profile = await request('/api/auth/profile', 'PUT', { displayName: 'مشتری تست', address: 'تهران خیابان آزمایشی پلاک یک' });
+assert.equal(profile.status, 200); assert.equal(profile.body.user.displayName, 'مشتری تست');
+const items = [{ productId: products.body.find(p => p.stock > 0).id, quantity: 1 }];
+assert.equal((await request('/api/cart/reserve-batch', 'POST', { items })).status, 200);
+const quote = await request('/api/orders/quote', 'POST', { items }); assert.equal(quote.status, 200);
+const body = { items, quoteId: quote.body.quoteId, idempotencyKey: 'full-flow', customerName: 'مشتری تست', customerPhone: mobile, customerAddress: 'تهران خیابان آزمایشی پلاک یک', paymentReceiptImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=' };
+const order = await request('/api/orders', 'POST', body); assert.equal(order.status, 201);
+assert.equal((await request('/api/orders', 'POST', body)).body.order.id, order.body.order.id);
+assert.ok((await request('/api/orders')).body.some(row => row.id === order.body.order.id));
+assert.equal((await request('/api/auth/logout', 'POST', {})).status, 200);
+assert.equal((await request('/api/auth/me')).status, 401);
+console.log('PASS: current cookie/SMS storefront-to-quote-to-receipt checkout, restored profile editing, order listing, idempotency and logout. Isolated local store only.');

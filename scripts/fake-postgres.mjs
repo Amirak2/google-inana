@@ -12,15 +12,17 @@ export function installFakePostgres() {
   let activeTransactions = 0;
   const failures = [];
   const excluded = new Set(['orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits']);
-  function rows(sql, source) {
-    return [...source.values()].filter(row => !sql.includes('WHERE bucket NOT IN') || !excluded.has(row.bucket)).map(row => structuredClone(row));
+  function rows(sql, source, params = []) {
+    const allowedBuckets = sql.includes('bucket = ANY') ? new Set(params[0]) : null;
+    const requested = sql.includes('jsonb_to_recordset') ? new Set(JSON.parse(params[0]).map(row => JSON.stringify([row.bucket, row.record_key]))) : null;
+    return [...source.values()].filter(row => (!allowedBuckets || allowedBuckets.has(row.bucket)) && (!requested || requested.has(JSON.stringify([row.bucket,row.record_key]))) && (!sql.includes('WHERE bucket NOT IN') || !excluded.has(row.bucket))).map(row => structuredClone(row));
   }
   function maybeFail(sql) {
     if (failures[0] && sql.includes(failures[0].match)) throw failures.shift().error;
   }
-  pg.Pool.prototype.query = async sql => {
+  pg.Pool.prototype.query = async (sql, params = []) => {
     events.push(sql); maybeFail(sql);
-    return { rows: rows(sql, records) };
+    return { rows: rows(sql, records, params) };
   };
   pg.Pool.prototype.connect = async () => {
     maybeFail('CONNECT');
@@ -39,7 +41,7 @@ export function installFakePostgres() {
           unlock = finish;
           draft = structuredClone(records);
         }
-        if (sql.startsWith('SELECT bucket')) return { rows: rows(sql, draft || records) };
+        if (sql.startsWith('SELECT bucket')) return { rows: rows(sql, draft || records, params) };
         if (sql.startsWith('INSERT INTO site_records')) {
           draft.set(JSON.stringify(params.slice(0, 2)), { bucket: params[0], record_key: params[1], value_json: JSON.parse(params[2]) });
         }

@@ -13,6 +13,8 @@ let app = createApp(store, env);
 const auth = createAuthStore(store, env);
 const admin = [...store.map('users').values()].find(u => u.role === 'admin');
 const token = auth.createSessionToken(admin);
+store.set('otp', '09120000999', { code: '12345', attempts: 0, expiresAt: Date.now() + 180000 });
+const competitorToken = auth.verifySmsOtpAndAuthenticate('09120000999', '12345').token;
 const products = [...store.map('products').values()].filter(p => p.stock > 0);
 const [a, b] = products;
 const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
@@ -43,7 +45,7 @@ const issuedAt = realNow();
 try {
   Date.now = () => issuedAt + 11 * 60000;
   const competitor = await app.fetch(new Request('http://localhost/api/cart/reserve', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${competitorToken}` },
     body: JSON.stringify({ productId: a.id, quantity: 1 }),
   }), { clientIp: '198.51.100.20' });
   assert.equal(competitor.status, 409, 'at minute eleven the paid quote still owns the last item');
@@ -92,7 +94,8 @@ assert.equal(store.map('quotes').size, 3);
 store.map('quotes').clear(); store.map('reservations').clear(); store.map('rateLimits').clear();
 const large = await request('/api/orders/quote', { items: [{ productId: a.id, quantity: 3 }] });
 await request('/api/orders/quote', { items });
-assert.equal(store.get('reservations', a.id)[0].quantity, 3);
+assert.equal(store.get('reservations', a.id).reduce((total, r) => total + r.quantity, 0), 4);
+assert.equal(new Set(store.get('reservations', a.id).map(r => r.reservationId)).size, 2);
 assert.ok(store.get('reservations', a.id)[0].expiresAt >= large.body.expiresAt);
 
 // Production snapshot pruning retains an expired quote for payment review.

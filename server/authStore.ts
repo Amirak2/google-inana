@@ -222,11 +222,12 @@ function sanitizeUser(u: StoredUser): UserProfile {
 }
 
 function findUserByMobile(mobile: string): StoredUser | undefined {
+  store.map('phoneClaims').get(normalizeIranianMobile(mobile));
   const norm = normalizeIranianMobile(mobile);
   if (!norm) return undefined;
   for (const u of usersCache.values()) {
     if (u.phoneNumber && normalizeIranianMobile(u.phoneNumber) === norm) {
-      return u;
+      return usersCache.get(u.email.toLowerCase());
     }
   }
   return undefined;
@@ -296,6 +297,7 @@ function loginWithUsername(username: string, password: string): { user: UserProf
 }
 
 function findSmsLoginUser(mobile: string): StoredUser | undefined {
+  store.map('phoneClaims').get(normalizeIranianMobile(mobile));
   if (mobile === normalizeIranianMobile(PRIMARY_ADMIN_PHONE)) {
     return usersCache.get(PRIMARY_ADMIN_EMAIL.toLowerCase().trim());
   }
@@ -305,7 +307,7 @@ function findSmsLoginUser(mobile: string): StoredUser | undefined {
   if (matches.length > 1) {
     throw new Error('چند حساب با این شماره ثبت شده است. برای بازیابی حساب با پشتیبانی تماس بگیرید.');
   }
-  const user = matches[0];
+  const user = matches[0] ? usersCache.get(matches[0].email.toLowerCase()) : undefined;
   if (user && user.phoneVerified !== true && user.passwordHash) {
     throw new Error('این شماره در یک حساب قدیمی تأیید نشده است. برای اتصال امن حساب با پشتیبانی تماس بگیرید.');
   }
@@ -647,6 +649,7 @@ function verifySmsOtpAndAuthenticate(
     }
   }
 
+  store.map('phoneClaims').set(cleanMobile, user.uid);
   user.phoneVerified = true;
   const token = createSessionToken(user);
   return {
@@ -747,6 +750,8 @@ function verifyPhoneChangeOtp(userId: string, code: string): UserProfile {
     throw new Error('این شماره همراه به حساب دیگری متصل است.');
   }
   otpCache.delete(pending.newMobile);
+  store.map('phoneClaims').set(pending.newMobile, targetUser.uid);
+  if (targetUser.phoneNumber) store.map('phoneClaims').set(targetUser.phoneNumber, null);
   targetUser.phoneNumber = pending.newMobile;
   targetUser.phoneVerified = true;
   targetUser.updatedAt = new Date().toISOString();
