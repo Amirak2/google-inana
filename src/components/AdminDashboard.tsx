@@ -2,7 +2,7 @@ import { AdminProductGallery } from './AdminProductGallery';
 import { useAdminDraft } from '../hooks/useAdminDraft';
 import { changedProductFields, numberOrDefault } from '../utils/adminProductForm';
 import { readApiResponse } from '../utils/apiResponse';
-import { normalizeOrderStatus, orderStatusOptions, isApprovedOrderStatus, canTransitionOrderStatus } from '../utils/orderWorkflow';
+import { normalizeOrderStatus, orderStatusOptions, isApprovedOrderStatus, canTransitionOrderStatus, canArchiveOrder } from '../utils/orderWorkflow';
 import React, { useState, useEffect, useRef } from 'react';
 import { readAdminTab, saveSessionValue, type AdminTab } from '../utils/navigationState';
 import {
@@ -11,6 +11,7 @@ import {
   Package,
   Plus,
   Trash2,
+  Archive,
   Edit2,
   CheckCircle,
   Clock,
@@ -169,8 +170,11 @@ export const AdminDashboard: React.FC = () => {
   const [lastOrdersReceived, setLastOrdersReceived] = useState<string | null>(null);
   const [orderErrors, setOrderErrors] = useState<Record<string, string>>({});
   const [clearingRejected, setClearingRejected] = useState(false);
+  const [archivingRejected, setArchivingRejected] = useState(false);
+  const workingOrders = orders.filter(order => !order.archivedAt);
+  const archivedOrders = orders.filter(order => order.archivedAt);
   const [orderFilterStatus, setOrderFilterStatus] = useState<
-    'all' | 'در انتظار بررسی' | 'تأیید شده' | 'رد شده' | 'other'
+    'all' | 'در انتظار بررسی' | 'تأیید شده' | 'رد شده' | 'other' | 'archived'
   >('all');
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [viewingReceiptOrder, setViewingReceiptOrder] = useState<Order | null>(null);
@@ -443,13 +447,13 @@ export const AdminDashboard: React.FC = () => {
 
   const handleClearRejectedOrders = async () => {
     if (clearingRejected) return;
-    const rejected = orders.filter(order => order.status === 'رد شده');
+    const rejected = archivedOrders.filter(order => order.status === 'رد شده');
     if (!rejected.length) return;
     if (!window.confirm(`حذف قطعی ${toPersianDigits(rejected.length)} سفارش با وضعیت «رد شده»؟ سوابق این سفارش‌ها قابل بازیابی نخواهد بود.`)) return;
     setClearingRejected(true);
     try {
       const res = await fetch('/api/orders', { method: 'DELETE', headers: {'Content-Type':'application/json', ...getAuthHeaders()},
-        body: JSON.stringify({ids: rejected.map(order => order.id), expectedStatus: 'رد شده'}) });
+        body: JSON.stringify({ids: rejected.map(order => order.id), expectedStatus: 'رد شده', expectedArchived:true}) });
       const data = await readApiResponse<{deletedIds: string[]; deletedCount: number}>(res, 'پاکسازی سفارش‌ها انجام نشد.');
       ordersRevision.current++;
       setOrders(previous => previous.filter(order => !data.deletedIds.includes(order.id)));
@@ -457,6 +461,47 @@ export const AdminDashboard: React.FC = () => {
     } catch (error) {
       setOrderActionNotification({message: error instanceof Error ? error.message : 'پاکسازی انجام نشد.', type:'error'});
     } finally { setClearingRejected(false); }
+  };
+
+  const handleArchiveOrder = async (order: Order) => {
+    setActionLoadingOrderId(order.id);
+    setOrderErrors(previous => { const next = {...previous}; delete next[order.id]; return next; });
+    try {
+      const res = await fetch(`/api/admin/orders/${encodeURIComponent(order.id)}/archive`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json', ...getAuthHeaders()},
+        body: JSON.stringify({archived: !order.archivedAt}),
+      });
+      const data = await readApiResponse<{order: Order}>(res, 'ذخیره آرشیو انجام نشد.');
+      ordersRevision.current++;
+      setOrders(previous => previous.map(item => item.id === order.id ? data.order : item));
+      if (viewingReceiptOrder?.id === order.id) setViewingReceiptOrder(null);
+      setOrderActionNotification({message: data.order.archivedAt ? 'سفارش آرشیو شد؛ سابقه و موجودی حفظ شد.' : 'سفارش از آرشیو برگردانده شد.', type:'success'});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'ارتباط با سرور برقرار نشد.';
+      setOrderErrors(previous => ({...previous, [order.id]: message}));
+      setOrderActionNotification({message, type:'error'});
+    } finally { setActionLoadingOrderId(null); }
+  };
+
+  const handleArchiveRejectedOrders = async () => {
+    if (archivingRejected) return;
+    const ids = workingOrders.filter(order => order.status === 'رد شده').slice(0, 100).map(order => order.id);
+    if (!ids.length) return;
+    setArchivingRejected(true);
+    try {
+      const res = await fetch('/api/admin/orders/archive', {
+        method:'POST', headers: {'Content-Type':'application/json', ...getAuthHeaders()},
+        body:JSON.stringify({ids, archived:true, expectedStatus:'رد شده'}),
+      });
+      const data = await readApiResponse<{orders: Order[]}>(res, 'آرشیو سفارش‌ها انجام نشد.');
+      const updated = new Map(data.orders.map(order => [order.id, order]));
+      ordersRevision.current++;
+      setOrders(previous => previous.map(order => updated.get(order.id) || order));
+      setViewingReceiptOrder(previous => previous && updated.has(previous.id) ? updated.get(previous.id)! : previous);
+      setOrderActionNotification({message:`${toPersianDigits(data.orders.length)} سفارش ردشده آرشیو شد.`, type:'success'});
+    } catch (error) {
+      setOrderActionNotification({message:error instanceof Error ? error.message : 'آرشیو انجام نشد.', type:'error'});
+    } finally { setArchivingRejected(false); }
   };
 
   const copyQuotationText = () => {
@@ -2049,7 +2094,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   </span>
                 </div>
                 <span className="text-xl sm:text-2xl font-bold text-amber-400 font-serif-brand">
-                  {toPersianDigits(orders.filter((o) => o.status === 'در انتظار بررسی').length)}
+                  {toPersianDigits(workingOrders.filter((o) => o.status === 'در انتظار بررسی').length)}
                 </span>
               </div>
               <div className="bg-[#0A1120] border border-emerald-500/30 rounded-2xl p-4">
@@ -2058,7 +2103,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 </span>
                 <span className="text-xl sm:text-2xl font-bold text-emerald-400 font-serif-brand">
                   {toPersianDigits(
-                    orders.filter((o) => isApprovedOrderStatus(o.status))
+                    workingOrders.filter((o) => isApprovedOrderStatus(o.status))
                       .length
                   )}
                 </span>
@@ -2068,7 +2113,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   رد شده
                 </span>
                 <span className="text-xl sm:text-2xl font-bold text-rose-400 font-serif-brand">
-                  {toPersianDigits(orders.filter((o) => o.status === 'رد شده').length)}
+                  {toPersianDigits(workingOrders.filter((o) => o.status === 'رد شده').length)}
                 </span>
               </div>
             </div>
@@ -2086,17 +2131,24 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     </span>
                   </h2>
                   <p className="text-xs text-slate-400 mt-1">
-                    سفارش‌ها در دیتابیس و حافظه تا زمان حذف توسط شما حفظ می‌شوند • امکان بررسی فیش، تایید، رد و حذف قطعی
+                    سفارش‌های پایان‌یافته را آرشیو کنید؛ سابقه و فیش حفظ می‌شود و موجودی تغییر نمی‌کند.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {orders.some((o) => o.status === 'رد شده') && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {orderFilterStatus !== 'archived' && workingOrders.some(order => order.status === 'رد شده') && (
+                    <button type="button" onClick={handleArchiveRejectedOrders} disabled={archivingRejected}
+                      className="text-xs text-[#D4AF37] bg-[#060B14] border border-slate-700 px-3 py-1.5 rounded-xl flex items-center gap-1.5 disabled:opacity-50"
+                      title="آرشیو حداکثر ۱۰۰ سفارش ردشده در هر بار">
+                      <Archive className="w-3.5 h-3.5" /><span>آرشیو رد شده‌ها</span>
+                    </button>
+                  )}
+                  {orderFilterStatus === 'archived' && archivedOrders.some((o) => o.status === 'رد شده') && (
                     <button
                       type="button"
                       onClick={handleClearRejectedOrders}
                       disabled={clearingRejected}
                       className="text-xs text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-                      title="پاکسازی یکجای تمام سفارش‌های رد شده"
+                      title="حذف قطعی سفارش‌های ردشده از آرشیو"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>پاکسازی رد شده‌ها</span>
@@ -2126,7 +2178,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    همه ({toPersianDigits(orders.length)})
+                    فهرست روزمره ({toPersianDigits(workingOrders.length)})
                   </button>
                   <button
                     type="button"
@@ -2139,7 +2191,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   >
                     <span>⏳ در انتظار بررسی</span>
                     <span className="bg-black/30 px-1.5 py-0.5 rounded-full text-[10px]">
-                      {toPersianDigits(orders.filter((o) => o.status === 'در انتظار بررسی').length)}
+                      {toPersianDigits(workingOrders.filter((o) => o.status === 'در انتظار بررسی').length)}
                     </span>
                   </button>
                   <button
@@ -2153,7 +2205,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   >
                     تأیید شده (
                     {toPersianDigits(
-                      orders.filter(
+                      workingOrders.filter(
                         (o) => isApprovedOrderStatus(o.status)
                       ).length
                     )}
@@ -2168,7 +2220,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                         : 'text-rose-400 hover:text-rose-300'
                     }`}
                   >
-                    رد شده ({toPersianDigits(orders.filter((o) => o.status === 'رد شده').length)})
+                    رد شده ({toPersianDigits(workingOrders.filter((o) => o.status === 'رد شده').length)})
                   </button>
                   <button
                     type="button"
@@ -2180,6 +2232,10 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     }`}
                   >
                     سایر مراحل
+                  </button>
+                  <button type="button" onClick={() => setOrderFilterStatus('archived')}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${orderFilterStatus === 'archived' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>
+                    آرشیو سفارش‌ها ({toPersianDigits(archivedOrders.length)})
                   </button>
                 </div>
 
@@ -2213,6 +2269,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
               ) : (
                 (() => {
                   const filteredOrders = orders.filter((ord) => {
+                    if (Boolean(ord.archivedAt) !== (orderFilterStatus === 'archived')) return false;
                     // Status filter
                     if (orderFilterStatus === 'در انتظار بررسی' && ord.status !== 'در انتظار بررسی') {
                       return false;
@@ -2509,7 +2566,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 {/* One-Click Approve Button */}
                                 <button
                                   type="button"
-                                  disabled={isLoadingThis || isApproved || !canTransitionOrderStatus(ord.status, 'تأیید شده')}
+                                  disabled={isLoadingThis || !!ord.archivedAt || isApproved || !canTransitionOrderStatus(ord.status, 'تأیید شده')}
                                   onClick={() => handleApproveOrder(ord)}
                                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
                                     isApproved
@@ -2524,7 +2581,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 {/* Reject Button (Opens reason dialog) */}
                                 <button
                                   type="button"
-                                  disabled={isLoadingThis || !canTransitionOrderStatus(ord.status, 'رد شده')}
+                                  disabled={isLoadingThis || !!ord.archivedAt || !canTransitionOrderStatus(ord.status, 'رد شده')}
                                   onClick={() => {
                                     setRejectingOrder(ord);
                                     setRejectionReasonInput(ord.rejectionReason || '');
@@ -2544,7 +2601,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                   <span className="text-[10px] text-slate-400">تغییر وضعیت:</span>
                                   <select
                                     value={normalizeOrderStatus(ord.status)}
-                                    disabled={isLoadingThis}
+                                    disabled={isLoadingThis || !!ord.archivedAt}
                                     onChange={(e) => handleUpdateOrderStatus(ord.id, e.target.value)}
                                     className="bg-transparent text-[#D4AF37] font-bold text-xs outline-none cursor-pointer"
                                   >
@@ -2552,7 +2609,16 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                   </select>
                                 </div>
 
-                                {/* Delete Order Button */}
+                                {(ord.archivedAt || canArchiveOrder(ord.status)) && (
+                                  <button type="button" disabled={isLoadingThis || archivingRejected}
+                                    onClick={() => void handleArchiveOrder(ord)}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50">
+                                    <Archive className="w-3.5 h-3.5" />
+                                    <span>{ord.archivedAt ? 'بازگرداندن از آرشیو' : 'آرشیو سفارش'}</span>
+                                  </button>
+                                )}
+                                {/* Permanent deletion is kept separate from reversible archiving. */}
+                                {ord.archivedAt && (
                                 <button
                                   type="button"
                                   disabled={isLoadingThis}
@@ -2563,6 +2629,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                   <Trash2 className="w-3.5 h-3.5 text-rose-400" />
                                   <span>حذف سفارش</span>
                                 </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2640,6 +2707,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
+                        disabled={!!viewingReceiptOrder.archivedAt || !canTransitionOrderStatus(viewingReceiptOrder.status, 'رد شده') || actionLoadingOrderId === viewingReceiptOrder.id}
                         onClick={() => {
                           const ord = viewingReceiptOrder;
                           setViewingReceiptOrder(null);
@@ -2654,6 +2722,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
 
                       <button
                         type="button"
+                        disabled={!!viewingReceiptOrder.archivedAt || !canTransitionOrderStatus(viewingReceiptOrder.status, 'تأیید شده') || actionLoadingOrderId === viewingReceiptOrder.id}
                         onClick={() => handleApproveOrder(viewingReceiptOrder)}
                         className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md"
                       >

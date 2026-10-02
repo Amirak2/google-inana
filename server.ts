@@ -1,4 +1,4 @@
-import { ORDER_STATUSES, normalizeOrderStatus, canTransitionOrderStatus } from './src/utils/orderWorkflow';
+import { ORDER_STATUSES, normalizeOrderStatus, canTransitionOrderStatus, canArchiveOrder } from './src/utils/orderWorkflow';
 import { createReservationEngine } from './server/reservations';
 import { createInventoryPolicy, expireUnreviewedInventory } from './server/inventoryPolicy';
 import { cartQuantities, boundedLogDetails } from './server/checkoutSafety';
@@ -1809,6 +1809,11 @@ async function handleOrderStatusUpdate(
         throw err;
       }
 
+      if (order.archivedAt) {
+        const err: any = new Error('ابتدا سفارش را از آرشیو برگردانید، سپس آن را ویرایش کنید.');
+        err.statusCode = 409;
+        throw err;
+      }
       if (status !== undefined && !canTransitionOrderStatus(order.status, status)) {
         const err: any = new Error('برای سفارش تکمیل‌شده فقط لغو صریح سفارش مجاز است.');
         err.statusCode = 409;
@@ -1887,6 +1892,62 @@ async function handleOrderStatusUpdate(
   }
 }
 
+// Archiving changes only the admin queue; sales, receipts and inventory stay intact.
+async function archiveOrders(ids: string[], archived: boolean, expectedStatus?: string): Promise<Order[]> {
+  return runDbTransaction(async () => {
+    const targets = ids.map(id => ordersList.find(order => order.id === id));
+    if (targets.some(order => !order)) {
+      const error: any = new Error('سفارش یافت نشد؛ فهرست را تازه کنید.');
+      error.statusCode = 404;
+      throw error;
+    }
+    const found = targets as Order[];
+    if (archived && found.some(order => !canArchiveOrder(order.status)
+      || (expectedStatus !== undefined && normalizeOrderStatus(order.status) !== expectedStatus))) {
+      const error: any = new Error('فقط سفارش‌های تکمیل‌شده، ردشده یا لغوشده قابل آرشیو هستند؛ وضعیت سفارش‌ها را دوباره بررسی کنید.');
+      error.statusCode = 409;
+      throw error;
+    }
+    const now = new Date().toISOString();
+    for (const order of found) {
+      if (Boolean(order.archivedAt) === archived) continue;
+      if (archived) order.archivedAt = now;
+      else delete order.archivedAt;
+      order.updatedAt = now;
+      saveOrderToDb(order);
+    }
+    return found;
+  });
+}
+
+async function handleArchiveOrders(req: AuthenticatedRequest, res: Response, single: boolean): Promise<void> {
+  const { archived, ids, expectedStatus } = req.body || {};
+  const selected = single ? [req.params.id] : ids;
+  if (typeof archived !== 'boolean' || !Array.isArray(selected) || selected.length < 1 || selected.length > 100
+    || selected.some(id => typeof id !== 'string' || !id.trim() || id.length > 100)
+    || (expectedStatus !== undefined && !canArchiveOrder(expectedStatus))) {
+    res.status(400).json({error: 'درخواست آرشیو نامعتبر است؛ هر بار بین ۱ تا ۱۰۰ سفارش انتخاب کنید.'});
+    return;
+  }
+  try {
+    const updated = await archiveOrders([...new Set<string>(selected)], archived, expectedStatus);
+    logger.order('ORDERS', archived ? 'آرشیو سفارش‌ها توسط مدیر' : 'بازگرداندن سفارش‌ها از آرشیو توسط مدیر', {
+      orderIds: updated.map(order => order.id), admin: req.user?.uid,
+    });
+    res.json(single ? {success: true, order: updated[0]} : {success: true, orders: updated});
+  } catch (error: any) {
+    ordersList = getAllOrdersFromDb();
+    res.status(error.statusCode || 500).json({error: error.message || 'ذخیره آرشیو انجام نشد.'});
+  }
+}
+
+app.patch('/api/admin/orders/:id/archive', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+  return handleArchiveOrders(req, res, true);
+});
+app.post('/api/admin/orders/archive', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+  return handleArchiveOrders(req, res, false);
+});
+
 app.patch('/api/admin/orders/:id', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
   return handleOrderStatusUpdate(req.params.id, req.body, req.user, res);
 });
@@ -1948,7 +2009,7 @@ app.delete('/api/admin/orders/:id', requireAdminAuth, (req: AuthenticatedRequest
 
 // Bulk delete or clear orders from database and memory
 app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const { ids, clearAll, expectedStatus } = req.body || {};
+  const { ids, clearAll, expectedStatus, expectedArchived } = req.body || {};
   try {
     const result = await runDbTransaction(async () => {
       if (clearAll === true) {
@@ -1965,6 +2026,11 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
       if (Array.isArray(ids) && ids.length > 0) {
         const idSet = new Set(ids.map(String));
         const targets = ordersList.filter(order => idSet.has(order.id) || idSet.has(order.trackingCode));
+        if (expectedArchived !== undefined && (expectedArchived !== true || targets.some(order => !order.archivedAt))) {
+          const err: any = new Error('برخی سفارش‌ها از آرشیو برگردانده شده‌اند؛ پیش از حذف، فهرست را تازه کنید.');
+          err.statusCode = 409;
+          throw err;
+        }
         if (expectedStatus !== undefined && (expectedStatus !== 'رد شده' || targets.some(order => order.status !== expectedStatus))) {
           const err: any = new Error('وضعیت برخی سفارش‌ها تغییر کرده است؛ فهرست را تازه کنید و پاکسازی را دوباره بررسی کنید.');
           err.statusCode = 409;
