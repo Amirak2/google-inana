@@ -1579,35 +1579,6 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
 
                 </div>
 
-                {/* Other markets summary */}
-                {goldPrice.otherMarkets && Object.keys(goldPrice.otherMarkets).length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-800/80 text-[11px]">
-                    <div className="bg-[#060B14] p-2 rounded-lg border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">طلای ۲۴ عیار:</span>
-                      <span className="font-bold text-slate-200">
-                        {goldPrice.otherMarkets.gold24k ? formatToman(goldPrice.otherMarkets.gold24k) : '—'}
-                      </span>
-                    </div>
-                    <div className="bg-[#060B14] p-2 rounded-lg border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">مظنه مثقال:</span>
-                      <span className="font-bold text-slate-200">
-                        {goldPrice.otherMarkets.mesghal ? formatToman(goldPrice.otherMarkets.mesghal) : '—'}
-                      </span>
-                    </div>
-                    <div className="bg-[#060B14] p-2 rounded-lg border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">سکه تمام امامی:</span>
-                      <span className="font-bold text-slate-200">
-                        {goldPrice.otherMarkets.emamiCoin ? formatToman(goldPrice.otherMarkets.emamiCoin) : '—'}
-                      </span>
-                    </div>
-                    <div className="bg-[#060B14] p-2 rounded-lg border border-slate-800">
-                      <span className="text-slate-400 block text-[10px]">انس جهانی ($):</span>
-                      <span className="font-bold text-[#D4AF37]">
-                        {goldPrice.otherMarkets.globalOunceUsd ? `$${goldPrice.otherMarkets.globalOunceUsd.toLocaleString()}` : '—'}
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <form onSubmit={handleSaveGlobalSettings} className="space-y-6">
