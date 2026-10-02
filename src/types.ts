@@ -120,6 +120,7 @@ export interface Order {
   totalPrice: number;
   goldPriceAtCheckout: number;
   status: OrderStatus;
+  archivedAt?: string;
   inventoryReleased?: boolean;
   paymentReviewRequired?: boolean;
   inventoryHoldExpiresAt?: string;
