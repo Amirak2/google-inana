@@ -51,12 +51,9 @@ interface GoldStoreContextType extends CatalogFilters {
   toggleFavorite: (productId: string) => void;
   isFavorite: (productId: string) => boolean;
   refreshGoldPrice: (force?: boolean) => Promise<void>;
-  syncWithApi: () => Promise<GoldPriceData | null>;
   refreshProducts: () => Promise<void>;
   updateSettings: (newSettings: Partial<PricingSettings>) => Promise<void>;
   updateStoreSettings: (newSettings: Partial<PricingSettings>) => Promise<void>;
-  updateGoldPriceState: (priceData: Partial<GoldPriceData>) => Promise<void>;
-  updateGoldPriceManual: (price: number) => Promise<void>;
   addProduct: (product: Product) => Promise<void>;
   updateProduct: (id: string, updates: ProductUpdates) => Promise<void>;
   updateSingleProductPricing: (
@@ -222,29 +219,6 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const syncWithApi = async (): Promise<GoldPriceData | null> => {
-    try {
-      setIsLoading(true);
-      const res = await fetch('/api/admin/gold-price/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      });
-      if (res.ok) {
-        const result = await res.json();
-        if (result.goldPrice) {
-          setGoldPrice(result.goldPrice);
-          await refreshProducts();
-          return result.goldPrice;
-        }
-      }
-    } catch (err) {
-      console.error('Failed to sync gold price with live API', err);
-    } finally {
-      setIsLoading(false);
-    }
-    return null;
-  };
-
   const refreshProducts = async () => {
     try {
       setIsLoading(true);
@@ -396,30 +370,6 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const updateStoreSettings = updateSettings;
 
-  const updateGoldPriceState = async (priceData: Partial<GoldPriceData>) => {
-    try {
-      const res = await fetch('/api/admin/gold-price', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify(priceData),
-      });
-      {
-        const data = await readApiResponse<{goldPrice: GoldPriceData}>(res, 'نرخ طلا ذخیره نشد. دوباره تلاش کنید.');
-        setGoldPrice(data.goldPrice);
-        refreshProducts();
-      }
-    } catch (e) {
-      throw e;
-    }
-  };
-
-  const updateGoldPriceManual = async (price: number) => {
-    await updateGoldPriceState({
-      pricePerGram: price,
-      isManualOverride: true,
-    });
-  };
-
   const addProduct = async (product: Product) => {
     const prodWithId: Product = {
       ...product,
@@ -515,12 +465,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         toggleFavorite,
         isFavorite,
         refreshGoldPrice,
-        syncWithApi,
         refreshProducts,
         updateSettings,
         updateStoreSettings,
-        updateGoldPriceState,
-        updateGoldPriceManual,
         addProduct,
         updateProduct,
         updateSingleProductPricing,
