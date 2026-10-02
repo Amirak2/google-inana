@@ -61,7 +61,6 @@ export const AdminDashboard: React.FC = () => {
     goldPrice,
     settings,
     products,
-    updateGoldPriceManual,
     updateStoreSettings,
     addProduct,
     updateProduct,
@@ -69,7 +68,6 @@ export const AdminDashboard: React.FC = () => {
     deleteProduct,
     refreshGoldPrice,
     refreshProducts,
-    syncWithApi,
     setActiveTab,
   } = useGoldStore();
 
@@ -105,9 +103,6 @@ export const AdminDashboard: React.FC = () => {
   const [directSaveError, setDirectSaveError] = useState<string | null>(null);
   const [savingProductId, setSavingProductId] = useState<string | null>(null);
 
-  const rateDraft = useAdminDraft({ overridePrice: goldPrice.pricePerGram }, 'gold-rate');
-  const { overridePrice } = rateDraft.draft;
-  const setOverridePrice = (value: number) => rateDraft.edit('overridePrice', value);
   const settingsDraft = useAdminDraft({
     profitPct: settings.profitPercent ?? 7,
     globalMakingChargePct: settings.globalMakingChargePercent ?? 20,
@@ -123,28 +118,9 @@ export const AdminDashboard: React.FC = () => {
   const setAdminBankHolder = (value: string) => settingsDraft.edit('adminBankHolder', value);
   const setAdminBankName = (value: string) => settingsDraft.edit('adminBankName', value);
   const setAdminBankSheba = (value: string) => settingsDraft.edit('adminBankSheba', value);
-  const [rateSaveSuccess, setRateSaveSuccess] = useState(false);
   const [settingsSaveSuccess, setSettingsSaveSuccess] = useState(false);
-  const [rateSaveError, setRateSaveError] = useState<string | null>(null);
   const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
-  const [savingRate, setSavingRate] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [isSyncingApi, setIsSyncingApi] = useState(false);
-
-  const handleSyncLiveApi = async () => {
-    const snapshot = rateDraft.draft;
-    setIsSyncingApi(true);
-    setRateSaveError(null);
-    try {
-      const updated = await syncWithApi();
-      if (!updated) throw new Error('دریافت نرخ تازه انجام نشد. دوباره تلاش کنید.');
-      rateDraft.accept(snapshot);
-      setRateSaveSuccess(true);
-    } catch (error) {
-      setRateSaveError(error instanceof Error ? error.message : 'دریافت نرخ انجام نشد.');
-    } finally { setIsSyncingApi(false); }
-  };
-
   // Exclusive Admin Calculator State
   const [calcWeight, setCalcWeight] = useState<number>(2.5);
   const [calcMakingCharge, setCalcMakingCharge] = useState<number>(20);
@@ -261,22 +237,6 @@ export const AdminDashboard: React.FC = () => {
     } catch (error) {
       setDirectSaveError(error instanceof Error ? error.message : 'ذخیره قیمت‌گذاری انجام نشد.');
     } finally { setSavingProductId(null); }
-  };
-
-  const handleSaveGoldRate = async () => {
-    if (savingRate) return;
-    const snapshot = rateDraft.draft;
-    setSavingRate(true);
-    setRateSaveError(null);
-    setRateSaveSuccess(false);
-    try {
-      if (!Number.isFinite(overridePrice) || overridePrice <= 0) throw new Error('نرخ مثبت و معتبر وارد کنید.');
-      await updateGoldPriceManual(overridePrice);
-      rateDraft.accept(snapshot);
-      setRateSaveSuccess(true);
-    } catch (error) {
-      setRateSaveError(error instanceof Error ? error.message : 'نرخ طلا ذخیره نشد.');
-    } finally { setSavingRate(false); }
   };
 
   const handleSaveGlobalSettings = async (e: React.FormEvent) => {
@@ -1598,12 +1558,6 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   <TrendingUp className="w-5 h-5 text-[#D4AF37]" />
                   <h2 className="text-lg font-bold text-white">تنظیم نرخ پایه طلای ۱۸ عیار و فرمول عمومی</h2>
                 </div>
-                {rateSaveSuccess && !rateDraft.dirty && (
-                  <span className="flex items-center gap-1 text-xs text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-                    <CheckCircle className="w-4 h-4" />
-                    <span>تغییرات با موفقیت ذخیره شد</span>
-                  </span>
-                )}
               </div>
 
               {/* Current price mode */}
@@ -1612,30 +1566,21 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-xs font-bold text-emerald-400">{goldPrice.isManualOverride ? 'نرخ دستی مدیریت فعال است' : 'استعلام خودکار قیمت فعال است'}</span>
-                      {!goldPrice.isManualOverride && <span className="text-[10px] text-slate-300 bg-slate-800 px-2 py-0.5 rounded-md">چرخه: هر ۱ ساعت</span>}
+                      <span className="text-xs font-bold text-emerald-400">{goldPrice.status === 'live' ? 'استعلام خودکار قیمت فعال است' : 'آخرین نرخ معتبر؛ دریافت تازه در چرخه بعدی'}</span>
+                      <span className="text-[10px] text-slate-300 bg-slate-800 px-2 py-0.5 rounded-md">چرخه: هر ۱ ساعت</span>
                     </div>
                     <p className="text-xs text-slate-300">
                       منبع: {goldPrice.source}
                     </p>
                     <p className="text-[11px] text-slate-400">
-                      {goldPrice.isManualOverride ? 'زمان ثبت نرخ دستی' : 'آخرین استعلام'}: {goldPrice.jalaliTimestamp || 'ثبت نشده'}
+                      زمان نرخ بازار: {goldPrice.jalaliTimestamp || 'ثبت نشده'}
                     </p>
                   </div>
 
-                  {!goldPrice.isManualOverride && <button
-                    type="button"
-                    onClick={handleSyncLiveApi}
-                    disabled={isSyncingApi || savingRate}
-                    className="flex items-center justify-center gap-2 bg-[#D4AF37] hover:bg-[#c5a033] text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isSyncingApi ? 'animate-spin' : ''}`} />
-                    <span>{isSyncingApi ? 'در حال استعلام از API...' : 'همگام‌سازی فوری با API زنده'}</span>
-                  </button>}
                 </div>
 
                 {/* Other markets summary */}
-                {!goldPrice.isManualOverride && goldPrice.otherMarkets && (
+                {goldPrice.otherMarkets && Object.keys(goldPrice.otherMarkets).length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-3 border-t border-slate-800/80 text-[11px]">
                     <div className="bg-[#060B14] p-2 rounded-lg border border-slate-800">
                       <span className="text-slate-400 block text-[10px]">طلای ۲۴ عیار:</span>
@@ -1666,39 +1611,10 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
               </div>
 
               <form onSubmit={handleSaveGlobalSettings} className="space-y-6">
-                {/* Gold Price Per Gram Input */}
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="text-sm font-semibold text-slate-200">
-                      نرخ هر گرم طلای ۱۸ عیار (تومان):
-                    </label>
-                    <span className="text-xs text-slate-400">
-                      نرخ فعال فعلی: {formatToman(goldPrice.pricePerGram)}
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="1"
-                      aria-label="نرخ دستی طلا" value={overridePrice}
-                      onChange={(e) => setOverridePrice(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-lg font-bold text-white outline-none"
-                    />
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium">
-                      تومان
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-slate-400 mt-1 block">
-                    با تغییر این نرخ، قیمت تمام محصولات بر اساس اجرت و سود تعیین‌شده هر طلا به طور خودکار بروزرسانی می‌شود.
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  <button type="button" onClick={handleSaveGoldRate} disabled={savingRate || isSyncingApi || overridePrice <= 0 || (!rateDraft.dirty && goldPrice.isManualOverride)} className="rounded-xl border border-[#D4AF37]/40 px-4 py-2 text-sm text-[#E6CA65] disabled:opacity-50">
-                    {savingRate ? 'در حال ذخیره نرخ...' : 'ذخیره نرخ دستی طلا'}
-                  </button>
-                  {rateDraft.dirty && <p className="text-xs text-amber-300">نرخ ویرایش‌شده هنوز ذخیره نشده است.</p>}
-                  {rateSaveError && <p role="alert" className="text-xs text-rose-300">{rateSaveError}</p>}
+                <div className="rounded-xl border border-slate-700 bg-[#060B14] px-4 py-3">
+                  <p className="text-sm text-slate-300">نرخ هر گرم طلای ۱۸ عیار (تومان)</p>
+                  <p className="mt-2 text-xl font-bold text-white">{formatToman(goldPrice.pricePerGram)}</p>
+                  <p className="mt-2 text-xs text-slate-400">نرخ به‌صورت خودکار هر ساعت از Servix دریافت می‌شود. زمان نمایش‌داده‌شده مربوط به نرخ بازار است.</p>
                 </div>
 
                 {/* Profit % & Global Making Charge */}
