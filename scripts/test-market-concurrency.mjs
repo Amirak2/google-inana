@@ -47,7 +47,10 @@ try {
   assert.equal(nextHistory.length, 2, 'The new hour must still be recorded once');
   assert.equal(new Set(nextHistory.map(point => Math.floor(point.timestamp / hour))).size, 2);
   const changed = await request('/api/admin/gold-price', 'POST', { pricePerGram: 25000000, isManualOverride: true }, adminToken);
-  assert.equal(changed.status, 200);
+  assert.equal(changed.status, 410,'Manual pricing is retired');
+  const updatedMarket = {...db.get('market','gold'),pricePerGram:25000000};
+  db.set('market','gold',updatedMarket);
+  assert.equal((await request('/api/products')).status,200);
   const changedHistory = db.get('market', 'hourlyHistory');
   assert.equal(changedHistory.length, 2);
   assert.equal(changedHistory.at(-1).price, 25000000, 'Changing the actual price updates this hour immediately');
