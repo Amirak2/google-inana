@@ -211,7 +211,7 @@ export const HeroSection: React.FC = () => {
       </div>
 
       {/* Subtle Scroll Down Indicator at the very bottom */}
-      <div className="absolute bottom-4 sm:bottom-6 z-10 opacity-50 hover:opacity-100 transition-opacity">
+      <div className="absolute bottom-[calc(var(--mobile-nav-offset)+1rem)] md:bottom-6 z-10 opacity-50 hover:opacity-100 transition-opacity">
         <button
           onClick={() => {
             window.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' });

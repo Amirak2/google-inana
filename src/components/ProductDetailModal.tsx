@@ -3,16 +3,9 @@ import {
   X,
   Heart,
   ShoppingBag,
-  ShieldCheck,
-  Truck,
-  RotateCcw,
   Sparkles,
   Info,
-  Layers,
-  ChevronLeft,
-  ChevronRight,
   Send,
-  MessageCircle,
   Link,
 } from 'lucide-react';
 import { Product } from '../types';
@@ -30,8 +23,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   const { goldPrice, settings, addToCart, toggleFavorite, isFavorite } = useGoldStore();
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [is360Mode, setIs360Mode] = useState(false);
-  const [rotationAngle, setRotationAngle] = useState(0);
   const [showFormulaBreakdown, setShowFormulaBreakdown] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [linkMessage, setLinkMessage] = useState('');
@@ -65,15 +56,15 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   )}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300">
+    <div role="dialog" aria-modal="true" aria-labelledby="product-detail-title" className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-slate-950/80 backdrop-blur-xl animate-in fade-in duration-300">
       <div
         id="product-detail-modal-card"
-        className="relative w-full max-w-4xl bg-[#060B15] border border-[#D4AF37]/40 rounded-2xl sm:rounded-3xl overflow-hidden shadow-[0_20px_70px_rgba(0,0,0,0.9)] my-auto text-slate-100 max-h-[92vh] flex flex-col min-w-0"
+        className="relative w-full max-w-4xl bg-[#060B15] border border-[#D4AF37]/40 rounded-2xl sm:rounded-3xl overflow-hidden shadow-[0_20px_70px_rgba(0,0,0,0.9)] my-auto text-slate-100 max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] flex flex-col min-w-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header Bar */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#D4AF37]/25 bg-[#0A1224]">
-          <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center justify-between gap-2 p-3 sm:p-5 border-b border-[#D4AF37]/25 bg-[#0A1224]">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="px-2.5 py-1 rounded-full bg-[#0B152B] text-[#E6CA65] border border-[#D4AF37]/35 text-xs font-semibold">
               {product.collection}
             </span>
@@ -86,32 +77,34 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               await navigator.clipboard.writeText(new URL(productPath(product.id), window.location.origin).href);
               setLinkMessage('لینک کپی شد');
             } catch { setLinkMessage('لینک را از نوار آدرس کپی کنید'); }
-          }}><Link className="w-4 h-4" />{linkMessage || 'کپی لینک'}</button>
+          }}><Link className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{linkMessage || 'کپی لینک'}</span></button>
           <span className="sr-only" role="status">{linkMessage}</span>
           <button
             onClick={onClose}
             className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-[#0B152B] transition-colors"
             title="بستن"
+            aria-label="بستن جزئیات محصول"
           >
             <X className="w-5 h-5" />
           </button>
           </div>
         </div>
 
+        <div className="lg:hidden shrink-0 px-3 pt-3 pb-2 border-b border-[#D4AF37]/15">
+          <h1 id="product-detail-title" className="text-lg font-extrabold text-white leading-7">{product.title}</h1>
+          <p className="mt-1 text-base font-bold text-[#E6CA65]">{priceReady ? formatToman(finalPrice) : 'در حال دریافت نرخ...'}</p>
+        </div>
+
         {/* Scrollable Content Body */}
-        <div className="overflow-y-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Gallery & 360 Column (5 Cols) */}
+        <div id="product-detail-content" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8 items-start">
+          {/* Product photo gallery */}
           <div className="lg:col-span-5 flex flex-col gap-4">
             {/* Main Stage Image */}
-            <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-[#0B152B] border border-[#D4AF37]/25 group">
+            <div className={`relative h-[min(32dvh,280px)] sm:h-[360px] lg:h-auto lg:aspect-[4/5] rounded-2xl overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#0B152B]'} border border-[#D4AF37]/25 group`}>
               <img
                 src={images[selectedImageIndex] || images[0]}
                 alt={product.title}
-                className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-110"
-                style={{
-                  transform: is360Mode ? `rotateY(${rotationAngle}deg)` : undefined,
-                  transition: is360Mode ? 'none' : 'transform 0.7s ease',
-                }}
+                className="w-full h-full object-contain object-center"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src =
@@ -119,37 +112,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                 }}
               />
 
-              {/* 360 Indicator & Toggle */}
-              <div className="absolute top-3 left-3 z-10 flex gap-2">
-                <button
-                  onClick={() => setIs360Mode(!is360Mode)}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-md transition-all ${
-                    is360Mode
-                      ? 'bg-gradient-to-r from-[#D4AF37] to-[#AA822A] text-slate-950 shadow-md font-bold'
-                      : 'bg-[#060B15]/85 text-slate-200 hover:text-white border border-[#D4AF37]/35'
-                  }`}
-                >
-                  نمای ۳۶۰ درجه
-                </button>
-              </div>
-
-              {/* 360 Drag / Slider Control if active */}
-              {is360Mode && (
-                <div className="absolute bottom-3 inset-x-3 bg-[#060B15]/95 backdrop-blur-md p-3 rounded-xl border border-[#D4AF37]/35">
-                  <span className="text-[11px] text-[#E6CA65] block mb-1 text-center font-medium">
-                    زاویه چرخش سه‌بعدی را تغییر دهید
-                  </span>
-                  <input
-                    type="range"
-                    aria-label="زاویه نمایش ۳۶۰ درجه محصول"
-                    min="0"
-                    max="360"
-                    value={rotationAngle}
-                    onChange={(e) => setRotationAngle(parseInt(e.target.value, 10))}
-                    className="w-full h-1 bg-slate-700 rounded-lg accent-[#D4AF37]"
-                  />
-                </div>
-              )}
             </div>
 
             {/* Thumbnails */}
@@ -160,12 +122,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                     key={idx}
                     type="button"
                     aria-label={`نمایش تصویر ${toPersianDigits(idx + 1)} از ${product.title}`}
-                    aria-pressed={selectedImageIndex === idx && !is360Mode}
+                    aria-pressed={selectedImageIndex === idx}
                     onClick={() => {
                       setSelectedImageIndex(idx);
-                      setIs360Mode(false);
                     }}
-                    className={`relative w-16 h-16 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
+                    className={`relative w-12 h-12 sm:w-16 sm:h-16 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
                       selectedImageIndex === idx
                         ? 'border-[#D4AF37] scale-105 shadow-[0_0_12px_rgba(212,175,55,0.45)]'
                         : 'border-[#D4AF37]/20 opacity-60 hover:opacity-100'
@@ -192,9 +153,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                 <span className="text-xs text-slate-300">{product.purity}{isFixed ? '' : ' (استاندارد ۷۵۰)'}</span>
               </div>
 
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white mb-4">
+              <h2 className="hidden lg:block text-3xl font-extrabold text-white mb-4">
                 {product.title}
-              </h1>
+              </h2>
 
               {/* Live Gold Calculation Notice Banner */}
               <div className="bg-[#0A1224] border border-[#D4AF37]/30 rounded-2xl p-3.5 mb-6 flex items-center justify-between text-xs shadow-sm">
@@ -303,102 +264,42 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               </div>}
             </div>
 
-            {/* Price & Action Section */}
-            <div className="pt-4 border-t border-slate-700/80">
-              <div className="flex items-baseline justify-between mb-4">
-                <div>
-                  <span className="text-xs text-slate-300 block">{isFixed ? 'قیمت ثابت:' : 'قیمت تمام‌شده روز:'}</span>
-                  <div className="text-2xl sm:text-3xl font-extrabold text-white gold-gradient-text">
-                    {priceReady ? formatToman(finalPrice * quantity) : 'در حال دریافت نرخ...'}
-                  </div>
-                </div>
-
-                {/* Quantity adjust */}
-                {(product.availableStock ?? product.stock ?? 0) <= 0 ? (
-                  <span className="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold">
-                    اتمام موجودی در انبار
-                  </span>
-                ) : (
-                  <div className="flex items-center bg-[#13254A] border border-slate-600 rounded-xl px-2 py-1">
-                    <button
-                      type="button"
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-white"
-                    >
-                      -
-                    </button>
-                    <span className="w-8 text-center text-sm font-bold text-white">
-                      {toPersianDigits(quantity)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const maxStock = product.availableStock ?? product.stock ?? 10;
-                        if (quantity < maxStock) setQuantity(quantity + 1);
-                      }}
-                      className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-30"
-                      disabled={quantity >= (product.availableStock ?? product.stock ?? 10)}
-                    >
-                      +
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Action Buttons Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  onClick={handleAddToCart}
-                  disabled={!priceReady || ((product.availableStock ?? product.stock ?? 0) <= 0)}
-                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all shadow-[0_4px_20px_rgba(212,175,55,0.3)] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  <span>
-                    {!priceReady
-                      ? 'در حال دریافت نرخ طلا'
-                      : (product.availableStock ?? product.stock ?? 0) <= 0
-                      ? 'اتمام موجودی'
-                      : 'افزودن به سبد خرید'}
-                  </span>
-                </button>
-
-                <a
-                  href={telegramUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-center gap-2 bg-[#13254A] hover:bg-[#1A3366] text-sky-400 border border-sky-500/40 font-semibold py-3.5 rounded-xl transition-all text-sm"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>سفارش و استعلام در تلگرام</span>
-                </a>
-              </div>
-
-              {/* Channel & Favorite secondary row */}
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-700/80 text-xs">
-                <a
-                  href="https://t.me/Inana_gold"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1.5 text-[#D4AF37] hover:underline transition-colors"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>عضویت در کانال تلگرام (Inana_gold@)</span>
-                </a>
-
-                <button
-                  onClick={() => toggleFavorite(product.id)}
-                  aria-label={favorite ? `حذف ${product.title} از علاقه‌مندی‌ها` : `افزودن ${product.title} به علاقه‌مندی‌ها`}
-                  aria-pressed={favorite}
-                  className={`flex items-center gap-1.5 transition-colors ${
-                    favorite ? 'text-rose-400 font-semibold' : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  <Heart className={`w-3.5 h-3.5 ${favorite ? 'fill-current' : ''}`} />
-                  <span>{favorite ? 'ذخیره شده در علاقه‌مندی‌ها' : 'افزودن به علاقه‌مندی'}</span>
-                </button>
-              </div>
+            <div className="flex flex-wrap items-center gap-4 border-t border-[#D4AF37]/20 pt-3 text-xs">
+              <a href={telegramUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sky-400">
+                <Send className="h-4 w-4" /> سفارش و استعلام در تلگرام
+              </a>
+              <button type="button" onClick={() => toggleFavorite(product.id)}
+                aria-label={favorite ? `حذف ${product.title} از علاقه‌مندی‌ها` : `افزودن ${product.title} به علاقه‌مندی‌ها`}
+                aria-pressed={favorite} className={`inline-flex items-center gap-1.5 ${favorite ? 'text-rose-400' : 'text-slate-300'}`}>
+                <Heart className={`h-4 w-4 ${favorite ? 'fill-current' : ''}`} /> {favorite ? 'ذخیره شد' : 'افزودن به علاقه‌مندی'}
+              </button>
             </div>
           </div>
+        </div>
+
+        <div id="product-purchase-bar" className="shrink-0 border-t border-[#D4AF37]/30 bg-[#0A1224] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-5">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="min-w-0">
+              <span className="text-[11px] text-slate-400">{isFixed ? 'قیمت ثابت' : 'قیمت روز'}{quantity > 1 ? ` / ${toPersianDigits(quantity)} عدد` : ''}</span>
+              <p className="text-base sm:text-xl font-extrabold text-[#E6CA65]">{priceReady ? formatToman(finalPrice * quantity) : 'در حال دریافت نرخ...'}</p>
+            </div>
+            {(product.availableStock ?? product.stock ?? 0) > 0 && (
+              <div className="flex shrink-0 items-center rounded-xl bg-[#13254A] border border-slate-600">
+                <button type="button" aria-label="کاهش تعداد" disabled={quantity <= 1} onClick={() => setQuantity(value => Math.max(1, value - 1))}
+                  className="h-10 w-10 disabled:opacity-30">−</button>
+                <span className="w-6 text-center text-sm font-bold">{toPersianDigits(quantity)}</span>
+                <button type="button" aria-label="افزایش تعداد" disabled={quantity >= (product.availableStock ?? product.stock ?? 0)}
+                  onClick={() => setQuantity(value => Math.min(product.availableStock ?? product.stock ?? 0, value + 1))}
+                  className="h-10 w-10 disabled:opacity-30">+</button>
+              </div>
+            )}
+          </div>
+          <button type="button" onClick={handleAddToCart}
+            disabled={!priceReady || (product.availableStock ?? product.stock ?? 0) <= 0}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] py-3 text-sm font-bold text-slate-950 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed">
+            <ShoppingBag className="h-4 w-4" />
+            {!priceReady ? 'در حال دریافت نرخ طلا' : (product.availableStock ?? product.stock ?? 0) <= 0 ? 'اتمام موجودی' : 'افزودن به سبد خرید'}
+          </button>
         </div>
       </div>
     </div>

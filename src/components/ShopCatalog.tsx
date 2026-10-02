@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ArrowUpDown,
   Sparkles,
   X,
   Layers,
+  SlidersHorizontal,
+  ChevronDown,
 } from 'lucide-react';
 import { CATEGORIES_LIST } from '../data/seedData';
 import { ProductCard } from './ProductCard';
@@ -33,6 +35,7 @@ export const ShopCatalog: React.FC = () => {
     sortBy, setSortBy, resetCatalogFilters,
   } = useGoldStore();
 
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const filters = useMemo(() => ({ selectedCategory, selectedCollection, searchQuery, selectedLetter, maxWeight, onlyInStock, sortBy }),
     [selectedCategory, selectedCollection, searchQuery, selectedLetter, maxWeight, onlyInStock, sortBy]);
   const filteredProducts = useMemo(() => sortCatalogProducts(filterCatalogProducts(products, filters), sortBy, goldPrice.pricePerGram, settings),
@@ -55,28 +58,20 @@ export const ShopCatalog: React.FC = () => {
   const hasActiveFilters = activeFilters.length > 0 || sortBy !== 'newest';
 
   return (
-    <section
-      id="shop-catalog-section"
-      className="py-14 sm:py-20 px-3.5 sm:px-6 lg:px-8 bg-[#060B15] min-h-screen w-full max-w-full overflow-hidden relative"
-      style={{
-        background:
-          'radial-gradient(ellipse at 50% 0%, rgba(18, 48, 98, 0.25) 0%, rgba(8, 15, 30, 0.6) 45%, #060B15 85%)',
-      }}
-    >
-      {/* Subtle Top Gold Transition Line */}
-      <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37]/30 to-transparent pointer-events-none" />
-
+    <section id="shop-catalog-section"
+      className="py-5 sm:py-14 px-3 sm:px-6 lg:px-8 bg-[#060B15] min-h-screen w-full min-w-0 relative"
+      style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(18, 48, 98, 0.25) 0%, rgba(8, 15, 30, 0.6) 45%, #060B15 85%)' }}>
       <div className="max-w-7xl mx-auto w-full min-w-0 relative z-10">
         {/* Catalog Banner / Header */}
-        <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-12">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#E6CA65] uppercase tracking-widest mb-3 px-4 py-1.5 rounded-full bg-[#0B152B] border border-[#D4AF37]/35 shadow-sm">
+        <div className="text-center max-w-2xl mx-auto mb-4 sm:mb-10">
+          <div className="hidden sm:inline-flex items-center gap-2 text-xs font-semibold text-[#E6CA65] uppercase tracking-widest mb-3 px-4 py-1.5 rounded-full bg-[#0B152B] border border-[#D4AF37]/35 shadow-sm">
             <Layers className="w-3.5 h-3.5 text-[#D4AF37]" />
             <span>گالری طلا و مروارید اینانا</span>
           </div>
 
           <div className="flex items-center justify-center gap-3 mb-2">
             <span className="hidden sm:inline-block h-[1px] w-8 sm:w-12 bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
-            <h1 className="text-2xl sm:text-4xl font-extrabold gold-gradient-text tracking-wide">
+            <h1 className="text-xl sm:text-4xl font-extrabold gold-gradient-text tracking-wide">
               ویترین زیورآلات اینانا
             </h1>
             <span className="hidden sm:inline-block h-[1px] w-8 sm:w-12 bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
@@ -87,96 +82,7 @@ export const ShopCatalog: React.FC = () => {
           </p>
         </div>
 
-        {/* Categories Chips Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-3 no-scrollbar mb-6 sm:mb-8 w-full max-w-full min-w-0">
-          <button
-            aria-pressed={selectedCategory === null}
-            onClick={() => {
-              setSelectedCategory(null);
-              setSelectedLetter(null);
-            }}
-            className={`px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm whitespace-nowrap transition-all ${
-              selectedCategory === null
-                ? 'bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#B38A30] text-slate-950 font-bold shadow-[0_4px_18px_rgba(212,175,55,0.3)]'
-                : 'bg-[#0B152B] text-slate-300 hover:text-white border border-[#D4AF37]/20 hover:border-[#D4AF37]/50'
-            }`}
-          >
-            همه دسته‌ها ({toPersianDigits(categoryTotal)})
-          </button>
-          {CATEGORIES_LIST.map((cat) => {
-            const count = categoryCounts.get(cat) || 0;
-            const isSelected = selectedCategory === cat;
-            return (
-              <button
-                key={cat}
-                aria-pressed={isSelected}
-                onClick={() => {
-                  const nextCategory = isSelected ? null : cat;
-                  setSelectedCategory(nextCategory);
-                  if (nextCategory !== 'حروف انگلیسی') {
-                    setSelectedLetter(null);
-                  }
-                }}
-                className={`px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm whitespace-nowrap transition-all ${
-                  isSelected
-                    ? 'bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#B38A30] text-slate-950 font-bold shadow-[0_4px_18px_rgba(212,175,55,0.3)]'
-                    : 'bg-[#0B152B] text-slate-300 hover:text-white border border-[#D4AF37]/20 hover:border-[#D4AF37]/50'
-                }`}
-              >
-                {cat} ({toPersianDigits(count)})
-              </button>
-            );
-          })}
-        </div>
-
-        {/* INANA LETTERS Alphabet Quick Bar - Only shown in English Letters category */}
-        {(selectedCategory === 'حروف انگلیسی' || selectedCollection === 'INANA LETTERS') && (
-          <div className="bg-[#081224]/90 border border-[#D4AF37]/35 rounded-2xl p-3.5 sm:p-4 mb-6 sm:mb-8 shadow-md w-full max-w-full overflow-hidden">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-[#F5E8C7] flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
-                <span>انتخاب مستقیم پلاک حروف انگلیسی (INANA LETTERS):</span>
-              </span>
-              {selectedLetter && (
-                <button
-                  onClick={() => setSelectedLetter(null)}
-                  className="text-[11px] text-[#D4AF37] hover:underline"
-                >
-                  حذف فیلتر حرف ({selectedLetter})
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5 sm:gap-2">
-              {alphabetLetters.map((char) => {
-                const isSelected = selectedLetter === char;
-                const hasProduct = letterProducts.some(
-                  (p) => p.letter?.toUpperCase() === char.toUpperCase()
-                );
-                return (
-                  <button
-                    key={char}
-                    aria-pressed={isSelected}
-                    onClick={() => setSelectedLetter(isSelected ? null : char)}
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-bold font-serif-brand transition-all flex items-center justify-center ${
-                      isSelected
-                        ? 'bg-[#D4AF37] text-slate-950 scale-110 shadow-md ring-2 ring-[#D4AF37]/60'
-                        : hasProduct
-                        ? 'bg-[#050B17] text-[#D4AF37] border border-[#D4AF37]/40 hover:bg-[#D4AF37]/25'
-                        : 'bg-[#050B17]/50 text-slate-600 border border-slate-800 opacity-40 cursor-not-allowed'
-                    }`}
-                    disabled={!hasProduct}
-                    title={hasProduct ? `پلاک حرف ${char}` : `حرف ${char} ناموجود`}
-                  >
-                    {char}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Filter and Sort Toolbar */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3.5 sm:gap-4 bg-[#081224]/85 border border-[#D4AF37]/25 rounded-2xl p-3.5 sm:p-4 mb-6 sm:mb-8 shadow-sm w-full max-w-full min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           {/* Active Filter summary */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="text-slate-300 font-medium">
@@ -199,12 +105,111 @@ export const ShopCatalog: React.FC = () => {
             )}
           </div>
 
+          <button type="button" onClick={() => setFiltersOpen(open => !open)}
+            aria-expanded={filtersOpen} aria-controls="catalog-filter-panel"
+            className="sm:hidden inline-flex items-center gap-2 rounded-xl border border-[#D4AF37]/35 px-3 py-2 text-xs text-[#E6CA65]">
+            <SlidersHorizontal className="h-4 w-4" />
+            فیلتر و مرتب‌سازی
+            <ChevronDown className={`h-4 w-4 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+        <div id="catalog-filter-panel" className={`${filtersOpen ? 'block' : 'hidden'} sm:block rounded-2xl border border-[#D4AF37]/25 bg-[#081224]/85 p-3 sm:p-4 mb-4 sm:mb-8`}>
+          {/* Categories Chips Bar */}
+          <div className="flex flex-wrap items-center gap-2 mb-4 w-full min-w-0">
+            <button
+              aria-pressed={selectedCategory === null}
+              onClick={() => {
+                setSelectedCategory(null);
+                setSelectedLetter(null);
+              }}
+              className={`px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm whitespace-nowrap transition-all ${
+                selectedCategory === null
+                  ? 'bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#B38A30] text-slate-950 font-bold shadow-[0_4px_18px_rgba(212,175,55,0.3)]'
+                  : 'bg-[#0B152B] text-slate-300 hover:text-white border border-[#D4AF37]/20 hover:border-[#D4AF37]/50'
+              }`}
+            >
+              همه دسته‌ها ({toPersianDigits(categoryTotal)})
+            </button>
+            {CATEGORIES_LIST.filter(cat => (categoryCounts.get(cat) || 0) > 0 || cat === selectedCategory).map((cat) => {
+              const count = categoryCounts.get(cat) || 0;
+              const isSelected = selectedCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    const nextCategory = isSelected ? null : cat;
+                    setSelectedCategory(nextCategory);
+                    if (nextCategory !== 'حروف انگلیسی') {
+                      setSelectedLetter(null);
+                    }
+                  }}
+                  className={`px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm whitespace-nowrap transition-all ${
+                    isSelected
+                      ? 'bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#B38A30] text-slate-950 font-bold shadow-[0_4px_18px_rgba(212,175,55,0.3)]'
+                      : 'bg-[#0B152B] text-slate-300 hover:text-white border border-[#D4AF37]/20 hover:border-[#D4AF37]/50'
+                  }`}
+                >
+                  {cat} ({toPersianDigits(count)})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* INANA LETTERS Alphabet Quick Bar - Only shown in English Letters category */}
+          {(selectedCategory === 'حروف انگلیسی' || selectedCollection === 'INANA LETTERS') && (
+            <div className="bg-[#081224]/90 border border-[#D4AF37]/35 rounded-2xl p-3.5 sm:p-4 mb-6 sm:mb-8 shadow-md w-full max-w-full overflow-hidden">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-[#F5E8C7] flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#D4AF37]" />
+                  <span>انتخاب حرف:</span>
+                </span>
+                {selectedLetter && (
+                  <button
+                    onClick={() => setSelectedLetter(null)}
+                    className="text-[11px] text-[#D4AF37] hover:underline"
+                  >
+                    حذف فیلتر حرف ({selectedLetter})
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                {alphabetLetters.filter(char => char === selectedLetter || letterProducts.some(product => product.letter?.toUpperCase() === char)).map((char) => {
+                  const isSelected = selectedLetter === char;
+                  const hasProduct = letterProducts.some(
+                    (p) => p.letter?.toUpperCase() === char.toUpperCase()
+                  );
+                  return (
+                    <button
+                      key={char}
+                      aria-pressed={isSelected}
+                      onClick={() => setSelectedLetter(isSelected ? null : char)}
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-bold font-serif-brand transition-all flex items-center justify-center ${
+                        isSelected
+                          ? 'bg-[#D4AF37] text-slate-950 scale-110 shadow-md ring-2 ring-[#D4AF37]/60'
+                          : hasProduct
+                          ? 'bg-[#050B17] text-[#D4AF37] border border-[#D4AF37]/40 hover:bg-[#D4AF37]/25'
+                          : 'bg-[#050B17]/50 text-slate-600 border border-slate-800 opacity-40 cursor-not-allowed'
+                      }`}
+                      disabled={!hasProduct}
+                      title={hasProduct ? `پلاک حرف ${char}` : `حرف ${char} ناموجود`}
+                    >
+                      {char}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Controls: Weight Slider, In-Stock, Sort */}
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-3 w-full">
             {/* Weight Filter */}
-            {weightBounds && <div className="flex items-center gap-2 bg-[#050B17] border border-[#D4AF37]/25 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs flex-1 sm:flex-initial">
-              <span className="text-slate-300">حداکثر وزن طلا:</span>
-              <span className="font-bold text-[#D4AF37]">{maxWeight === null ? 'همه وزن‌ها' : formatWeight(maxWeight)}</span>
+            {weightBounds && <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#050B17] border border-[#D4AF37]/25 px-3 py-2 rounded-xl text-xs">
+              <div className="flex items-center justify-between gap-3 whitespace-nowrap">
+                <span className="text-slate-300">حداکثر وزن طلا:</span>
+                <span className="font-bold text-[#D4AF37]">{maxWeight === null ? 'همه وزن‌ها' : formatWeight(maxWeight)}</span>
+              </div>
               <input
                 type="range"
                 aria-label="حداکثر وزن طلا"
@@ -216,7 +221,7 @@ export const ShopCatalog: React.FC = () => {
                   const value = Number(e.target.value);
                   setMaxWeight(value >= weightBounds.max ? null : value);
                 }}
-                className="w-14 sm:w-24 h-1 bg-slate-700 rounded-lg accent-[#D4AF37]"
+                className="w-full sm:w-24 h-2 bg-slate-700 rounded-lg accent-[#D4AF37]"
               />
             </div>}
 
@@ -262,7 +267,6 @@ export const ShopCatalog: React.FC = () => {
             </div>
           </div>
         </div>
-
         {/* Product Grid */}
         {productsLoading && products.length === 0 ? (
           <div role="status" className="text-center py-20 text-slate-400">در حال دریافت محصولات...</div>
@@ -272,7 +276,7 @@ export const ShopCatalog: React.FC = () => {
             <button onClick={() => void refreshProducts()} className="mt-4 text-[#D4AF37]">تلاش دوباره</button>
           </div>
         ) : filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.id}

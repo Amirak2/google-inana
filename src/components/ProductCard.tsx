@@ -53,12 +53,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent opacity-0 group-hover:opacity-100 transition-all duration-700 transform scale-x-0 group-hover:scale-x-100 z-30 pointer-events-none" />
 
       {/* Image Container with Luxury Shimmer & Cinematic Zoom */}
-      <div className={`relative aspect-[4/5] w-full overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#070E1C]'}`}>
+      <div className={`relative aspect-square sm:aspect-[4/5] w-full overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#070E1C]'}`}>
         <img
           src={product.images?.[0] || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80'}
           alt={product.title}
           loading="lazy"
-          className="w-full h-full object-cover object-center transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] group-hover:scale-108 group-hover:brightness-105"
+          className={`w-full h-full ${isFixed ? 'object-contain' : 'object-cover'} object-center transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] group-hover:scale-108 group-hover:brightness-105`}
           referrerPolicy="no-referrer"
           onError={(e) => {
             (e.target as HTMLImageElement).src =
@@ -108,9 +108,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       </div>
 
       {/* Product Information */}
-      <div className="p-4 sm:p-5 flex flex-col flex-1 justify-between bg-gradient-to-b from-[#0A1325] to-[#060B15] transition-colors duration-500 group-hover:from-[#0D1830] group-hover:to-[#070D1B]">
+      <div className="p-2.5 sm:p-5 flex flex-col flex-1 justify-between bg-gradient-to-b from-[#0A1325] to-[#060B15] transition-colors duration-500 group-hover:from-[#0D1830] group-hover:to-[#070D1B]">
         <div>
-          <h3 className="text-sm sm:text-base font-bold text-white line-clamp-1 group-hover:text-[#F5E8C7] transition-colors duration-300">
+          <h3 className="text-xs sm:text-base leading-5 font-bold text-white line-clamp-2 min-h-10 sm:min-h-0 group-hover:text-[#F5E8C7] transition-colors duration-300">
             <a href={productPath(product.id)} onClick={event => {
               event.stopPropagation();
               if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -119,17 +119,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
             }}>{product.title}</a>
           </h3>
           {isFixed ? (
-            <p className="mt-2 text-xs text-slate-300">{product.category}</p>
+            <p className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-slate-300">{product.category}</p>
           ) : (
-            <p className="mt-2 text-xs text-slate-300">وزن: <span className="font-bold text-white">{formatWeight(product.weight)}</span></p>
+            <p className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-slate-300">وزن: <span className="font-bold text-white">{formatWeight(product.weight)}</span></p>
           )}
         </div>
 
         {/* Dynamic Computed Price & Action Button Footer */}
-        <div className="mt-4 pt-3 border-t border-slate-700/80 group-hover:border-slate-700 flex items-center justify-between transition-colors duration-300">
+        <div className="mt-2 sm:mt-4 pt-2 sm:pt-3 border-t border-slate-700/80 group-hover:border-slate-700 flex items-center justify-between transition-colors duration-300">
           <div className="flex flex-col">
             <span className="text-[10px] text-slate-300 font-light">{isFixed ? 'قیمت ثابت' : 'قیمت روز'}</span>
-            <span className="text-sm sm:text-base font-bold text-white gold-gradient-text tracking-tight group-hover:brightness-115 transition-all">
+            <span className="text-[11px] sm:text-base font-bold text-white gold-gradient-text whitespace-nowrap tracking-tight group-hover:brightness-115 transition-all">
               {priceReady ? formatToman(finalPrice) : 'در حال دریافت نرخ...'}
             </span>
           </div>
@@ -145,7 +145,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
               whileTap={{ scale: 0.92 }}
               onClick={handleAddToCart}
               disabled={!priceReady}
-              className="p-2.5 rounded-xl bg-[#1A315C] hover:bg-[#D4AF37] text-[#D4AF37] hover:text-slate-950 border border-[#D4AF37]/40 hover:border-transparent transition-colors shadow-sm disabled:cursor-wait disabled:opacity-50 disabled:hover:bg-[#1A315C] disabled:hover:text-[#D4AF37]"
+              className="p-2 sm:p-2.5 rounded-xl bg-[#1A315C] hover:bg-[#D4AF37] text-[#D4AF37] hover:text-slate-950 border border-[#D4AF37]/40 hover:border-transparent transition-colors shadow-sm disabled:cursor-wait disabled:opacity-50 disabled:hover:bg-[#1A315C] disabled:hover:text-[#D4AF37]"
+              aria-label={`افزودن ${product.title} به سبد خرید`}
               title={priceReady ? 'افزودن به سبد خرید' : 'در حال دریافت نرخ لحظه‌ای طلا'}
             >
               <ShoppingBag className="w-4 h-4" />

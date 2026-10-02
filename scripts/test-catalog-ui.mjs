@@ -73,11 +73,12 @@ try {
     .find(node => node.textContent.includes('کالکشن مروارید')).closest('.group');
   await click(pearlTile);
   assert.equal(ids().length, 9);
-  assert.equal(category('حروف انگلیسی').textContent.trim(), 'حروف انگلیسی (۰)');
+  assert.equal(category('حروف انگلیسی'), undefined, 'Unrelated empty categories must not occupy the pearl filter panel');
   const removePearls = catalog().querySelector('button[aria-label="حذف کالکشن مروارید"]');
   assert.ok(removePearls, 'Selected collection must be visible and removable');
-  await click(category('حروف انگلیسی'));
+  await update(() => catalogHarness.setSelectedCategory('حروف انگلیسی'));
   assert.equal(ids().length, 0);
+  assert.ok(category('حروف انگلیسی'), 'A zero-count category from a shared URL remains removable');
   await click(removePearls);
   assert.equal(ids().length, 4);
   assert.equal(category('حروف انگلیسی').textContent.trim(), 'حروف انگلیسی (۴)');

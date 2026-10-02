@@ -8,7 +8,7 @@ interface CollectionsShowcaseProps {
 }
 
 export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit, showViewAll = false }) => {
-  const { collections, openCatalog, setActiveTab } = useGoldStore();
+  const { collections, products, openCatalog, setActiveTab } = useGoldStore();
 
   const handleCollectionSelect = (colName: string) => {
     openCatalog({ selectedCollection: colName });
@@ -50,19 +50,27 @@ export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit,
 
         {/* Collections Editorial Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {collections.slice(0, limit ?? collections.length).map((col) => (
+          {collections.slice(0, limit ?? collections.length).map((col) => {
+            const letterProducts = col.name === 'INANA LETTERS' ? products.filter(product => product.collection === col.name && product.letter) : [];
+            const letterPhoto = letterProducts.flatMap(product => product.images || []).find(image => !image.includes('images.unsplash.com'));
+            const coverImage = col.name === 'INANA LETTERS' ? letterPhoto : col.coverImage;
+            return (
             <div
               key={col.id}
               onClick={() => handleCollectionSelect(col.name)}
               className="group relative h-[420px] rounded-3xl overflow-hidden cursor-pointer border border-[#D4AF37]/25 hover:border-[#D4AF37]/60 transition-all duration-700 hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.75),0_0_30px_rgba(212,175,55,0.2)] bg-[#070E1E]"
             >
               {/* Cover Image */}
-              <img
-                src={col.coverImage}
-                alt={col.name}
+              {coverImage ? <img
+                src={coverImage}
+                alt={col.titleFa}
                 className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-1000 ease-out"
                 referrerPolicy="no-referrer"
-              />
+              /> : <div aria-label="حروف موجود در کالکشن اختصاصی" className="absolute inset-0 flex items-center justify-center bg-[#0B152B] pb-32">
+                <span aria-hidden="true" className="font-serif-brand text-6xl sm:text-7xl tracking-[0.12em] text-[#D4AF37]" dir="ltr">
+                  {letterProducts.map(product => product.letter).slice(0, 4).join(' ') || 'INANA'}
+                </span>
+              </div>}
 
               {/* Luxury Gradient Overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-[#060B15] via-[#060B15]/70 to-black/30 group-hover:opacity-90 transition-opacity" />
@@ -95,7 +103,8 @@ export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit,
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {showViewAll && collections.length > (limit ?? collections.length) && (
