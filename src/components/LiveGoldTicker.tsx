@@ -286,50 +286,6 @@ export const LiveGoldTicker: React.FC<LiveGoldTickerProps> = ({ compact = false 
           </div>
         </div>
 
-        {/* Secondary Gold & Coin Market Rates (Live from TGJU) */}
-        {goldPrice.otherMarkets && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3 mb-8 w-full min-w-0">
-            <div className="bg-[#070E1E]/90 border border-[#D4AF37]/20 rounded-xl p-2.5 sm:p-3 text-center transition-all hover:border-[#D4AF37]/45 min-w-0 overflow-hidden">
-              <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-1 truncate">طلای ۲۴ عیار</span>
-              <span className="text-xs sm:text-sm font-bold text-white block truncate">
-                {goldPrice.otherMarkets.gold24k ? formatToman(goldPrice.otherMarkets.gold24k) : '—'}
-              </span>
-            </div>
-            <div className="bg-[#070E1E]/90 border border-[#D4AF37]/20 rounded-xl p-2.5 sm:p-3 text-center transition-all hover:border-[#D4AF37]/45 min-w-0 overflow-hidden">
-              <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-1 truncate">مظنه مثقال طلا</span>
-              <span className="text-xs sm:text-sm font-bold text-white block truncate">
-                {goldPrice.otherMarkets.mesghal ? formatToman(goldPrice.otherMarkets.mesghal) : '—'}
-              </span>
-            </div>
-            <div className="bg-[#070E1E]/90 border border-[#D4AF37]/20 rounded-xl p-2.5 sm:p-3 text-center transition-all hover:border-[#D4AF37]/45 min-w-0 overflow-hidden">
-              <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-1 truncate">سکه تمام امامی</span>
-              <span className="text-xs sm:text-sm font-bold text-white block truncate">
-                {goldPrice.otherMarkets.emamiCoin ? formatToman(goldPrice.otherMarkets.emamiCoin) : '—'}
-              </span>
-            </div>
-            <div className="bg-[#070E1E]/90 border border-[#D4AF37]/20 rounded-xl p-2.5 sm:p-3 text-center transition-all hover:border-[#D4AF37]/45 min-w-0 overflow-hidden">
-              <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-1 truncate">نیم سکه آزادی</span>
-              <span className="text-xs sm:text-sm font-bold text-white block truncate">
-                {goldPrice.otherMarkets.halfCoin ? formatToman(goldPrice.otherMarkets.halfCoin) : '—'}
-              </span>
-            </div>
-            <div className="bg-[#070E1E]/90 border border-[#D4AF37]/20 rounded-xl p-2.5 sm:p-3 text-center transition-all hover:border-[#D4AF37]/45 min-w-0 overflow-hidden">
-              <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-1 truncate">ربع سکه آزادی</span>
-              <span className="text-xs sm:text-sm font-bold text-white block truncate">
-                {goldPrice.otherMarkets.quarterCoin ? formatToman(goldPrice.otherMarkets.quarterCoin) : '—'}
-              </span>
-            </div>
-            <div className="bg-[#070E1E]/90 border border-[#D4AF37]/20 rounded-xl p-2.5 sm:p-3 text-center transition-all hover:border-[#D4AF37]/45 min-w-0 overflow-hidden">
-              <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-1 truncate">انس جهانی طلا</span>
-              <span className="text-xs sm:text-sm font-bold text-[#E6CA65] block truncate">
-                {goldPrice.otherMarkets.globalOunceUsd
-                  ? `$${goldPrice.otherMarkets.globalOunceUsd.toLocaleString()}`
-                  : '—'}
-              </span>
-            </div>
-          </div>
-        )}
-
         {/* Interactive Gold Price Chart */}
         <div className="luxury-glass-card rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 lg:p-8 relative w-full max-w-full min-w-0 overflow-hidden border border-[#D4AF37]/25">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
