@@ -1,3 +1,4 @@
+import { ORDER_STATUSES, normalizeOrderStatus, canTransitionOrderStatus } from './src/utils/orderWorkflow';
 import { createReservationEngine } from './server/reservations';
 import { createInventoryPolicy, expireUnreviewedInventory } from './server/inventoryPolicy';
 import { cartQuantities, boundedLogDetails } from './server/checkoutSafety';
@@ -1086,6 +1087,10 @@ app.put('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedRequest,
   }
 
   if (req.body.stock !== undefined) {
+    if (!Number.isInteger(req.body.expectedStock) || req.body.expectedStock !== productsList[index].stock) {
+      res.status(409).json({ error: 'موجودی این محصول تغییر کرده است. موجودی تازه را بررسی کنید و فرم ویرایش را دوباره باز کنید.', currentStock: productsList[index].stock });
+      return;
+    }
     const sVal = validateInteger(req.body.stock, 'موجودی انبار', 0, 100000);
     if (!sVal.isValid) {
       res.status(400).json({ error: sVal.error });
@@ -1093,9 +1098,10 @@ app.put('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedRequest,
     }
   }
 
+  const { expectedStock: _expectedStock, ...updates } = req.body;
   productsList[index] = {
     ...productsList[index],
-    ...req.body,
+    ...updates,
     title: req.body.title ? String(req.body.title).trim() : productsList[index].title,
     pricingMode: nextPricingMode,
     fixedPrice: nextPricingMode === 'fixed' ? Math.round(Number(nextFixedPrice)) : undefined,
@@ -1782,20 +1788,11 @@ async function handleOrderStatusUpdate(
   adminUser: any,
   res: Response
 ): Promise<void> {
-  const { status, rejectionReason, paymentTrackingNumber } = body;
+  const { rejectionReason, paymentTrackingNumber } = body;
+  const status = typeof body.status === 'string' ? normalizeOrderStatus(body.status) : body.status;
 
   if (status !== undefined) {
-    const validStatuses = [
-      'در انتظار بررسی',
-      'تایید شده',
-      'تأیید شده',
-      'رد شده',
-      'در حال آماده‌سازی',
-      'آماده تحویل',
-      'تکمیل شده',
-      'لغو شده',
-    ];
-    if (!validStatuses.includes(status)) {
+    if (!ORDER_STATUSES.includes(status)) {
       res.status(400).json({ error: `وضعیت ارسالی نامعتبر است: «${status}».` });
       return;
     }
@@ -1812,6 +1809,11 @@ async function handleOrderStatusUpdate(
         throw err;
       }
 
+      if (status !== undefined && !canTransitionOrderStatus(order.status, status)) {
+        const err: any = new Error('برای سفارش تکمیل‌شده فقط لغو صریح سفارش مجاز است.');
+        err.statusCode = 409;
+        throw err;
+      }
       const wasRejected = order.status === 'رد شده' || order.status === 'لغو شده';
       const quantities = new Map<string, number>();
       for (const item of order.items) quantities.set(item.productId, (quantities.get(item.productId) || 0) + item.quantity);
@@ -1946,7 +1948,7 @@ app.delete('/api/admin/orders/:id', requireAdminAuth, (req: AuthenticatedRequest
 
 // Bulk delete or clear orders from database and memory
 app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, res: Response) => {
-  const { ids, clearAll } = req.body || {};
+  const { ids, clearAll, expectedStatus } = req.body || {};
   try {
     const result = await runDbTransaction(async () => {
       if (clearAll === true) {
@@ -1962,6 +1964,12 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
       }
       if (Array.isArray(ids) && ids.length > 0) {
         const idSet = new Set(ids.map(String));
+        const targets = ordersList.filter(order => idSet.has(order.id) || idSet.has(order.trackingCode));
+        if (expectedStatus !== undefined && (expectedStatus !== 'رد شده' || targets.some(order => order.status !== expectedStatus))) {
+          const err: any = new Error('وضعیت برخی سفارش‌ها تغییر کرده است؛ فهرست را تازه کنید و پاکسازی را دوباره بررسی کنید.');
+          err.statusCode = 409;
+          throw err;
+        }
         const prevCount = ordersList.length;
         const toDeleteIds: string[] = [];
         const keptOrders: Order[] = [];
@@ -1977,7 +1985,7 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
 
         ordersList = keptOrders;
         deleteOrdersBulkFromDb(toDeleteIds);
-        return { clearAll: false, deletedCount: prevCount - ordersList.length, remainingCount: ordersList.length };
+        return { clearAll: false, deletedIds: toDeleteIds, deletedCount: prevCount - ordersList.length, remainingCount: ordersList.length };
       }
       const err: any = new Error('پارامترهای حذف مشخص نشده است.');
       err.statusCode = 400;
@@ -2000,6 +2008,7 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
     res.json({
       success: true,
       message: 'سفارش‌های انتخابی با موفقیت حذف شدند.',
+      deletedIds: result.deletedIds,
       deletedCount: result.deletedCount,
       remainingCount: result.remainingCount,
     });
@@ -2162,7 +2171,7 @@ app.get('/api/auth/me', requireAuth, (req: AuthenticatedRequest, res: Response) 
 app.put('/api/auth/profile', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   try {
     const { displayName, address, phoneNumber } = req.body;
-    
+
     // Issue #6 Fix: Prevent bypassing SMS OTP for phone number change
     if (phoneNumber !== undefined && phoneNumber.trim() !== (req.user!.phoneNumber || '')) {
       res.status(400).json({

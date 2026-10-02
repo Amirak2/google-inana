@@ -1,3 +1,8 @@
+import { AdminProductGallery } from './AdminProductGallery';
+import { useAdminDraft } from '../hooks/useAdminDraft';
+import { changedProductFields, numberOrDefault } from '../utils/adminProductForm';
+import { readApiResponse } from '../utils/apiResponse';
+import { normalizeOrderStatus, orderStatusOptions, isApprovedOrderStatus, canTransitionOrderStatus } from '../utils/orderWorkflow';
 import React, { useState, useEffect, useRef } from 'react';
 import { readAdminTab, saveSessionValue, type AdminTab } from '../utils/navigationState';
 import {
@@ -82,32 +87,61 @@ export const AdminDashboard: React.FC = () => {
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
-  // Selected Product Pricing Form State
-  const [singleMakingCharge, setSingleMakingCharge] = useState<number>(20);
-  const [singleProfit, setSingleProfit] = useState<number>(7);
-  const [singleDiscount, setSingleDiscount] = useState<number>(0);
-  const [isCustomProfit, setIsCustomProfit] = useState<boolean>(false);
-  const [directSaveSuccess, setDirectSaveSuccess] = useState<boolean>(false);
+  const goldProducts = products.filter(product => product.pricingMode !== 'fixed');
+  const selectedProduct = goldProducts.find(product => product.id === selectedProductId) || goldProducts[0] || null;
+  const pricingDraft = useAdminDraft({
+    singleMakingCharge: selectedProduct?.customMakingChargePercent ?? settings.globalMakingChargePercent ?? 20,
+    singleProfit: selectedProduct?.customProfitPercent ?? settings.profitPercent ?? 7,
+    singleDiscount: selectedProduct?.discountPercent ?? 0,
+    isCustomProfit: selectedProduct?.customProfitPercent != null,
+  }, selectedProduct?.id || 'no-product');
+  const { singleMakingCharge, singleProfit, singleDiscount, isCustomProfit } = pricingDraft.draft;
+  const setSingleMakingCharge = (value: React.SetStateAction<number>) => pricingDraft.edit('singleMakingCharge', value);
+  const setSingleProfit = (value: React.SetStateAction<number>) => pricingDraft.edit('singleProfit', value);
+  const setSingleDiscount = (value: React.SetStateAction<number>) => pricingDraft.edit('singleDiscount', value);
+  const setIsCustomProfit = (value: React.SetStateAction<boolean>) => pricingDraft.edit('isCustomProfit', value);
+  const [directSaveSuccess, setDirectSaveSuccess] = useState(false);
+  const [directSaveError, setDirectSaveError] = useState<string | null>(null);
   const [savingProductId, setSavingProductId] = useState<string | null>(null);
 
-  // Pricing inputs for Tab: gold-rate
-  const [overridePrice, setOverridePrice] = useState<number>(goldPrice.pricePerGram);
-  const [profitPct, setProfitPct] = useState<number>(settings.profitPercent || 7);
-  const [globalMakingChargePct, setGlobalMakingChargePct] = useState<number>(
-    settings.globalMakingChargePercent || 20
-  );
+  const rateDraft = useAdminDraft({ overridePrice: goldPrice.pricePerGram }, 'gold-rate');
+  const { overridePrice } = rateDraft.draft;
+  const setOverridePrice = (value: number) => rateDraft.edit('overridePrice', value);
+  const settingsDraft = useAdminDraft({
+    profitPct: settings.profitPercent ?? 7,
+    globalMakingChargePct: settings.globalMakingChargePercent ?? 20,
+    adminBankCard: settings.bankCardNumber ?? '',
+    adminBankHolder: settings.bankCardHolder ?? '',
+    adminBankName: settings.bankName ?? '',
+    adminBankSheba: settings.bankSheba ?? '',
+  });
+  const { profitPct, globalMakingChargePct, adminBankCard, adminBankHolder, adminBankName, adminBankSheba } = settingsDraft.draft;
+  const setProfitPct = (value: number) => settingsDraft.edit('profitPct', value);
+  const setGlobalMakingChargePct = (value: number) => settingsDraft.edit('globalMakingChargePct', value);
+  const setAdminBankCard = (value: string) => settingsDraft.edit('adminBankCard', value);
+  const setAdminBankHolder = (value: string) => settingsDraft.edit('adminBankHolder', value);
+  const setAdminBankName = (value: string) => settingsDraft.edit('adminBankName', value);
+  const setAdminBankSheba = (value: string) => settingsDraft.edit('adminBankSheba', value);
   const [rateSaveSuccess, setRateSaveSuccess] = useState(false);
+  const [settingsSaveSuccess, setSettingsSaveSuccess] = useState(false);
+  const [rateSaveError, setRateSaveError] = useState<string | null>(null);
+  const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
+  const [savingRate, setSavingRate] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [isSyncingApi, setIsSyncingApi] = useState(false);
 
   const handleSyncLiveApi = async () => {
+    const snapshot = rateDraft.draft;
     setIsSyncingApi(true);
-    const updated = await syncWithApi();
-    if (updated) {
-      setOverridePrice(updated.pricePerGram);
+    setRateSaveError(null);
+    try {
+      const updated = await syncWithApi();
+      if (!updated) throw new Error('دریافت نرخ تازه انجام نشد. دوباره تلاش کنید.');
+      rateDraft.accept(snapshot);
       setRateSaveSuccess(true);
-      setTimeout(() => setRateSaveSuccess(false), 3000);
-    }
-    setIsSyncingApi(false);
+    } catch (error) {
+      setRateSaveError(error instanceof Error ? error.message : 'دریافت نرخ انجام نشد.');
+    } finally { setIsSyncingApi(false); }
   };
 
   // Exclusive Admin Calculator State
@@ -130,6 +164,11 @@ export const AdminDashboard: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const ordersRequestInFlight = useRef(false);
+  const ordersRevision = useRef(0);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [lastOrdersReceived, setLastOrdersReceived] = useState<string | null>(null);
+  const [orderErrors, setOrderErrors] = useState<Record<string, string>>({});
+  const [clearingRejected, setClearingRejected] = useState(false);
   const [orderFilterStatus, setOrderFilterStatus] = useState<
     'all' | 'در انتظار بررسی' | 'تأیید شده' | 'رد شده' | 'other'
   >('all');
@@ -145,29 +184,10 @@ export const AdminDashboard: React.FC = () => {
     type: 'success' | 'error';
   } | null>(null);
 
-  // Bank Card Settings State (synchronized with store settings)
-  const [adminBankCard, setAdminBankCard] = useState(
-    settings.bankCardNumber || '۶۰۳۷-۹۹۱۸-۴۲۱۰-۸۸۷۶'
-  );
-  const [adminBankHolder, setAdminBankHolder] = useState(
-    settings.bankCardHolder || 'امیر بی‌اشد (گالری طلا و جواهر اینانا)'
-  );
-  const [adminBankName, setAdminBankName] = useState(
-    settings.bankName || 'بانک ملی ایران (شعبه تجریش)'
-  );
-  const [adminBankSheba, setAdminBankSheba] = useState(
-    settings.bankSheba || 'IR-120170000000108876543210'
-  );
-
-  useEffect(() => {
-    if (settings.bankCardNumber) setAdminBankCard(settings.bankCardNumber);
-    if (settings.bankCardHolder) setAdminBankHolder(settings.bankCardHolder);
-    if (settings.bankName) setAdminBankName(settings.bankName);
-    if (settings.bankSheba) setAdminBankSheba(settings.bankSheba);
-  }, [settings]);
-
   // New/Edit product form state
   const [isEditingProduct, setIsEditingProduct] = useState(false);
+  const productBaseline = useRef<Product | null>(null);
+  const [savingProductForm, setSavingProductForm] = useState(false);
   const [productFormError, setProductFormError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<Partial<Product>>({
@@ -192,47 +212,22 @@ export const AdminDashboard: React.FC = () => {
     isNewArrival: true,
   });
 
-  // Keep selected product in sync
-  const goldProducts = products.filter((product) => product.pricingMode !== 'fixed');
-  const selectedProduct =
-    goldProducts.find((p) => p.id === selectedProductId) || goldProducts[0] || null;
-
-  useEffect(() => {
-    if (selectedProduct) {
-      setSingleMakingCharge(
-        selectedProduct.customMakingChargePercent !== undefined &&
-          selectedProduct.customMakingChargePercent !== null
-          ? selectedProduct.customMakingChargePercent
-          : settings.globalMakingChargePercent || 20
-      );
-      if (
-        selectedProduct.customProfitPercent !== undefined &&
-        selectedProduct.customProfitPercent !== null
-      ) {
-        setSingleProfit(selectedProduct.customProfitPercent);
-        setIsCustomProfit(true);
-      } else {
-        setSingleProfit(settings.profitPercent || 7);
-        setIsCustomProfit(false);
-      }
-      setSingleDiscount(selectedProduct.discountPercent || 0);
-    }
-  }, [selectedProductId, selectedProduct, settings]);
-
   const fetchOrders = async (showLoading = true) => {
     if (ordersRequestInFlight.current) return;
     ordersRequestInFlight.current = true;
-    if (showLoading) setLoadingOrders(true);
+    const revision = ordersRevision.current;
+    if (showLoading && orders.length === 0) setLoadingOrders(true);
     try {
       const res = await fetch('/api/orders', { headers: { ...getAuthHeaders() } });
-      if (!res.ok) throw new Error('دریافت سفارش‌ها از سرور انجام نشد.');
-      const serverOrders: Order[] = await res.json();
+      const serverOrders = await readApiResponse<Order[]>(res, 'دریافت سفارش‌ها از سرور انجام نشد.');
       const sortedOrders = serverOrders.sort(
         (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
-      setOrders(sortedOrders);
+      if (revision === ordersRevision.current) setOrders(sortedOrders);
+      setOrdersError(null);
+      setLastOrdersReceived(new Date().toISOString());
     } catch (err) {
-      console.error('[ORDERS] Server fetch failed:', err);
+      setOrdersError(err instanceof Error ? err.message : 'دریافت سفارش‌ها انجام نشد.');
     } finally {
       if (showLoading) setLoadingOrders(false);
       ordersRequestInFlight.current = false;
@@ -249,44 +244,52 @@ export const AdminDashboard: React.FC = () => {
     }
   }, [activeAdminTab]);
 
-  // Handle direct save for the currently selected product
   const handleSaveDirectPricing = async () => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || savingProductId) return;
+    const snapshot = pricingDraft.draft;
     setSavingProductId(selectedProduct.id);
-
-    const effectiveProfit = isCustomProfit ? singleProfit : null;
-    await updateSingleProductPricing(
-      selectedProduct.id,
-      singleMakingCharge,
-      effectiveProfit,
-      singleDiscount
-    );
-
-    setDirectSaveSuccess(true);
-    setSavingProductId(null);
-    setTimeout(() => setDirectSaveSuccess(false), 3000);
+    setDirectSaveError(null);
+    setDirectSaveSuccess(false);
+    try {
+      await updateSingleProductPricing(selectedProduct.id, singleMakingCharge, isCustomProfit ? singleProfit : null, singleDiscount);
+      pricingDraft.accept(snapshot);
+      setDirectSaveSuccess(true);
+    } catch (error) {
+      setDirectSaveError(error instanceof Error ? error.message : 'ذخیره قیمت‌گذاری انجام نشد.');
+    } finally { setSavingProductId(null); }
   };
 
-  // Handle global gold rate and bank account settings save
-  const handleSaveRateAndGlobalSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveGoldRate = async () => {
+    if (savingRate) return;
+    const snapshot = rateDraft.draft;
+    setSavingRate(true);
+    setRateSaveError(null);
     setRateSaveSuccess(false);
     try {
-    await updateGoldPriceManual(overridePrice);
-    await updateStoreSettings({
-      profitPercent: profitPct,
-      taxPercent: 0,
-      globalMakingChargePercent: globalMakingChargePct,
-      bankCardNumber: adminBankCard.trim(),
-      bankCardHolder: adminBankHolder.trim(),
-      bankName: adminBankName.trim(),
-      bankSheba: adminBankSheba.trim(),
-    });
-    setRateSaveSuccess(true);
-    setTimeout(() => setRateSaveSuccess(false), 3000);
+      if (!Number.isFinite(overridePrice) || overridePrice <= 0) throw new Error('نرخ مثبت و معتبر وارد کنید.');
+      await updateGoldPriceManual(overridePrice);
+      rateDraft.accept(snapshot);
+      setRateSaveSuccess(true);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'ذخیره انجام نشد.');
-    }
+      setRateSaveError(error instanceof Error ? error.message : 'نرخ طلا ذخیره نشد.');
+    } finally { setSavingRate(false); }
+  };
+
+  const handleSaveGlobalSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (savingSettings) return;
+    const snapshot = settingsDraft.draft;
+    setSavingSettings(true);
+    setSettingsSaveError(null);
+    setSettingsSaveSuccess(false);
+    try {
+      await updateStoreSettings({ profitPercent: profitPct, taxPercent: 0, globalMakingChargePercent: globalMakingChargePct,
+        bankCardNumber: adminBankCard.trim(), bankCardHolder: adminBankHolder.trim(), bankName: adminBankName.trim(), bankSheba: adminBankSheba.trim() });
+      settingsDraft.accept(snapshot);
+      setSettingsSaveSuccess(true);
+    } catch (error) {
+      setSettingsSaveError(error instanceof Error ? error.message : 'تنظیمات ذخیره نشد.');
+    } finally { setSavingSettings(false); }
   };
 
   // Handle full product save (create or full edit)
@@ -303,8 +306,13 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
 
+    if (savingProductForm) return;
+    setSavingProductForm(true);
+    try {
     if (isEditingProduct && productForm.id) {
-      await updateProduct(productForm.id, productForm);
+      if (!productBaseline.current) throw new Error('فرم ویرایش را دوباره باز کنید.');
+      const updates = changedProductFields(productBaseline.current, productForm);
+      if (Object.keys(updates).length) await updateProduct(productForm.id, updates);
     } else {
       const newProd: Product = {
         id: `prod-${Date.now()}`,
@@ -318,7 +326,7 @@ export const AdminDashboard: React.FC = () => {
         fixedPrice: isFixedPrice ? Number(productForm.fixedPrice) : undefined,
         weight: isFixedPrice ? 0 : Number(productForm.weight) || 1,
         purity: isFixedPrice ? 'مروارید' : '18 عیار',
-        customMakingChargePercent: isFixedPrice ? 0 : Number(productForm.customMakingChargePercent) || 20,
+        customMakingChargePercent: isFixedPrice ? 0 : numberOrDefault(productForm.customMakingChargePercent, 20),
         customProfitPercent: isFixedPrice ? 0 :
           productForm.customProfitPercent !== undefined && productForm.customProfitPercent !== null
             ? Number(productForm.customProfitPercent)
@@ -364,218 +372,91 @@ export const AdminDashboard: React.FC = () => {
       sku: `INA-${Math.floor(1000 + Math.random() * 9000)}`,
       letter: '',
     });
+    productBaseline.current = null;
+    } catch (error) {
+      setProductFormError(error instanceof Error ? error.message : 'ذخیره محصول انجام نشد.');
+    } finally { setSavingProductForm(false); }
   };
 
   const startEditProduct = (prod: Product) => {
-    setProductForm(prod);
+    if (savingProductForm) return;
+    productBaseline.current = structuredClone(prod);
+    setProductForm(structuredClone(prod));
+    setProductFormError(null);
     setIsEditingProduct(true);
     setActiveAdminTab('products');
     window.scrollTo({ top: 200, behavior: 'smooth' });
   };
 
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+  const applyOrderStatus = async (orderId: string, newStatus: string, rejectionReason?: string) => {
     setActionLoadingOrderId(orderId);
+    setOrderErrors(previous => { const next = {...previous}; delete next[orderId]; return next; });
     try {
-      const nowIso = new Date().toISOString();
       const res = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({
-          status: newStatus,
-          reviewedAt: nowIso,
-        }),
+        method: 'PATCH', headers: {'Content-Type': 'application/json', ...getAuthHeaders()},
+        body: JSON.stringify({status: newStatus, ...(rejectionReason !== undefined ? {rejectionReason} : {})}),
       });
-
-      if (res.ok) {
-        setOrders((prev) =>
-          prev.map((o) =>
-            o.id === orderId
-              ? {
-                  ...o,
-                  status: newStatus as any,
-                  reviewedAt: nowIso,
-                  updatedAt: nowIso,
-                }
-              : o
-          )
-        );
-        await refreshProducts();
-        setOrderActionNotification({
-          message: `وضعیت سفارش به «${newStatus}» تغییر یافت.`,
-          type: 'success',
-        });
-        setTimeout(() => setOrderActionNotification(null), 3000);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setActionLoadingOrderId(null);
-    }
+      const data = await readApiResponse<{order: Order}>(res, 'تغییر وضعیت سفارش انجام نشد.');
+      ordersRevision.current++;
+      setOrders(previous => previous.map(order => order.id === orderId ? data.order : order));
+      setOrderActionNotification({message: `وضعیت سفارش به «${data.order.status}» تغییر یافت.`, type: 'success'});
+      await refreshProducts();
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'ارتباط با سرور برقرار نشد.';
+      setOrderErrors(previous => ({...previous, [orderId]: message}));
+      setOrderActionNotification({message, type: 'error'});
+      return false;
+    } finally { setActionLoadingOrderId(null); }
   };
-
+  const handleUpdateOrderStatus = (orderId: string, status: string) => applyOrderStatus(orderId, status);
   const handleApproveOrder = async (order: Order) => {
-    setActionLoadingOrderId(order.id);
-    try {
-      const nowIso = new Date().toISOString();
-      const res = await fetch(`/api/orders/${order.id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({
-          status: 'تأیید شده',
-          reviewedAt: nowIso,
-        }),
-      });
-
-      if (res.ok) {
-        setOrders((prev) =>
-          prev.map((o) =>
-            o.id === order.id
-              ? {
-                  ...o,
-                  status: 'تأیید شده' as any,
-                  reviewedAt: nowIso,
-                  updatedAt: nowIso,
-                }
-              : o
-          )
-        );
-        await refreshProducts();
-        setOrderActionNotification({
-          message: `فیش و سفارش کد ${order.trackingCode} با موفقیت تایید شد.`,
-          type: 'success',
-        });
-        setTimeout(() => setOrderActionNotification(null), 3500);
-        if (viewingReceiptOrder?.id === order.id) {
-          setViewingReceiptOrder(null);
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoadingOrderId(null);
-    }
+    if (await applyOrderStatus(order.id, 'تأیید شده') && viewingReceiptOrder?.id === order.id) setViewingReceiptOrder(null);
   };
-
   const handleRejectOrder = async () => {
     if (!rejectingOrder) return;
     const orderId = rejectingOrder.id;
-    const tracking = rejectingOrder.trackingCode;
-    setActionLoadingOrderId(orderId);
-    try {
-      const reason = rejectionReasonInput.trim() || 'عدم تطابق یا تایید فیش بانکی';
-      const nowIso = new Date().toISOString();
-      const res = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({
-          status: 'رد شده',
-          rejectionReason: reason,
-          reviewedAt: nowIso,
-        }),
-      });
-
-      if (res.ok) {
-        setOrders((prev) =>
-          prev.map((o) =>
-            o.id === orderId
-              ? {
-                  ...o,
-                  status: 'رد شده' as any,
-                  rejectionReason: reason,
-                  reviewedAt: nowIso,
-                  updatedAt: nowIso,
-                }
-              : o
-          )
-        );
-        setOrderActionNotification({
-          message: `سفارش کد ${tracking} با ثبت دلیل رد شد.`,
-          type: 'error',
-        });
-        setTimeout(() => setOrderActionNotification(null), 3500);
-        await refreshProducts();
-        setRejectingOrder(null);
-        setRejectionReasonInput('');
-        if (viewingReceiptOrder?.id === orderId) {
-          setViewingReceiptOrder(null);
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoadingOrderId(null);
+    if (await applyOrderStatus(orderId, 'رد شده', rejectionReasonInput.trim() || 'عدم تطابق یا تایید فیش بانکی')) {
+      setRejectingOrder(null);
+      setRejectionReasonInput('');
+      if (viewingReceiptOrder?.id === orderId) setViewingReceiptOrder(null);
     }
   };
 
   const handleDeleteOrder = async () => {
-    if (!deletingOrder) return;
+    if (!deletingOrder || isDeletingLoading) return;
     const targetId = deletingOrder.id;
-    const tracking = deletingOrder.trackingCode;
     setIsDeletingLoading(true);
-
     try {
-      const res = await fetch(`/api/orders/${targetId}`, {
-        method: 'DELETE',
-        headers: { ...getAuthHeaders() },
-      });
-
-      if (res.ok) {
-        setOrders((prev) => prev.filter((o) => o.id !== targetId));
-        setOrderActionNotification({
-          message: `سفارش کد ${tracking} با موفقیت از پایگاه داده و حافظه حذف گردید.`,
-          type: 'success',
-        });
-        setTimeout(() => setOrderActionNotification(null), 3500);
-        await refreshProducts();
-        setDeletingOrder(null);
-      } else {
-        setOrderActionNotification({
-          message: 'خطا در حذف سفارش از پایگاه داده.',
-          type: 'error',
-        });
-        setTimeout(() => setOrderActionNotification(null), 3500);
-      }
-    } catch (err) {
-      console.error(err);
-      setOrderActionNotification({
-        message: 'خطا در برقراری ارتباط با سرور جهت حذف سفارش.',
-        type: 'error',
-      });
-      setTimeout(() => setOrderActionNotification(null), 3500);
-    } finally {
-      setIsDeletingLoading(false);
-    }
+      const res = await fetch(`/api/orders/${targetId}`, {method:'DELETE', headers:getAuthHeaders()});
+      const data = await readApiResponse<{deletedId: string; message: string}>(res, 'حذف سفارش انجام نشد.');
+      ordersRevision.current++;
+      setOrders(previous => previous.filter(order => order.id !== data.deletedId));
+      setDeletingOrder(null);
+      setOrderActionNotification({message:data.message, type:'success'});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'ارتباط با سرور برقرار نشد.';
+      setOrderErrors(previous => ({...previous, [targetId]: message}));
+      setOrderActionNotification({message, type:'error'});
+    } finally { setIsDeletingLoading(false); }
   };
 
   const handleClearRejectedOrders = async () => {
-    const rejected = orders.filter((o) => o.status === 'رد شده');
-    if (rejected.length === 0) {
-      setOrderActionNotification({
-        message: 'هیچ سفارشی با وضعیت «رد شده» جهت پاکسازی وجود ندارد.',
-        type: 'error',
-      });
-      setTimeout(() => setOrderActionNotification(null), 3500);
-      return;
-    }
-
-    const ids = rejected.map((o) => o.id);
+    if (clearingRejected) return;
+    const rejected = orders.filter(order => order.status === 'رد شده');
+    if (!rejected.length) return;
+    if (!window.confirm(`حذف قطعی ${toPersianDigits(rejected.length)} سفارش با وضعیت «رد شده»؟ سوابق این سفارش‌ها قابل بازیابی نخواهد بود.`)) return;
+    setClearingRejected(true);
     try {
-      const res = await fetch('/api/orders', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ ids }),
-      });
-      if (res.ok) {
-        setOrders((prev) => prev.filter((o) => o.status !== 'رد شده'));
-        setOrderActionNotification({
-          message: `${rejected.length} سفارش رد شده از پایگاه داده و حافظه پاکسازی شد.`,
-          type: 'success',
-        });
-        setTimeout(() => setOrderActionNotification(null), 3500);
-      }
-    } catch (err) {
-      console.error(err);
-    }
+      const res = await fetch('/api/orders', { method: 'DELETE', headers: {'Content-Type':'application/json', ...getAuthHeaders()},
+        body: JSON.stringify({ids: rejected.map(order => order.id), expectedStatus: 'رد شده'}) });
+      const data = await readApiResponse<{deletedIds: string[]; deletedCount: number}>(res, 'پاکسازی سفارش‌ها انجام نشد.');
+      ordersRevision.current++;
+      setOrders(previous => previous.filter(order => !data.deletedIds.includes(order.id)));
+      setOrderActionNotification({message: `${toPersianDigits(data.deletedCount)} سفارش ردشده حذف شد.`, type: 'success'});
+    } catch (error) {
+      setOrderActionNotification({message: error instanceof Error ? error.message : 'پاکسازی انجام نشد.', type:'error'});
+    } finally { setClearingRejected(false); }
   };
 
   const copyQuotationText = () => {
@@ -608,7 +489,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
         {
           ...selectedProduct,
           customMakingChargePercent: singleMakingCharge,
-          customProfitPercent: isCustomProfit ? singleProfit : settings.profitPercent || 7,
+          customProfitPercent: isCustomProfit ? singleProfit : settings.profitPercent ?? 7,
           discountPercent: singleDiscount,
         },
         goldPrice.pricePerGram,
@@ -940,7 +821,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                         </div>
                       </div>
 
-                      {directSaveSuccess && (
+                      {directSaveSuccess && !pricingDraft.dirty && (
                         <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-bold bg-emerald-500/10 px-3.5 py-1.5 rounded-full border border-emerald-500/30 animate-in fade-in">
                           <CheckCheck className="w-4 h-4" />
                           <span>روی این طلا اعمال شد!</span>
@@ -964,7 +845,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 min="0"
                                 max="60"
                                 step="1"
-                                value={singleMakingCharge}
+                                aria-label="اجرت اختصاصی" value={singleMakingCharge}
                                 onChange={(e) =>
                                   setSingleMakingCharge(
                                     Math.max(0, parseFloat(e.target.value) || 0)
@@ -985,7 +866,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                           min="0"
                           max="45"
                           step="1"
-                          value={singleMakingCharge}
+                          aria-label="اجرت اختصاصی" value={singleMakingCharge}
                           onChange={(e) => setSingleMakingCharge(parseInt(e.target.value, 10))}
                           className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#D4AF37] my-3"
                         />
@@ -1024,7 +905,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 min="0"
                                 max="30"
                                 step="1"
-                                value={singleProfit}
+                                aria-label="سود اختصاصی" value={singleProfit}
                                 onChange={(e) => {
                                   setSingleProfit(Math.max(0, parseFloat(e.target.value) || 0));
                                   setIsCustomProfit(true);
@@ -1044,7 +925,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                           min="0"
                           max="20"
                           step="1"
-                          value={singleProfit}
+                          aria-label="سود اختصاصی" value={singleProfit}
                           onChange={(e) => {
                             setSingleProfit(parseInt(e.target.value, 10));
                             setIsCustomProfit(true);
@@ -1078,7 +959,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                           <button
                             type="button"
                             onClick={() => {
-                              setSingleProfit(settings.profitPercent || 7);
+                              setSingleProfit(settings.profitPercent ?? 7);
                               setIsCustomProfit(false);
                             }}
                             className={`text-[11px] px-3 py-1 rounded-lg border transition-colors ${
@@ -1087,7 +968,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 : 'text-slate-400 border-slate-800 hover:text-white'
                             }`}
                           >
-                            سود عمومی گالری ({settings.profitPercent || 7}٪)
+                            سود عمومی گالری ({settings.profitPercent ?? 7}٪)
                           </button>
                         </div>
                       </div>
@@ -1107,7 +988,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                             type="number"
                             min="0"
                             max="50"
-                            value={singleDiscount}
+                            aria-label="تخفیف اختصاصی" value={singleDiscount}
                             onChange={(e) =>
                               setSingleDiscount(Math.max(0, parseFloat(e.target.value) || 0))
                             }
@@ -1146,7 +1027,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                           </div>
                           <div className="bg-[#060B14] p-2.5 rounded-xl border border-slate-800">
                             <span className="text-emerald-400 block">
-                              سود ({isCustomProfit ? singleProfit : settings.profitPercent || 7}٪):
+                              سود ({isCustomProfit ? singleProfit : settings.profitPercent ?? 7}٪):
                             </span>
                             <span className="font-bold text-white mt-0.5 block">
                               {formatToman(previewBreakdown.profitAmount)}
@@ -1163,11 +1044,13 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                             </span>
                           </div>
 
+                          {directSaveError && <p role="alert" className="text-xs text-rose-300">{directSaveError}</p>}
+                          {pricingDraft.dirty && <span className="text-xs text-amber-300">تغییرات ذخیره‌نشده</span>}
                           {/* 1-Click Action Button */}
                           <button
                             type="button"
                             onClick={handleSaveDirectPricing}
-                            disabled={savingProductId === selectedProduct.id}
+                            disabled={savingProductId !== null}
                             className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold px-8 py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all shadow-[0_4px_20px_rgba(212,175,55,0.3)] text-xs sm:text-sm cursor-pointer"
                           >
                             <Save className="w-4 h-4" />
@@ -1325,9 +1208,10 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 )}
               </div>
 
-              <form onSubmit={handleSaveProductFull} className="space-y-4 text-xs">
+              <form onSubmit={handleSaveProductFull} className="text-xs">
+                <fieldset disabled={savingProductForm} className="space-y-4">
                 {productFormError && (
-                  <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-center gap-2 text-rose-300 text-xs">
+                  <div role="alert" className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-center gap-2 text-rose-300 text-xs">
                     <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
                     <span>{productFormError}</span>
                   </div>
@@ -1363,7 +1247,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                       type="text"
                       required
                       placeholder="مثال: پلاک طلای حرف M اینانا"
-                      value={productForm.title || ''}
+                      aria-label="عنوان محصول" value={productForm.title || ''}
                       onChange={(e) => setProductForm({ ...productForm, title: e.target.value })}
                       className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-white outline-none"
                     />
@@ -1437,7 +1321,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                       step="1"
                       required
                       placeholder="20"
-                      value={productForm.customMakingChargePercent ?? ''}
+                      aria-label="اجرت محصول" value={productForm.customMakingChargePercent ?? ''}
                       onChange={(e) =>
                         setProductForm({
                           ...productForm,
@@ -1489,7 +1373,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <label className="block text-slate-300 font-semibold mb-1">تعداد موجودی:</label>
                     <input
                       type="number"
-                      value={productForm.stock || ''}
+                      aria-label="موجودی محصول" value={productForm.stock ?? ''}
                       onChange={(e) =>
                         setProductForm({ ...productForm, stock: parseInt(e.target.value, 10) || 0 })
                       }
@@ -1512,20 +1396,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    آدرس تصویر محصول (URL):
-                  </label>
-                  <input
-                    type="text"
-                    value={productForm.images?.[0] || ''}
-                    onChange={(e) =>
-                      setProductForm({ ...productForm, images: [e.target.value] })
-                    }
-                    className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-3.5 py-2 text-white outline-none"
-                    placeholder="https://..."
-                  />
-                </div>
+                <AdminProductGallery images={productForm.images || []} onChange={images => setProductForm(previous => ({ ...previous, images }))} />
 
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">توضیحات معرفی محصول:</label>
@@ -1542,11 +1413,13 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 <div className="flex justify-end pt-2">
                   <button
                     type="submit"
+                    disabled={savingProductForm}
                     className="bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold px-7 py-3 rounded-xl hover:brightness-110 transition-all text-xs cursor-pointer"
                   >
-                    {isEditingProduct ? 'بروزرسانی کامل محصول' : 'ثبت و انتشار محصول در ویترین'}
+                    {savingProductForm ? 'در حال ذخیره...' : isEditingProduct ? 'بروزرسانی کامل محصول' : 'ثبت و انتشار محصول در ویترین'}
                   </button>
                 </div>
+                </fieldset>
               </form>
             </div>
 
@@ -1680,7 +1553,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   <TrendingUp className="w-5 h-5 text-[#D4AF37]" />
                   <h2 className="text-lg font-bold text-white">تنظیم نرخ پایه طلای ۱۸ عیار و فرمول عمومی</h2>
                 </div>
-                {rateSaveSuccess && (
+                {rateSaveSuccess && !rateDraft.dirty && (
                   <span className="flex items-center gap-1 text-xs text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
                     <CheckCircle className="w-4 h-4" />
                     <span>تغییرات با موفقیت ذخیره شد</span>
@@ -1708,7 +1581,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   {!goldPrice.isManualOverride && <button
                     type="button"
                     onClick={handleSyncLiveApi}
-                    disabled={isSyncingApi}
+                    disabled={isSyncingApi || savingRate}
                     className="flex items-center justify-center gap-2 bg-[#D4AF37] hover:bg-[#c5a033] text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
                   >
                     <RefreshCw className={`w-4 h-4 ${isSyncingApi ? 'animate-spin' : ''}`} />
@@ -1747,7 +1620,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 )}
               </div>
 
-              <form onSubmit={handleSaveRateAndGlobalSettings} className="space-y-6">
+              <form onSubmit={handleSaveGlobalSettings} className="space-y-6">
                 {/* Gold Price Per Gram Input */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
@@ -1762,7 +1635,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <input
                       type="number"
                       step="1"
-                      value={overridePrice}
+                      aria-label="نرخ دستی طلا" value={overridePrice}
                       onChange={(e) => setOverridePrice(parseFloat(e.target.value) || 0)}
                       className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-lg font-bold text-white outline-none"
                     />
@@ -1775,6 +1648,14 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   </span>
                 </div>
 
+                <div className="space-y-2">
+                  <button type="button" onClick={handleSaveGoldRate} disabled={savingRate || isSyncingApi || overridePrice <= 0 || (!rateDraft.dirty && goldPrice.isManualOverride)} className="rounded-xl border border-[#D4AF37]/40 px-4 py-2 text-sm text-[#E6CA65] disabled:opacity-50">
+                    {savingRate ? 'در حال ذخیره نرخ...' : 'ذخیره نرخ دستی طلا'}
+                  </button>
+                  {rateDraft.dirty && <p className="text-xs text-amber-300">نرخ ویرایش‌شده هنوز ذخیره نشده است.</p>}
+                  {rateSaveError && <p role="alert" className="text-xs text-rose-300">{rateSaveError}</p>}
+                </div>
+
                 {/* Profit % & Global Making Charge */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -1783,7 +1664,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     </label>
                     <input
                       type="number"
-                      value={profitPct}
+                      aria-label="سود عمومی" value={profitPct}
                       onChange={(e) => setProfitPct(parseFloat(e.target.value) || 0)}
                       className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-3 py-2.5 text-sm font-bold text-white outline-none"
                     />
@@ -1797,7 +1678,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     </label>
                     <input
                       type="number"
-                      value={globalMakingChargePct}
+                      aria-label="اجرت عمومی" value={globalMakingChargePct}
                       onChange={(e) => setGlobalMakingChargePct(parseFloat(e.target.value) || 0)}
                       className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-3 py-2.5 text-sm font-bold text-white outline-none"
                     />
@@ -1821,7 +1702,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                       <input
                         type="text"
                         dir="ltr"
-                        value={adminBankCard}
+                        aria-label="شماره کارت بانکی" value={adminBankCard}
                         onChange={(e) => setAdminBankCard(e.target.value)}
                         placeholder="۶۰۳۷-xxxx-xxxx-xxxx"
                         className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-3 py-2.5 text-xs sm:text-sm font-mono font-bold text-white outline-none"
@@ -1871,14 +1752,20 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 </div>
 
                 <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">ثبت نرخ دستی، استعلام خودکار را متوقف می‌کند.</span>
+                  <div>
+                    <p className="text-[11px] text-slate-400">ذخیره تنظیمات مالی و بانکی، نرخ طلا را تغییر نمی‌دهد.</p>
+                    {settingsDraft.dirty && <p className="text-xs text-amber-300">تغییرات ذخیره‌نشده</p>}
+                    {settingsSaveError && <p role="alert" className="text-xs text-rose-300">{settingsSaveError}</p>}
+                    {settingsSaveSuccess && !settingsDraft.dirty && <p role="status" className="text-xs text-emerald-300">تنظیمات ذخیره شد.</p>}
+                  </div>
 
                   <button
                     type="submit"
+                    disabled={savingSettings || !settingsDraft.dirty}
                     className="flex items-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold px-6 py-3 rounded-xl hover:brightness-110 active:scale-95 transition-all text-xs sm:text-sm cursor-pointer"
                   >
                     <Save className="w-4 h-4" />
-                    <span>ذخیره و اعمال سراسری نرخ طلا</span>
+                    <span>{savingSettings ? 'در حال ذخیره تنظیمات...' : 'ذخیره تنظیمات مالی و بانکی'}</span>
                   </button>
                 </div>
               </form>
@@ -2111,6 +1998,11 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
         {/* ========================================================================= */}
         {activeAdminTab === 'orders' && (
           <div className="space-y-6">
+            {ordersError && <div role="alert" className="rounded-xl border border-rose-500/40 bg-rose-950/40 p-4 text-sm text-rose-300">
+              <p>{ordersError} اطلاعات نمایش‌داده‌شده ممکن است قدیمی باشد.</p>
+              <button type="button" onClick={() => void fetchOrders(false)} className="mt-2 underline">تلاش دوباره برای دریافت سفارش‌ها</button>
+            </div>}
+            <p className="text-xs text-slate-400">آخرین دریافت موفق: {lastOrdersReceived ? new Date(lastOrdersReceived).toLocaleString('fa-IR') : 'هنوز دریافت نشده'}</p>
             {/* Notification alert banner */}
             {orderActionNotification && (
               <div
@@ -2166,7 +2058,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 </span>
                 <span className="text-xl sm:text-2xl font-bold text-emerald-400 font-serif-brand">
                   {toPersianDigits(
-                    orders.filter((o) => o.status === 'تأیید شده' || o.status === 'تأیید شد و در حال ساخت')
+                    orders.filter((o) => isApprovedOrderStatus(o.status))
                       .length
                   )}
                 </span>
@@ -2202,6 +2094,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <button
                       type="button"
                       onClick={handleClearRejectedOrders}
+                      disabled={clearingRejected}
                       className="text-xs text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
                       title="پاکسازی یکجای تمام سفارش‌های رد شده"
                     >
@@ -2261,7 +2154,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     تأیید شده (
                     {toPersianDigits(
                       orders.filter(
-                        (o) => o.status === 'تأیید شده' || o.status === 'تأیید شد و در حال ساخت'
+                        (o) => isApprovedOrderStatus(o.status)
                       ).length
                     )}
                     )
@@ -2326,8 +2219,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     }
                     if (
                       orderFilterStatus === 'تأیید شده' &&
-                      ord.status !== 'تأیید شده' &&
-                      ord.status !== 'تأیید شد و در حال ساخت'
+                      !isApprovedOrderStatus(ord.status)
                     ) {
                       return false;
                     }
@@ -2337,8 +2229,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     if (
                       orderFilterStatus === 'other' &&
                       (ord.status === 'در انتظار بررسی' ||
-                        ord.status === 'تأیید شده' ||
-                        ord.status === 'تأیید شد و در حال ساخت' ||
+                        isApprovedOrderStatus(ord.status) ||
                         ord.status === 'رد شده')
                     ) {
                       return false;
@@ -2370,13 +2261,14 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                       {filteredOrders.map((ord) => {
                         const isPending = ord.status === 'در انتظار بررسی';
                         const isApproved =
-                          ord.status === 'تأیید شده' || ord.status === 'تأیید شد و در حال ساخت';
+                          isApprovedOrderStatus(ord.status);
                         const isRejected = ord.status === 'رد شده';
                         const isLoadingThis = actionLoadingOrderId === ord.id;
 
                         return (
                           <div
                             key={ord.id}
+                            data-order-id={ord.id}
                             className={`bg-[#0A1120] border rounded-2xl p-5 text-xs text-slate-300 space-y-4 transition-all shadow-md ${
                               isPending
                                 ? 'border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.05)]'
@@ -2387,6 +2279,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 : 'border-slate-800'
                             }`}
                           >
+                            {orderErrors[ord.id] && <p role="alert" className="rounded-xl border border-rose-500/40 bg-rose-950/40 p-3 text-rose-300">{orderErrors[ord.id]}</p>}
                             {/* Card Header */}
                             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
                               <div className="flex items-center gap-3">
@@ -2616,7 +2509,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 {/* One-Click Approve Button */}
                                 <button
                                   type="button"
-                                  disabled={isLoadingThis || isApproved}
+                                  disabled={isLoadingThis || isApproved || !canTransitionOrderStatus(ord.status, 'تأیید شده')}
                                   onClick={() => handleApproveOrder(ord)}
                                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
                                     isApproved
@@ -2631,7 +2524,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 {/* Reject Button (Opens reason dialog) */}
                                 <button
                                   type="button"
-                                  disabled={isLoadingThis}
+                                  disabled={isLoadingThis || !canTransitionOrderStatus(ord.status, 'رد شده')}
                                   onClick={() => {
                                     setRejectingOrder(ord);
                                     setRejectionReasonInput(ord.rejectionReason || '');
@@ -2650,31 +2543,12 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 <div className="flex items-center gap-1 bg-[#060B14] border border-slate-700 rounded-xl px-2 py-1">
                                   <span className="text-[10px] text-slate-400">تغییر وضعیت:</span>
                                   <select
-                                    value={ord.status}
+                                    value={normalizeOrderStatus(ord.status)}
+                                    disabled={isLoadingThis}
                                     onChange={(e) => handleUpdateOrderStatus(ord.id, e.target.value)}
                                     className="bg-transparent text-[#D4AF37] font-bold text-xs outline-none cursor-pointer"
                                   >
-                                    <option value="در انتظار بررسی" className="bg-[#060B14] text-white">
-                                      در انتظار بررسی
-                                    </option>
-                                    <option value="تأیید شده" className="bg-[#060B14] text-white">
-                                      تأیید شده
-                                    </option>
-                                    <option value="تأیید شد و در حال ساخت" className="bg-[#060B14] text-white">
-                                      تأیید شد و در حال ساخت
-                                    </option>
-                                    <option value="ارسال شد" className="bg-[#060B14] text-white">
-                                      ارسال شد
-                                    </option>
-                                    <option value="تکمیل شده" className="bg-[#060B14] text-white">
-                                      تکمیل شده
-                                    </option>
-                                    <option value="رد شده" className="bg-[#060B14] text-white">
-                                      رد شده
-                                    </option>
-                                    <option value="لغو شده" className="bg-[#060B14] text-white">
-                                      لغو شده
-                                    </option>
+                                    {orderStatusOptions(ord.status).map(status => <option key={status} value={status} className="bg-[#060B14] text-white">{status}</option>)}
                                   </select>
                                 </div>
 
@@ -2857,7 +2731,8 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     </div>
 
                     {/* Custom Textarea */}
-                    <div>
+                    <p role="alert" className="text-xs text-rose-300">{orderErrors[rejectingOrder.id]}</p>
+                  <div>
                       <label className="text-xs font-semibold text-slate-200 block mb-1.5">
                         متن دقیق دلیل رد سفارش:
                       </label>
@@ -2933,6 +2808,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     </div>
                   </div>
 
+                  <p role="alert" className="text-xs text-rose-300">{orderErrors[deletingOrder.id]}</p>
                   <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
                     <button
                       type="button"

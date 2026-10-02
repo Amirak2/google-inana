@@ -1,3 +1,5 @@
+import { readApiResponse } from '../utils/apiResponse';
+import type { ProductUpdates } from '../utils/adminProductForm';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { INITIAL_COLLECTIONS } from '../data/seedData';
 import {
@@ -56,7 +58,7 @@ interface GoldStoreContextType extends CatalogFilters {
   updateGoldPriceState: (priceData: Partial<GoldPriceData>) => Promise<void>;
   updateGoldPriceManual: (price: number) => Promise<void>;
   addProduct: (product: Product) => Promise<void>;
-  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  updateProduct: (id: string, updates: ProductUpdates) => Promise<void>;
   updateSingleProductPricing: (
     productId: string,
     makingChargePercent: number | null,
@@ -382,14 +384,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(newSettings),
       });
-      if (!res.ok) throw new Error('تنظیمات ذخیره نشد. دوباره تلاش کنید.');
-      if (res.ok) {
-        const data = await res.json();
+      {
+        const data = await readApiResponse<{settings: PricingSettings}>(res, 'تنظیمات ذخیره نشد. دوباره تلاش کنید.');
         setSettings(data.settings);
         refreshProducts();
       }
     } catch (e) {
-      console.error(e);
       throw e;
     }
   };
@@ -403,14 +403,12 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(priceData),
       });
-      if (!res.ok) throw new Error('نرخ طلا ذخیره نشد. دوباره تلاش کنید.');
-      if (res.ok) {
-        const data = await res.json();
+      {
+        const data = await readApiResponse<{goldPrice: GoldPriceData}>(res, 'نرخ طلا ذخیره نشد. دوباره تلاش کنید.');
         setGoldPrice(data.goldPrice);
         refreshProducts();
       }
     } catch (e) {
-      console.error(e);
       throw e;
     }
   };
@@ -433,18 +431,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(prodWithId),
     });
-    if (!res.ok) throw new Error('ذخیره محصول در سرور انجام نشد.');
-    setProducts((prev) => [prodWithId, ...prev.filter((p) => p.id !== prodWithId.id)]);
+    const savedProduct = await readApiResponse<Product>(res, 'ذخیره محصول در سرور انجام نشد.');
+    setProducts((prev) => [savedProduct, ...prev.filter((p) => p.id !== savedProduct.id)]);
   };
 
-  const updateProduct = async (id: string, updates: Partial<Product>) => {
+  const updateProduct = async (id: string, updates: ProductUpdates) => {
     const res = await fetch(`/api/admin/products/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(updates),
     });
-    if (!res.ok) throw new Error('ویرایش محصول در سرور انجام نشد.');
-    const savedProduct: Product = await res.json();
+    const savedProduct = await readApiResponse<Product>(res, 'ویرایش محصول در سرور انجام نشد.');
     setProducts((prev) => prev.map((p) => (p.id === id ? savedProduct : p)));
   };
 
@@ -454,7 +451,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     profitPercent: number | null,
     discountPercent?: number
   ) => {
-    const updates: Partial<Product> = {
+    const updates: ProductUpdates = {
       customMakingChargePercent: makingChargePercent,
       customProfitPercent: profitPercent,
       ...(discountPercent !== undefined ? { discountPercent } : {}),
@@ -464,10 +461,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(updates),
     });
-    if (!res.ok) throw new Error('ذخیره قیمت‌گذاری محصول در سرور انجام نشد.');
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, ...updates } : p))
-    );
+    const data = await readApiResponse<{product: Product}>(res, 'ذخیره قیمت‌گذاری محصول در سرور انجام نشد.');
+    setProducts((prev) => prev.map((p) => p.id === productId ? { ...p, ...data.product } : p));
   };
 
   const deleteProduct = async (id: string) => {

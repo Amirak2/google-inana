@@ -15,7 +15,7 @@ async function request(path, method = 'GET', body) {
 }
 const product = [...store.map('products').values()].find(product => product.stock > 0);
 async function setStock(stock) {
-  const result = await request(`/api/admin/products/${product.id}`, 'PUT', { stock, availableStock: 0 });
+  const result = await request(`/api/admin/products/${product.id}`, 'PUT', { stock, expectedStock: store.get('products', product.id).stock, availableStock: 0 });
   assert.equal(result.status, 200);
   assert.equal(result.body.availableStock, stock);
   assert.equal(store.get('products', product.id).availableStock, undefined);

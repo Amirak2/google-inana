@@ -91,15 +91,7 @@ export interface CartItem {
   quantity: number;
 }
 
-export type OrderStatus =
-  | 'در انتظار بررسی'
-  | 'تایید شده'
-  | 'تأیید شده'
-  | 'رد شده'
-  | 'در حال آماده‌سازی'
-  | 'آماده تحویل'
-  | 'تکمیل شده'
-  | 'لغو شده';
+export type OrderStatus = import('./utils/orderWorkflow').CanonicalOrderStatus | 'تایید شده' | 'تأیید شد و در حال ساخت';
 
 export interface OrderItem {
   productId: string;
