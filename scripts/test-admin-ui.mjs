@@ -118,7 +118,7 @@ try {
   assert.equal(mutations.findLast(m=>m.method==='POST'&&m.url==='/api/admin/products').body.customMakingChargePercent,0);
 
   await click(button('نرخ پایه و فرمول'));
-  assert.equal(field('نرخ دستی طلا').value,'23932462','Fetched rate initializes the form');
+  assert.ok(document.body.textContent.includes('Servix'),'The gold rate is automatic');
   assert.equal(field('سود عمومی').value,'0');
   assert.equal(field('اجرت عمومی').value,'0');
   await input(document.querySelector('input[aria-label="شماره کارت بانکی"]'),'2222333344445555');
@@ -132,8 +132,9 @@ try {
   failSettings=false;await submit(document.querySelector('form'));
   assert.equal(mutations.filter(m=>m.url==='/api/admin/gold-price').length,rateWrites,'Bank save must not write rate');
   assert.equal(gold.isManualOverride,false);
-  await input(field('نرخ دستی طلا'),25000000);await click(button('ذخیره نرخ دستی طلا'));
-  assert.equal(gold.pricePerGram,25000000);
+  assert.equal(document.querySelector('input[aria-label="نرخ دستی طلا"]'),null);
+  assert.ok(!document.body.textContent.includes('ذخیره نرخ دستی طلا'));
+  assert.equal(gold.pricePerGram,23932462,'Read-only rate is preserved');
 
   await click(button('سفارش‌ها'));
   const row=()=>document.querySelector('[data-order-id="review"]');
