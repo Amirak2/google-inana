@@ -1,6 +1,10 @@
 export const ORDER_STATUSES = ['در انتظار بررسی', 'تأیید شده', 'در حال آماده‌سازی', 'آماده تحویل', 'ارسال شد', 'تکمیل شده', 'رد شده', 'لغو شده'] as const;
 export type CanonicalOrderStatus = typeof ORDER_STATUSES[number];
 
+export function canArchiveOrder(status: string): boolean {
+  return ['تکمیل شده', 'رد شده', 'لغو شده'].includes(normalizeOrderStatus(status));
+}
+
 export function normalizeOrderStatus(status: string): string {
   if (status === 'تایید شده') return 'تأیید شده';
   if (status === 'تأیید شد و در حال ساخت') return 'در حال آماده‌سازی';
