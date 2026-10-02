@@ -30,7 +30,7 @@ let settings={...DEFAULT_SETTINGS,profitPercent:0,globalMakingChargePercent:0,ba
 let gold={pricePerGram:23932462,isManualOverride:false,otherMarkets:{},changePercent:0};
 const order={id:'review',trackingCode:'REVIEW',customerName:'مشتری تست',customerPhone:'09120000123',customerAddress:'نشانی تست',items:[],totalPrice:100,totalWeight:0,status:'در انتظار بررسی',createdAt:new Date().toISOString()};
 let orders=[order,{...order,id:'rejected',trackingCode:'REJECTED',status:'رد شده'}];
-let failPricing=true,failProducts=false,failOrders=false,failStatus=true,failSettings=false;
+let failPricing=true,failProducts=false,failOrders=false,failStatus=true,failSettings=false,failArchive=true;
 const mutations=[];
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async (url,options={})=>{
@@ -45,6 +45,18 @@ globalThis.fetch=async (url,options={})=>{
   if(url==='/api/admin/gold-price') {gold={...gold,...body};return Response.json({goldPrice:gold});}
   if(url==='/api/orders'&&method==='GET') return failOrders?Response.json({error:'خطای دریافت سفارش آزمایشی'},{status:503}):Response.json(orders);
   if(url==='/api/orders'&&method==='DELETE') {const deletedIds=body.ids;orders=orders.filter(o=>!deletedIds.includes(o.id));return Response.json({deletedIds,deletedCount:deletedIds.length});}
+  if(url.startsWith('/api/admin/orders/')&&url.endsWith('/archive')) {
+    if(failArchive)return Response.json({error:'خطای ذخیره آرشیو آزمایشی'},{status:409});
+    const ids=body.ids || [url.split('/')[4]];
+    orders=orders.map(order=>{
+      if(!ids.includes(order.id))return order;
+      const updated={...order};
+      if(body.archived)updated.archivedAt='2026-10-02T10:00:00Z';else delete updated.archivedAt;
+      return updated;
+    });
+    const selected=orders.filter(order=>ids.includes(order.id));
+    return Response.json(body.ids?{orders:selected}:{order:selected[0]});
+  }
   if(url.endsWith('/status')) {
     if(failStatus)return Response.json({error:'موجودی برای فعال‌سازی سفارش کافی نیست.'},{status:409});
     const id=url.split('/')[3];const updated={...orders.find(o=>o.id===id),status:body.status,reviewedAt:'2026-10-02T10:00:00Z',updatedAt:'2026-10-02T10:00:00Z',paymentReviewRequired:false};
@@ -134,15 +146,33 @@ try {
   const options=[...row().querySelectorAll('option')].map(o=>o.value);
   assert.ok(options.includes('در حال آماده‌سازی')&&options.includes('آماده تحویل')&&options.includes('ارسال شد'));
   assert.ok(!options.includes('تأیید شد و در حال ساخت'));
-  let confirmed=0;window.confirm=()=>{confirmed++;return false;};
+   const rejectedRow=()=>document.querySelector('[data-order-id="rejected"]');
+   assert.equal(button('پاکسازی رد شده‌ها'),undefined,'Permanent cleanup is available only in archive');
+   await click([...rejectedRow().querySelectorAll('button')].find(b=>b.textContent==='آرشیو سفارش'));
+   assert.ok(rejectedRow(),'Failed archive keeps the order in the working queue');
+   assert.ok(rejectedRow().textContent.includes('خطای ذخیره آرشیو آزمایشی'));
+   failArchive=false;await click(button('آرشیو رد شده‌ها'));
+   assert.equal(rejectedRow(),null,'Archived orders leave the working queue');
+   assert.equal(mutations.findLast(m=>m.url==='/api/admin/orders/archive').body.expectedStatus,'رد شده');
+   await click(button('آرشیو سفارش‌ها'));
+   assert.ok(rejectedRow());assert.equal(row(),null,'Archive excludes working orders');
+   assert.equal(rejectedRow().querySelector('select').disabled,true);
+   await click(button('بازگرداندن از آرشیو'));
+   assert.equal(rejectedRow(),null);
+   await click(button('فهرست روزمره'));
+   assert.ok(rejectedRow(),'Restored order returns to working queue');
+   await click(button('آرشیو رد شده‌ها'));await click(button('آرشیو سفارش‌ها'));
+   let confirmed=0;window.confirm=()=>{confirmed++;return false;};
   const deletes=()=>mutations.filter(m=>m.method==='DELETE').length;
   await click(button('پاکسازی رد شده‌ها'));assert.equal(confirmed,1);assert.equal(deletes(),0);
   window.confirm=()=>true;await click(button('پاکسازی رد شده‌ها'));
-  assert.equal(mutations.findLast(m=>m.method==='DELETE').body.expectedStatus,'رد شده');
+   assert.equal(mutations.findLast(m=>m.method==='DELETE').body.expectedStatus,'رد شده');
+   assert.equal(mutations.findLast(m=>m.method==='DELETE').body.expectedArchived,true);
+   await click(button('فهرست روزمره'));
   failOrders=true;await click(button('بروزرسانی زنده لیست'));
   assert.ok(document.body.textContent.includes('خطای دریافت سفارش آزمایشی'));
   assert.ok(row(),'Stale list remains available after refresh failure');
-  console.log('PASS: real admin React/provider failure recovery, dirty drafts, zero fees, delta product edits, gallery preservation, independent settings/rate save, server order feedback and confirmed cleanup.');
+   console.log('PASS: real admin React/provider failure recovery, dirty drafts, zero fees, delta product edits, gallery preservation, independent settings/rate save, server order feedback, reversible archive filters and confirmed cleanup.');
 } finally {
   await act(async()=>root.unmount());globalThis.fetch=originalFetch;dom.window.close();await unlink(output);
 }
