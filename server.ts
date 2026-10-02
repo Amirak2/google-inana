@@ -3,6 +3,7 @@ import { createReservationEngine } from './server/reservations';
 import { createInventoryPolicy, expireUnreviewedInventory } from './server/inventoryPolicy';
 import { cartQuantities, boundedLogDetails } from './server/checkoutSafety';
 import { BRS_USER_AGENT, parseBrsGold } from './server/brsGold';
+import { GOLD_POLL_INTERVAL_MS } from './server/servixGold';
 import { validateReceipt } from './server/receiptValidation';
 import express from './server/router';
 import type { Request, Response, NextFunction } from 'express';
@@ -355,6 +356,8 @@ function isCurrentJalaliDate(value: unknown): boolean {
 
 // In-memory cache for TGJU indicator summary table (historical daily records)
 currentGoldState = store.get('market', 'gold') || currentGoldState;
+const automaticServix = Boolean(env.SERVIX_API_KEY) || env.NODE_ENV === 'production';
+if (automaticServix) currentGoldState = { ...currentGoldState, isManualOverride: false, status: currentGoldState.status === 'manual' ? 'cached' : currentGoldState.status };
 let cachedTgjuData: any[][] = store.get('market', 'history') || [];
 let lastFetchTimestamp = store.get<number>('market', 'fetchedAt') || 0;
 let lastHistoryFetchTimestamp = store.get<number>('market', 'historyFetchedAt') || 0;
@@ -363,6 +366,7 @@ let hourlyGoldHistory: HourlyGoldPoint[] = store.get<HourlyGoldPoint[]>('market'
 const CACHE_LIFETIME_MS = 60 * 60 * 1000; // 1 hour cache (scheduled updates every 1 hour)
 
 async function ensureTgjuHistory(): Promise<any[][]> {
+  if (automaticServix) return cachedTgjuData;
   if (cachedTgjuData.length > 0 && Date.now() - lastHistoryFetchTimestamp < CACHE_LIFETIME_MS) {
     return cachedTgjuData;
   }
@@ -464,6 +468,12 @@ async function fetchOtherMarkets(): Promise<OtherMarketsData> {
 
 // Main function to fetch or refresh live gold price from official APIs
 async function getOrUpdateGoldPrice(force: boolean = false): Promise<GoldPriceData> {
+  if (automaticServix) {
+    // The server scheduler owns upstream calls. Page reads, checkouts and admin sync never spend API quota.
+    const fresh = currentGoldState.source?.startsWith('Servix') && Date.now() - Date.parse(currentGoldState.timestamp) <= GOLD_POLL_INTERVAL_MS;
+    currentGoldState = { ...currentGoldState, isManualOverride: false, status: fresh && currentGoldState.status === 'live' ? 'live' : 'cached' };
+    return currentGoldState;
+  }
   // If manual override is enabled and not forced by admin sync, respect manual
   if (currentGoldState.isManualOverride && !force) {
     recordHourlyGoldPoint();
@@ -630,54 +640,9 @@ app.post('/api/gold-price/refresh', requireAdminAuth, async (_req: Request, res:
   }
 });
 
-// Admin update gold price (manual override or switch)
-app.post('/api/admin/gold-price', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
-  const { pricePerGram, isManualOverride, changePercent, source } = req.body;
-
-  if (pricePerGram !== undefined) {
-    const valResult = validatePositiveNumber(pricePerGram, 'قیمت هر گرم طلا', 1_000_000, 1_000_000_000);
-    if (!valResult.isValid) {
-      res.status(400).json({ error: valResult.error });
-      return;
-    }
-    const newPrice = Math.round(valResult.value);
-    currentGoldState.previousPrice = currentGoldState.pricePerGram;
-    currentGoldState.pricePerGram = newPrice;
-    currentGoldState.dailyHigh = Math.max(currentGoldState.dailyHigh, newPrice);
-    currentGoldState.dailyLow = Math.min(currentGoldState.dailyLow, newPrice);
-  }
-
-  if (isManualOverride !== undefined) {
-    currentGoldState.isManualOverride = Boolean(isManualOverride);
-    currentGoldState.status = isManualOverride ? 'manual' : 'live';
-    if (isManualOverride) {
-      currentGoldState.source = 'نرخ تعیین‌شده توسط مدیریت فروشگاه';
-      currentGoldState.jalaliTimestamp = formatJalaliDateTime(new Date());
-      currentGoldState.changePercent = 0;
-    }
-  }
-
-  if (changePercent !== undefined) {
-    const changeResult = validatePercentOrNull(changePercent, 'درصد تغییرات', -50, 50);
-    if (!changeResult.isValid) {
-      res.status(400).json({ error: changeResult.error });
-      return;
-    }
-    currentGoldState.changePercent = changeResult.value ?? 0;
-  }
-
-  if (source) {
-    currentGoldState.source = String(source).slice(0, 100);
-  }
-
-  currentGoldState.timestamp = new Date().toISOString();
-  recordHourlyGoldPoint();
-  logger.security('ADMIN', `تغییر نرخ طلا توسط مدیر: ${currentGoldState.pricePerGram.toLocaleString('fa-IR')} تومان`, {
-    admin: req.user?.email,
-    newPrice: currentGoldState.pricePerGram,
-    isManual: currentGoldState.isManualOverride,
-  });
-  res.json({ success: true, goldPrice: currentGoldState });
+// Manual rate writes are retired; only the authenticated server scheduler supplies the gold rate.
+app.post('/api/admin/gold-price', requireAdminAuth, (_req: AuthenticatedRequest, res: Response) => {
+  res.status(410).json({ error: 'قیمت طلا فقط از سرویس خودکار دریافت می‌شود؛ ثبت نرخ دستی غیرفعال است.' });
 });
 
 // Admin force sync with official API
@@ -686,8 +651,7 @@ app.post('/api/admin/gold-price/sync', requireAdminAuth, async (_req: Authentica
     res.status(429).json({ error: 'بروزرسانی اجباری قیمت هر ساعت یک بار مجاز است.' }); return;
   }
   try {
-    currentGoldState.isManualOverride = false;
-    const updated = await getOrUpdateGoldPrice(true);
+    const updated = await getOrUpdateGoldPrice(false);
     res.json({ success: true, goldPrice: updated });
   } catch (error) {
     res.status(500).json({ error: 'خطا در همگام‌سازی با API', current: currentGoldState });
