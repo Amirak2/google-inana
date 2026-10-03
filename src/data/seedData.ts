@@ -401,7 +401,37 @@ export const PEARL_PRODUCTS: Product[] = [
   },
 ];
 
+export const LETTER_PRODUCTS: Product[] = [
+  {
+    id: 'inana-letter-l',
+    title: 'آویز طلا حرف L',
+    slug: 'pendant-letter-l',
+    category: 'حروف انگلیسی',
+    collection: 'INANA LETTERS',
+    pricingMode: 'gold',
+    weight: 0.190,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0,
+    stoneCost: 0,
+    discountPercent: 0,
+    images: ['/products/letters/inana-letter-l-white.webp'],
+    description: 'آویز حرف L از طلای ۱۸ عیار، با وزن ۱۹۰ سوت. قیمت با نرخ روز طلا، اجرت ۱۶٫۵٪ و سود ۷٪ محاسبه می‌شود؛ بدون مالیات.',
+    features: ['حرف انگلیسی L', 'طلای ۱۸ عیار', 'وزن: ۱۹۰ سوت (۰٫۱۹۰ گرم)', 'اجرت: ۱۶٫۵٪', 'سود: ۷٪'],
+    dimensions: '',
+    sku: 'INA-LET-L-019',
+    stock: 1,
+    isNewArrival: true,
+    isBestSeller: false,
+    isFeatured: true,
+    letter: 'L',
+    createdAt: '2026-10-03T14:13:54.000Z',
+  },
+];
+
 export const INITIAL_PRODUCTS: Product[] = [
+  ...LETTER_PRODUCTS,
   ...PEARL_GOLD_PRODUCTS,
   ...PEARL_PRODUCTS,
   {
