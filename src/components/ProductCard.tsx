@@ -18,7 +18,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
 
   const favorite = isFavorite(product.id);
   const isFixed = product.pricingMode === 'fixed';
-  const showFullPhoto = isFixed || (product.pearlPrice ?? 0) > 0;
+  const showFullPhoto = isFixed || (product.pearlPrice ?? 0) > 0 || product.images?.some(url => url.startsWith('/products/letters/'));
   const priceReady = isFixed ? (product.fixedPrice ?? 0) > 0 : goldPrice.pricePerGram > 0;
 
   // Dynamic live calculation
