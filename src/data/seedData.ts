@@ -403,6 +403,32 @@ export const PEARL_PRODUCTS: Product[] = [
 
 export const LETTER_PRODUCTS: Product[] = [
   {
+    id: 'inana-letter-o',
+    title: 'آویز طلا حرف O',
+    slug: 'pendant-letter-o',
+    category: 'حروف انگلیسی',
+    collection: 'INANA LETTERS',
+    pricingMode: 'gold',
+    weight: 0.280,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0,
+    stoneCost: 0,
+    discountPercent: 0,
+    images: ['/products/letters/inana-letter-o-white.webp'],
+    description: 'آویز حرف O از طلای ۱۸ عیار، با وزن ۲۸۰ سوت. قیمت با نرخ روز طلا، اجرت ۱۶٫۵٪ و سود ۷٪ محاسبه می‌شود؛ بدون مالیات.',
+    features: ['حرف انگلیسی O', 'طلای ۱۸ عیار', 'وزن: ۲۸۰ سوت (۰٫۲۸۰ گرم)', 'اجرت: ۱۶٫۵٪', 'سود: ۷٪'],
+    dimensions: '',
+    sku: 'INA-LET-O-028',
+    stock: 1,
+    isNewArrival: true,
+    isBestSeller: false,
+    isFeatured: true,
+    letter: 'O',
+    createdAt: '2026-10-04T00:30:00.000Z',
+  },
+  {
     id: 'inana-letter-z',
     title: 'آویز طلا حرف Z',
     slug: 'pendant-letter-z',
@@ -1058,4 +1084,3 @@ export const TESTIMONIALS_DATA: Testimonial[] = [
     purchasedItem: 'دستبند النگویی آرشیتکتورال',
   },
 ];
-
