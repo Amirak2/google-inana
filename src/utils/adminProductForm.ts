@@ -1,7 +1,7 @@
 import type { Product } from '../types';
 
 export type ProductUpdates = Partial<Product> & { expectedStock?: number };
-const editableFields = ['title', 'titleEn', 'slug', 'category', 'collection', 'pricingMode', 'fixedPrice', 'weight', 'purity', 'customMakingChargePercent', 'customProfitPercent', 'additionalCost', 'stoneCost', 'discountPercent', 'images', 'description', 'features', 'dimensions', 'sku', 'stock', 'isNewArrival', 'isBestSeller', 'isFeatured', 'letter'] as const;
+const editableFields = ['title', 'titleEn', 'slug', 'category', 'collection', 'pricingMode', 'fixedPrice', 'pearlPrice', 'weight', 'purity', 'customMakingChargePercent', 'customProfitPercent', 'additionalCost', 'stoneCost', 'discountPercent', 'images', 'description', 'features', 'dimensions', 'sku', 'stock', 'isNewArrival', 'isBestSeller', 'isFeatured', 'letter'] as const;
 
 export function changedProductFields(original: Product, draft: Partial<Product>): ProductUpdates {
   const updates: ProductUpdates = {};
