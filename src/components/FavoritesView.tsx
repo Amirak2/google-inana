@@ -2,11 +2,12 @@ import React from 'react';
 import { Heart, ShoppingBag, ArrowLeft, Trash2 } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { ProductCard } from './ProductCard';
+import { groupCatalogVariants } from '../utils/productVariants';
 
 export const FavoritesView: React.FC = () => {
   const { favorites, products, openCatalog, clearFavorites } = useGoldStore();
 
-  const favoriteProducts = products.filter((p) => favorites.includes(p.id));
+  const favoriteProducts = groupCatalogVariants(products.filter((p) => favorites.includes(p.id)));
 
   return (
     <section

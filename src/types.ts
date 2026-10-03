@@ -68,6 +68,7 @@ export interface Product {
   isBestSeller: boolean;
   isFeatured: boolean;
   letter?: string; // e.g. 'F', 'M', 'A', 'S'
+  variantGroupId?: string; // Separate stock records offered as weight options on one catalog card.
   createdAt: string;
 }
 

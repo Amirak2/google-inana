@@ -12,7 +12,7 @@ import type { Store } from './server/storage';
 
 import crypto from 'crypto';
 
-import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS } from './src/data/seedData';
+import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS } from './src/data/seedData';
 import { GoldHistoryPoint, GoldPriceData, Order, OtherMarketsData, PricingSettings, Product, SystemLogModule } from './src/types';
 import { calculateProductPrice, DEFAULT_SETTINGS } from './src/utils/pricingEngine';
 import { formatJalaliDateTime } from './src/utils/persianFormatter';
@@ -292,6 +292,7 @@ const DEFAULT_SEED_ORDERS: Order[] = [
 // --- Settings Persistence ---
 function saveSettingsToDb(settings: PricingSettings): void { store.set('settings', 'pricing', settings); }
 seedDatabaseIfEmpty(INITIAL_PRODUCTS, []);
+for (const product of LETTER_PRODUCTS) seedProductsOnce(`letterCatalogV1-${product.id}`, [product]);
 seedProductsOnce('pearlProductsV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p3'));
 seedProductsOnce('pearlClass10V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-class10'));
 seedProductsOnce('pearlP9V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p9'));

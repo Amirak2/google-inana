@@ -36,7 +36,8 @@ for (const name of ['window', 'document', 'localStorage', 'sessionStorage', 'HTM
 Object.defineProperty(globalThis, 'navigator', {configurable: true, value: dom.window.navigator});
 window.scrollTo = () => {};
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-let products = structuredClone(INITIAL_PRODUCTS.filter(product => product.category === 'حروف انگلیسی' || product.pricingMode === 'fixed'));
+// Stable fixture for the original four-letter filter scenarios.
+let products = structuredClone(INITIAL_PRODUCTS.filter(product => ['inana-letter-a', 'inana-letter-f', 'inana-letter-s', 'inana-letter-m'].includes(product.id) || product.pricingMode === 'fixed'));
 products = products.map(product => ({...product, availableStock: product.letter === 'F' ? 0 : 1}));
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async url => {

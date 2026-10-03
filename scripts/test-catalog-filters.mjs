@@ -3,7 +3,8 @@ import { INITIAL_PRODUCTS } from '../src/data/seedData.ts';
 import { DEFAULT_SETTINGS } from '../src/utils/pricingEngine.ts';
 import { DEFAULT_CATALOG_FILTERS, normalizeCatalogFilters, normalizeCatalogText, filterCatalogProducts, sortCatalogProducts, catalogCategoryCounts, catalogWeightBounds } from '../src/utils/catalogFilters.ts';
 import { buildSiteRoute, parseSiteRoute } from '../src/utils/siteRoutes.ts';
-const products = INITIAL_PRODUCTS.filter(product => product.letter || product.pricingMode === 'fixed');
+// Keep the original four-letter regression fixture independent of new catalog entries.
+const products = INITIAL_PRODUCTS.filter(product => ['inana-letter-a', 'inana-letter-f', 'inana-letter-s', 'inana-letter-m'].includes(product.id) || product.pricingMode === 'fixed');
 const filters = { ...DEFAULT_CATALOG_FILTERS };
 const matchingPearls = products.filter(product => product.title.includes('مروارید'));
 assert.deepEqual(filterCatalogProducts(products, {...filters, searchQuery: 'مروارید'}), matchingPearls);

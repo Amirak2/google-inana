@@ -6,6 +6,7 @@ import { useGoldStore } from '../context/GoldStoreContext';
 import { formatToman, formatWeight } from '../utils/persianFormatter';
 import { calculateProductPrice } from '../utils/pricingEngine';
 import { productPath } from '../utils/siteRoutes';
+import { productWeightOptions, productAvailability } from '../utils/productVariants';
 
 interface ProductCardProps {
   product: Product;
@@ -13,12 +14,15 @@ interface ProductCardProps {
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }) => {
-  const { goldPrice, settings, addToCart, toggleFavorite, isFavorite, setQuickViewProduct } =
+  const { products, goldPrice, settings, addToCart, toggleFavorite, isFavorite, setQuickViewProduct } =
     useGoldStore();
 
   const favorite = isFavorite(product.id);
+  const weightOptions = productWeightOptions(product, products);
+  const hasWeightOptions = weightOptions.length > 1;
+  const available = weightOptions.reduce((total, option) => total + productAvailability(option), 0);
   const isFixed = product.pricingMode === 'fixed';
-  const showFullPhoto = isFixed || (product.pearlPrice ?? 0) > 0;
+  const showFullPhoto = isFixed || (product.pearlPrice ?? 0) > 0 || product.images?.some(url => url.startsWith('/products/letters/'));
   const priceReady = isFixed ? (product.fixedPrice ?? 0) > 0 : goldPrice.pricePerGram > 0;
 
   // Dynamic live calculation
@@ -34,6 +38,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!priceReady) return;
+    if (hasWeightOptions) { handleQuickView(e); return; }
     addToCart(product, 1);
   };
 
@@ -122,7 +127,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
           {isFixed ? (
             <p className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-slate-300">{product.category}</p>
           ) : (
-            <p className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-slate-300">وزن: <span className="font-bold text-white">{formatWeight(product.weight)}</span></p>
+            <p className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-slate-300">وزن: <span className="font-bold text-white">{hasWeightOptions ? weightOptions.map(option => formatWeight(option.weight)).join(' / ') : formatWeight(product.weight)}</span></p>
           )}
         </div>
 
@@ -131,12 +136,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
           <div className="flex flex-col">
             <span className="text-[10px] text-slate-300 font-light">{isFixed ? 'قیمت ثابت' : 'قیمت روز'}</span>
             <span className="text-[11px] sm:text-base font-bold text-white gold-gradient-text whitespace-nowrap tracking-tight group-hover:brightness-115 transition-all">
-              {priceReady ? formatToman(finalPrice) : 'در حال دریافت نرخ...'}
+              {priceReady ? `${hasWeightOptions ? 'از ' : ''}${formatToman(finalPrice)}` : 'در حال دریافت نرخ...'}
             </span>
           </div>
 
           {/* Add to Cart quick icon with spring response */}
-          {(product.availableStock ?? product.stock ?? 0) <= 0 ? (
+          {available <= 0 ? (
             <span className="text-[10px] text-rose-400 bg-rose-500/20 px-2 py-1 rounded-lg font-medium border border-rose-500/30">
               ناموجود
             </span>
@@ -147,8 +152,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
               onClick={handleAddToCart}
               disabled={!priceReady}
               className="p-2 sm:p-2.5 rounded-xl bg-[#1A315C] hover:bg-[#D4AF37] text-[#D4AF37] hover:text-slate-950 border border-[#D4AF37]/40 hover:border-transparent transition-colors shadow-sm disabled:cursor-wait disabled:opacity-50 disabled:hover:bg-[#1A315C] disabled:hover:text-[#D4AF37]"
-              aria-label={`افزودن ${product.title} به سبد خرید`}
-              title={priceReady ? 'افزودن به سبد خرید' : 'در حال دریافت نرخ لحظه‌ای طلا'}
+              aria-label={hasWeightOptions ? `انتخاب وزن ${product.title}` : `افزودن ${product.title} به سبد خرید`}
+              title={priceReady ? hasWeightOptions ? 'انتخاب وزن' : 'افزودن به سبد خرید' : 'در حال دریافت نرخ لحظه‌ای طلا'}
             >
               <ShoppingBag className="w-4 h-4" />
             </motion.button>

@@ -1,5 +1,6 @@
 import type { Product, PricingSettings } from '../types';
 import { calculateProductPrice } from './pricingEngine';
+import { groupCatalogVariants } from './productVariants';
 
 export const CATALOG_SORTS = ['newest', 'bestseller', 'price-asc', 'price-desc', 'weight-asc', 'weight-desc'] as const;
 export type CatalogSort = typeof CATALOG_SORTS[number];
@@ -41,7 +42,7 @@ export function normalizeCatalogText(text: string): string {
 
 export function filterCatalogProducts(products: Product[], filters: CatalogFilters): Product[] {
   const query = normalizeCatalogText(filters.searchQuery);
-  return products.filter(product => {
+  return groupCatalogVariants(products.filter(product => {
     if (query && ![product.title, product.titleEn, product.category, product.collection, product.sku, product.letter]
       .some(text => text && normalizeCatalogText(text).includes(query))) return false;
     if (filters.selectedCategory && product.category !== filters.selectedCategory) return false;
@@ -49,7 +50,7 @@ export function filterCatalogProducts(products: Product[], filters: CatalogFilte
     if (filters.selectedLetter && product.letter?.toUpperCase() !== filters.selectedLetter) return false;
     if (filters.maxWeight !== null && product.pricingMode !== 'fixed' && product.weight > filters.maxWeight) return false;
     return !filters.onlyInStock || (product.availableStock ?? product.stock ?? 0) > 0;
-  });
+  }));
 }
 
 export function sortCatalogProducts(products: Product[], sort: CatalogSort, goldPrice: number, settings: PricingSettings): Product[] {

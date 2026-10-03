@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   Heart,
@@ -13,6 +13,7 @@ import { useGoldStore } from '../context/GoldStoreContext';
 import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
 import { calculateProductPrice } from '../utils/pricingEngine';
 import { productPath } from '../utils/siteRoutes';
+import { productWeightOptions, productAvailability } from '../utils/productVariants';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -20,14 +21,22 @@ interface ProductDetailModalProps {
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, onClose }) => {
-  const { goldPrice, settings, addToCart, toggleFavorite, isFavorite } = useGoldStore();
+  const { products, goldPrice, settings, addToCart, toggleFavorite, isFavorite, setQuickViewProduct } = useGoldStore();
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showFormulaBreakdown, setShowFormulaBreakdown] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [linkMessage, setLinkMessage] = useState('');
 
+  useEffect(() => {
+    setSelectedImageIndex(0);
+    setQuantity(1);
+    setLinkMessage('');
+  }, [product?.id]);
+
   if (!product) return null;
+
+  const weightOptions = productWeightOptions(product, products);
 
   const favorite = isFavorite(product.id);
   const isFixed = product.pricingMode === 'fixed';
@@ -36,8 +45,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   const finalPrice = priceBreakdown.finalPrice;
 
   const handleAddToCart = () => {
-    if (!priceReady) return;
-    addToCart(product, quantity);
+    if (!priceReady || productAvailability(product) <= 0) return;
+    addToCart(product, Math.min(quantity, productAvailability(product)));
     onClose();
   };
 
@@ -94,6 +103,24 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           <h1 id="product-detail-title" className="text-lg font-extrabold text-white leading-7">{product.title}</h1>
           <p className="mt-1 text-base font-bold text-[#E6CA65]">{priceReady ? formatToman(finalPrice) : 'در حال دریافت نرخ...'}</p>
         </div>
+
+        {weightOptions.length > 1 && (
+          <fieldset className="shrink-0 px-3 py-3 sm:px-6 border-b border-[#D4AF37]/20">
+            <legend className="text-sm font-bold text-[#E6CA65] px-1">انتخاب وزن آویز</legend>
+            <div className="flex flex-wrap gap-2">
+              {weightOptions.map(option => (
+                <button key={option.id} type="button" aria-pressed={product.id === option.id}
+                  aria-label={`انتخاب وزن ${toPersianDigits(Math.round(option.weight * 1000))} سوت`}
+                  onClick={() => { setQuantity(1); setSelectedImageIndex(0); setQuickViewProduct(option); }}
+                  className={`rounded-xl border px-3 py-2 text-sm ${product.id === option.id ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#E6CA65]' : 'border-slate-600 text-slate-200'}`}>
+                  <span className="block font-bold">{toPersianDigits(Math.round(option.weight * 1000))} سوت</span>
+                  <span className="block text-xs mt-1">{priceReady ? formatToman(calculateProductPrice(option, goldPrice.pricePerGram, settings).finalPrice) : 'در حال دریافت نرخ...'}</span>
+                  <span className="block text-xs mt-1">{productAvailability(option) > 0 ? `${toPersianDigits(productAvailability(option))} عدد موجود` : 'ناموجود'}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
 
         {/* Scrollable Content Body */}
         <div id="product-detail-content" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8 items-start">
