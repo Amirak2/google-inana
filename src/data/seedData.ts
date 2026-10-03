@@ -402,6 +402,28 @@ export const PEARL_PRODUCTS: Product[] = [
 ];
 
 export const LETTER_PRODUCTS: Product[] = [
+  ...[400, 440].map(soot => ({
+    id: `inana-letter-m-${soot}`,
+    title: 'آویز طلا حرف M',
+    slug: `pendant-letter-m-${soot}`,
+    category: 'حروف انگلیسی',
+    collection: 'INANA LETTERS',
+    pricingMode: 'gold' as const,
+    variantGroupId: 'inana-letter-m-weight-options',
+    weight: soot / 1000,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0, stoneCost: 0, discountPercent: 0,
+    images: ['/products/letters/inana-letter-m-white.webp'],
+    description: `آویز حرف M از طلای ۱۸ عیار، با وزن ${soot} سوت. قیمت با نرخ روز طلا، اجرت ۱۶٫۵٪ و سود ۷٪ محاسبه می‌شود؛ بدون مالیات.`,
+    features: ['حرف انگلیسی M', 'طلای ۱۸ عیار', `وزن: ${soot} سوت`, 'اجرت: ۱۶٫۵٪', 'سود: ۷٪'],
+    dimensions: '',
+    sku: `INA-LET-M-${soot}`,
+    stock: 1, isNewArrival: true, isBestSeller: false, isFeatured: true,
+    letter: 'M',
+    createdAt: '2026-10-03T20:00:00.000Z',
+  })),
   {
     id: 'inana-letter-d',
     title: 'آویز طلا حرف D',
