@@ -9,7 +9,7 @@ import { configureTrustedProxy, normalizeClientIp } from './server/clientIp';
 import { runPostgresRequest } from './server/postgresRequest';
 import { securityHeaders } from './server/securityHeaders';
 import { startGoldScheduler } from './server/goldScheduler';
-import { PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS } from './src/data/seedData';
+import { PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS } from './src/data/seedData';
 
 const app = express();
 app.disable('x-powered-by');
@@ -80,15 +80,14 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
 app.all(['/api/*', '/media/*'], (req, res) => { void handleRequest(req, res); });
 
 // Preserve existing product URLs while serving their bytes from the private bucket.
-const pearlMediaFiles = new Set([...PEARL_PRODUCTS, ...PEARL_GOLD_PRODUCTS].flatMap(product => product.images)
-  .filter(url => url.startsWith('/products/pearls/'))
-  .map(url => url.slice('/products/pearls/'.length)));
-app.get('/products/pearls/:filename', async (req, res) => {
-  if (!pearlMediaFiles.has(req.params.filename)) {
+const productMediaPaths = new Set([...PEARL_PRODUCTS, ...PEARL_GOLD_PRODUCTS, ...LETTER_PRODUCTS].flatMap(product => product.images)
+  .filter(url => /^\/products\/(pearls|letters)\/[\w.-]+$/.test(url)));
+app.get(['/products/pearls/:filename', '/products/letters/:filename'], async (req, res) => {
+  if (!productMediaPaths.has(req.path)) {
     res.sendStatus(404); return;
   }
   try {
-    const data = await getMediaObject(`products/pearls/${req.params.filename}`);
+    const data = await getMediaObject(req.path.slice(1));
     if (!data) { res.sendStatus(404); return; }
     res.set('Content-Type', req.params.filename.endsWith('.webp') ? 'image/webp' : 'image/png');
     res.set('Cache-Control', 'public, max-age=86400');
