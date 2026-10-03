@@ -7,6 +7,24 @@ import { calculateProductPrice, DEFAULT_SETTINGS } from '../src/utils/pricingEng
 import { changedProductFields } from '../src/utils/adminProductForm.ts';
 
 const product = PEARL_GOLD_PRODUCTS[0];
+const bracelets = ['R', 'G'].map(letter => PEARL_GOLD_PRODUCTS.find(p => p.sku === `a7-${letter}`));
+for (const [index, bracelet] of bracelets.entries()) {
+  assert.ok(bracelet);
+  assert.equal(bracelet.stock, 1);
+  assert.equal(bracelet.pearlPrice, 1_000_000);
+  assert.equal(bracelet.weight, index === 0 ? 0.270 : 0.310);
+  assert.equal(bracelet.collection, product.collection);
+  assert.equal(bracelet.category, 'دستبند مروارید و طلا');
+  for (const rate of [15_000_000, 30_000_000]) {
+    const result = calculateProductPrice(bracelet, rate, DEFAULT_SETTINGS);
+    assert.equal(result.finalPrice, Math.round((1_000_000 + rate * bracelet.weight * 1.165 * 1.07) / 1000) * 1000);
+    assert.equal(result.pearlCost, 1_000_000);
+    assert.equal(result.taxAmount, 0);
+    const goldOnly = calculateProductPrice({ ...bracelet, pearlPrice: 0 }, rate, DEFAULT_SETTINGS);
+    assert.equal(result.makingChargeAmount, goldOnly.makingChargeAmount);
+    assert.equal(result.profitAmount, goldOnly.profitAmount);
+  }
+}
 assert.equal(product.sku, 'a7');
 assert.equal(product.weight, 0.840);
 assert.equal(product.stock, 1);
@@ -54,4 +72,22 @@ store.get('products', product.id).stock = 0;
 createApp(store, env);
 assert.equal(store.get('products', product.id).stock, 0, 'Restart must not replenish sold inventory');
 assert.equal(store.get('products', product.id).pearlPrice, 2_100_000, 'Restart must not overwrite administrator changes');
+const braceletQuote = await request('/api/orders/quote', 'POST', { items: bracelets.map(p => ({ productId: p.id, quantity: 1 })) });
+assert.equal(braceletQuote.status, 200);
+assert.equal(braceletQuote.body.totalWeight, 0.580);
+assert.equal(braceletQuote.body.totalPrice, bracelets.reduce((sum, p) => sum + calculateProductPrice(p, 25_863_228, DEFAULT_SETTINGS).finalPrice, 0));
+for (const bracelet of bracelets) assert.equal(store.get('products', bracelet.id).stock, 1, 'Quoting must not consume physical inventory');
+
+// Upgrade an existing shop whose earlier necklace migration already ran.
+const upgraded = new Store(env);
+upgraded.set('migrations', 'initialProducts', true);
+upgraded.set('migrations', 'pearlGoldA7V1', true);
+upgraded.set('products', product.id, { ...product, stock: 0, pearlPrice: 2_100_000 });
+createApp(upgraded, env);
+for (const bracelet of bracelets) assert.equal(upgraded.get('products', bracelet.id).stock, 1);
+assert.equal(upgraded.get('products', product.id).stock, 0);
+assert.equal(upgraded.get('products', product.id).pearlPrice, 2_100_000);
+upgraded.get('products', bracelets[0].id).stock = 0;
+createApp(upgraded, env);
+assert.equal(upgraded.get('products', bracelets[0].id).stock, 0, 'Bracelet migration must not restock on restart');
 console.log('PASS: hybrid pricing, quote totals, pearl fee exclusion, input validation, editing and non-restocking migration.');

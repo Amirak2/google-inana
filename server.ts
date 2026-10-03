@@ -301,7 +301,8 @@ seedProductsOnce('pearlAshkiV1', PEARL_PRODUCTS.filter((product) => product.id =
 seedProductsOnce('pearlShirazA3V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-a3'));
 seedProductsOnce('pearlTak5V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-tak5'));
 seedProductsOnce('pearlP6V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p6'));
-seedProductsOnce('pearlGoldA7V1', PEARL_GOLD_PRODUCTS);
+seedProductsOnce('pearlGoldA7V1', PEARL_GOLD_PRODUCTS.filter((product) => product.id === 'pearl-gold-a7'));
+seedProductsOnce('pearlGoldA7BraceletsV1', PEARL_GOLD_PRODUCTS.filter((product) => product.category === 'دستبند مروارید و طلا'));
 let pricingSettings: PricingSettings = {
   ...(store.get('settings', 'pricing') || DEFAULT_SETTINGS),
   taxPercent: 0,

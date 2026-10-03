@@ -5,8 +5,9 @@ import { DEFAULT_CATALOG_FILTERS, normalizeCatalogFilters, normalizeCatalogText,
 import { buildSiteRoute, parseSiteRoute } from '../src/utils/siteRoutes.ts';
 const products = INITIAL_PRODUCTS.filter(product => product.letter || product.pricingMode === 'fixed');
 const filters = { ...DEFAULT_CATALOG_FILTERS };
-assert.equal(filterCatalogProducts(products, {...filters, searchQuery: 'مروارید'}).length, 8);
-assert.equal(filterCatalogProducts(products, {...filters, searchQuery: 'مرواريد'}).length, 8);
+const matchingPearls = products.filter(product => product.title.includes('مروارید'));
+assert.deepEqual(filterCatalogProducts(products, {...filters, searchQuery: 'مروارید'}), matchingPearls);
+assert.deepEqual(filterCatalogProducts(products, {...filters, searchQuery: 'مرواريد'}), matchingPearls);
 assert.equal(normalizeCatalogText('كیـــفِیت ۸'), normalizeCatalogText('کیفیت 8'));
 const pearls = {...filters, selectedCollection: 'INANA PEARLS'};
 const counts = catalogCategoryCounts(products, pearls);

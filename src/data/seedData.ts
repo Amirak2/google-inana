@@ -85,6 +85,7 @@ export const INITIAL_COLLECTIONS: CollectionInfo[] = [
 
 export const CATEGORIES_LIST = [
   'گردنبند مروارید و طلا',
+  'دستبند مروارید و طلا',
   'گردنبند مروارید',
   'پلاک طلا',
   'حروف انگلیسی',
@@ -126,6 +127,37 @@ export const PEARL_GOLD_PRODUCTS: Product[] = [
     isFeatured: true,
     createdAt: '2026-10-03T00:00:00.000Z',
   },
+  ...(['R', 'G'] as const).map((letter): Product => {
+    const soot = letter === 'R' ? 270 : 310;
+    const sootFa = letter === 'R' ? '۲۷۰' : '۳۱۰';
+    return {
+      id: `pearl-gold-a7-${letter.toLowerCase()}`,
+      title: `دستبند مروارید کلاسیک گرد همراه با آویز حرف ${letter}`,
+      slug: `pearl-gold-bracelet-a7-${letter.toLowerCase()}`,
+      category: 'دستبند مروارید و طلا',
+      collection: 'INANA PEARL GOLD',
+      pricingMode: 'gold',
+      pearlPrice: 1_000_000,
+      weight: soot / 1000,
+      purity: '18 عیار',
+      customMakingChargePercent: 16.5,
+      customProfitPercent: 7,
+      additionalCost: 0,
+      stoneCost: 0,
+      discountPercent: 0,
+      images: [`/products/pearls/a7-${letter.toLowerCase()}-bracelet-white.webp`],
+      description: `دستبند مروارید کلاسیک گرد با کد مروارید a7، سایز ۳ و قفل استیل ضد زنگ طلایی، همراه با آویز حرف ${letter} از طلای ۱۸ عیار به وزن ${sootFa} سوت. مبلغ مروارید برای هر دستبند ۱٬۰۰۰٬۰۰۰ تومان ثابت است؛ اجرت ۱۶٫۵٪ و سود ۷٪ فقط برای بخش طلا محاسبه می‌شوند. بدون مالیات.`,
+      features: ['کد مروارید: a7', 'نوع مروارید: کلاسیک گرد', 'سایز مروارید: ۳', 'قفل: استیل ضد زنگ طلایی', `آویز طلای حرف ${letter}؛ وزن ${sootFa} سوت`, 'قیمت ثابت مروارید هر دستبند: ۱٬۰۰۰٬۰۰۰ تومان', 'اجرت ۱۶٫۵٪ و سود ۷٪ فقط برای طلا'],
+      dimensions: 'سایز مروارید ۳',
+      sku: `a7-${letter}`,
+      stock: 1,
+      isNewArrival: true,
+      isBestSeller: false,
+      isFeatured: true,
+      letter,
+      createdAt: '2026-10-03T12:10:00.000Z',
+    };
+  }),
 ];
 
 export const PEARL_PRODUCTS: Product[] = [
