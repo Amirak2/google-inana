@@ -1246,7 +1246,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     }}
                     className="w-full bg-[#060B14] border border-slate-700 rounded-xl px-3.5 py-2.5 text-white"
                   >
-                    <option value="gold">طلا؛ محاسبه با نرخ روز</option>
+                    <option value="gold">طلا یا ترکیب مروارید و طلا؛ نرخ روز</option>
                     <option value="fixed">مروارید؛ قیمت ثابت</option>
                   </select>
                 </div>
@@ -1321,7 +1321,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <p className="text-xs text-slate-400 mt-1">برای طلای خالص صفر بگذارید؛ اجرت و سود روی این مبلغ محاسبه نمی‌شوند.</p>
                   </div>
                   <div>
-                    <label className="block text-[#D4AF37] font-bold mb-1">وزن خالص (گرم): *</label>
+                    <label className="block text-[#D4AF37] font-bold mb-1">وزن خالص طلا (گرم): *</label>
                     <input
                       type="number"
                       step="0.01"
@@ -1338,7 +1338,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <label className="block text-[#D4AF37] font-bold mb-1">درصد اجرت ساخت (%): *</label>
                     <input
                       type="number"
-                      step="1"
+                      step="0.1"
                       required
                       placeholder="20"
                       aria-label="اجرت محصول" value={productForm.customMakingChargePercent ?? ''}
