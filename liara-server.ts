@@ -9,7 +9,7 @@ import { configureTrustedProxy, normalizeClientIp } from './server/clientIp';
 import { runPostgresRequest } from './server/postgresRequest';
 import { securityHeaders } from './server/securityHeaders';
 import { startGoldScheduler } from './server/goldScheduler';
-import { PEARL_PRODUCTS } from './src/data/seedData';
+import { PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS } from './src/data/seedData';
 
 const app = express();
 app.disable('x-powered-by');
@@ -80,7 +80,7 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
 app.all(['/api/*', '/media/*'], (req, res) => { void handleRequest(req, res); });
 
 // Preserve existing product URLs while serving their bytes from the private bucket.
-const pearlMediaFiles = new Set(PEARL_PRODUCTS.flatMap(product => product.images)
+const pearlMediaFiles = new Set([...PEARL_PRODUCTS, ...PEARL_GOLD_PRODUCTS].flatMap(product => product.images)
   .filter(url => url.startsWith('/products/pearls/'))
   .map(url => url.slice('/products/pearls/'.length)));
 app.get('/products/pearls/:filename', async (req, res) => {
