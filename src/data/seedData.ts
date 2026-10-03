@@ -402,6 +402,32 @@ export const PEARL_PRODUCTS: Product[] = [
 ];
 
 export const LETTER_PRODUCTS: Product[] = [
+  {
+    id: 'inana-letter-x',
+    title: 'آویز طلا حرف X',
+    slug: 'pendant-letter-x',
+    category: 'حروف انگلیسی',
+    collection: 'INANA LETTERS',
+    pricingMode: 'gold',
+    weight: 0.260,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0,
+    stoneCost: 0,
+    discountPercent: 0,
+    images: ['/products/letters/inana-letter-x-white.webp'],
+    description: 'آویز حرف X از طلای ۱۸ عیار، با وزن ۲۶۰ سوت. قیمت با نرخ روز طلا، اجرت ۱۶٫۵٪ و سود ۷٪ محاسبه می‌شود؛ بدون مالیات.',
+    features: ['حرف انگلیسی X', 'طلای ۱۸ عیار', 'وزن: ۲۶۰ سوت (۰٫۲۶۰ گرم)', 'اجرت: ۱۶٫۵٪', 'سود: ۷٪'],
+    dimensions: '',
+    sku: 'INA-LET-X-026',
+    stock: 1,
+    isNewArrival: true,
+    isBestSeller: false,
+    isFeatured: true,
+    letter: 'X',
+    createdAt: '2026-10-04T01:15:00.000Z',
+  },
   ...[340, 350].map(soot => ({
     id: `inana-letter-n-${soot}`,
     title: 'آویز طلا حرف N',
