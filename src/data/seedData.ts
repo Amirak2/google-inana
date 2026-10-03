@@ -402,6 +402,27 @@ export const PEARL_PRODUCTS: Product[] = [
 ];
 
 export const LETTER_PRODUCTS: Product[] = [
+  {
+    id: 'inana-letter-v',
+    title: 'آویز طلا حرف V',
+    slug: 'pendant-letter-v',
+    category: 'حروف انگلیسی',
+    collection: 'INANA LETTERS',
+    pricingMode: 'gold',
+    weight: 0.280,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0, stoneCost: 0, discountPercent: 0,
+    images: ['/products/letters/inana-letter-v-white.webp'],
+    description: 'آویز حرف V از طلای ۱۸ عیار، با وزن ۲۸۰ سوت. قیمت با نرخ روز طلا، اجرت ۱۶٫۵٪ و سود ۷٪ محاسبه می‌شود؛ بدون مالیات.',
+    features: ['حرف انگلیسی V', 'طلای ۱۸ عیار', 'وزن: ۲۸۰ سوت (۰٫۲۸۰ گرم)', 'اجرت: ۱۶٫۵٪', 'سود: ۷٪'],
+    dimensions: '',
+    sku: 'INA-LET-V-028',
+    stock: 1, isNewArrival: true, isBestSeller: false, isFeatured: true,
+    letter: 'V',
+    createdAt: '2026-10-03T19:00:00.000Z',
+  },
   ...[240, 280].map(soot => ({
     id: `inana-letter-p-${soot}`,
     title: 'آویز طلا حرف P',
