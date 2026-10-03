@@ -18,6 +18,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
 
   const favorite = isFavorite(product.id);
   const isFixed = product.pricingMode === 'fixed';
+  const showFullPhoto = isFixed || (product.pearlPrice ?? 0) > 0;
   const priceReady = isFixed ? (product.fixedPrice ?? 0) > 0 : goldPrice.pricePerGram > 0;
 
   // Dynamic live calculation
@@ -53,12 +54,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent opacity-0 group-hover:opacity-100 transition-all duration-700 transform scale-x-0 group-hover:scale-x-100 z-30 pointer-events-none" />
 
       {/* Image Container with Luxury Shimmer & Cinematic Zoom */}
-      <div className={`relative aspect-square sm:aspect-[4/5] w-full overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#070E1C]'}`}>
+      <div className={`relative aspect-square sm:aspect-[4/5] w-full overflow-hidden ${showFullPhoto ? 'bg-white' : 'bg-[#070E1C]'}`}>
         <img
           src={product.images?.[0] || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80'}
           alt={product.title}
           loading="lazy"
-          className={`w-full h-full ${isFixed ? 'object-contain' : 'object-cover'} object-center transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] group-hover:scale-108 group-hover:brightness-105`}
+          className={`w-full h-full ${showFullPhoto ? 'object-contain' : 'object-cover group-hover:scale-108'} object-center transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] group-hover:brightness-105`}
           referrerPolicy="no-referrer"
           onError={(e) => {
             (e.target as HTMLImageElement).src =
@@ -75,7 +76,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none bg-[radial-gradient(circle_at_center,rgba(212,175,55,0.12)_0%,transparent_70%)]" />
 
         {/* Vignette Depth Gradient */}
-        {!isFixed && <div className="absolute inset-0 bg-gradient-to-t from-[#060B15] via-transparent to-transparent opacity-75" />}
+        {!showFullPhoto && <div className="absolute inset-0 bg-gradient-to-t from-[#060B15] via-transparent to-transparent opacity-75" />}
 
         <div className="absolute top-3 left-3 z-10">
           <motion.button
