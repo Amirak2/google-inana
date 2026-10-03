@@ -49,6 +49,7 @@ export interface Product {
   collection: string;
   pricingMode?: 'gold' | 'fixed';
   fixedPrice?: number; // Toman; independent of the gold rate, making charge and gold profit.
+  pearlPrice?: number; // Fixed pearl component in Toman; excluded from gold fees.
   weight: number; // in grams (e.g. 0.450 or 2.300)
   purity: string; // '18 عیار'
   customMakingChargePercent?: number | null; // if specified, overrides global
@@ -80,6 +81,7 @@ export interface CalculatedPriceBreakdown {
   taxAmount: number;
   additionalCosts: number;
   stoneCost: number;
+  pearlCost: number;
   discountPercent: number;
   discountAmount: number;
   finalPrice: number;
