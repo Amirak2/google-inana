@@ -677,6 +677,9 @@ const AccountCartDrawer: React.FC = () => {
                             <div className="flex items-center gap-2 text-[11px] text-slate-300 mt-1">
                               <span>{item.product.pricingMode === 'fixed' ? 'قیمت ثابت' : `وزن: ${formatWeight(item.product.weight)}`}</span>
                             </div>
+                            {item.product.pricingMode !== 'fixed' && (item.product.pearlPrice ?? 0) > 0 && (
+                              <p className="text-[11px] text-slate-300 mt-1">مروارید هر عدد: {formatToman(item.product.pearlPrice!)} ثابت؛ به‌علاوهٔ طلا با نرخ روز</p>
+                            )}
                           </div>
 
                           <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/80">
