@@ -402,6 +402,28 @@ export const PEARL_PRODUCTS: Product[] = [
 ];
 
 export const LETTER_PRODUCTS: Product[] = [
+  ...[240, 280].map(soot => ({
+    id: `inana-letter-p-${soot}`,
+    title: 'آویز طلا حرف P',
+    slug: `pendant-letter-p-${soot}`,
+    category: 'حروف انگلیسی',
+    collection: 'INANA LETTERS',
+    pricingMode: 'gold' as const,
+    variantGroupId: 'inana-letter-p-weight-options',
+    weight: soot / 1000,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0, stoneCost: 0, discountPercent: 0,
+    images: ['/products/letters/inana-letter-p-white.webp'],
+    description: `آویز حرف P از طلای ۱۸ عیار، با وزن ${soot} سوت. قیمت با نرخ روز طلا، اجرت ۱۶٫۵٪ و سود ۷٪ محاسبه می‌شود؛ بدون مالیات.`,
+    features: ['حرف انگلیسی P', 'طلای ۱۸ عیار', `وزن: ${soot} سوت`, 'اجرت: ۱۶٫۵٪', 'سود: ۷٪'],
+    dimensions: '',
+    sku: `INA-LET-P-${soot}`,
+    stock: 1, isNewArrival: true, isBestSeller: false, isFeatured: true,
+    letter: 'P',
+    createdAt: '2026-10-03T18:30:00.000Z',
+  })),
   ...[310, 480].map(soot => ({
     id: `inana-letter-r-${soot}`,
     title: 'آویز طلا حرف R',
