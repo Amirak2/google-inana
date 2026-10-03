@@ -145,7 +145,7 @@ export const PEARL_GOLD_PRODUCTS: Product[] = [
       additionalCost: 0,
       stoneCost: 0,
       discountPercent: 0,
-      images: [`/products/pearls/a7-${letter.toLowerCase()}-bracelet-white.webp`],
+      images: [`/products/pearls/a7-${letter.toLowerCase()}-bracelet-white${letter === 'G' ? '-v2' : ''}.webp`],
       description: `دستبند مروارید کلاسیک گرد با کد مروارید a7، سایز ۳ و قفل استیل ضد زنگ طلایی، همراه با آویز حرف ${letter} از طلای ۱۸ عیار به وزن ${sootFa} سوت. مبلغ مروارید برای هر دستبند ۱٬۰۰۰٬۰۰۰ تومان ثابت است؛ اجرت ۱۶٫۵٪ و سود ۷٪ فقط برای بخش طلا محاسبه می‌شوند. بدون مالیات.`,
       features: ['کد مروارید: a7', 'نوع مروارید: کلاسیک گرد', 'سایز مروارید: ۳', 'قفل: استیل ضد زنگ طلایی', `آویز طلای حرف ${letter}؛ وزن ${sootFa} سوت`, 'قیمت ثابت مروارید هر دستبند: ۱٬۰۰۰٬۰۰۰ تومان', 'اجرت ۱۶٫۵٪ و سود ۷٪ فقط برای طلا'],
       dimensions: 'سایز مروارید ۳',

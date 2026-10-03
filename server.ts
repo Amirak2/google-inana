@@ -303,6 +303,11 @@ seedProductsOnce('pearlTak5V1', PEARL_PRODUCTS.filter((product) => product.id ==
 seedProductsOnce('pearlP6V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p6'));
 seedProductsOnce('pearlGoldA7V1', PEARL_GOLD_PRODUCTS.filter((product) => product.id === 'pearl-gold-a7'));
 seedProductsOnce('pearlGoldA7BraceletsV1', PEARL_GOLD_PRODUCTS.filter((product) => product.category === 'دستبند مروارید و طلا'));
+// Replace only the original G photo; preserve stock, prices and administrator galleries.
+const gBracelet = store.get('products', 'pearl-gold-a7-g');
+if (gBracelet?.images?.length === 1 && gBracelet.images[0] === '/products/pearls/a7-g-bracelet-white.webp') {
+  store.set('products', gBracelet.id, { ...gBracelet, images: ['/products/pearls/a7-g-bracelet-white-v2.webp'] });
+}
 let pricingSettings: PricingSettings = {
   ...(store.get('settings', 'pricing') || DEFAULT_SETTINGS),
   taxPercent: 0,
