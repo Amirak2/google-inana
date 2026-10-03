@@ -40,6 +40,7 @@ export function calculateProductPrice(
       taxAmount: 0,
       additionalCosts: 0,
       stoneCost: 0,
+      pearlCost: 0,
       discountPercent,
       discountAmount: Math.round(discountAmount),
       finalPrice,
@@ -81,11 +82,12 @@ export function calculateProductPrice(
 
   // 5. Additional Costs & Stone/Gem value:
   const stoneCost = product.stoneCost ?? 0;
+  const pearlCost = Number.isFinite(product.pearlPrice) ? Math.max(0, product.pearlPrice ?? 0) : 0;
   const additionalCosts = (product.additionalCost ?? 0) + (settings.fixedCost ?? 0);
 
   // 6. Subtotal before discount:
   const rawSubtotal =
-    baseGoldValue + makingChargeAmount + profitAmount + taxAmount + additionalCosts + stoneCost;
+    baseGoldValue + makingChargeAmount + profitAmount + taxAmount + additionalCosts + stoneCost + pearlCost;
 
   // 7. Discount:
   const discountPercent = product.discountPercent || 0;
@@ -107,6 +109,7 @@ export function calculateProductPrice(
     taxAmount: Math.round(taxAmount),
     additionalCosts,
     stoneCost,
+    pearlCost,
     discountPercent,
     discountAmount: Math.round(discountAmount),
     finalPrice,

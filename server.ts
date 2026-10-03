@@ -12,7 +12,7 @@ import type { Store } from './server/storage';
 
 import crypto from 'crypto';
 
-import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS } from './src/data/seedData';
+import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS } from './src/data/seedData';
 import { GoldHistoryPoint, GoldPriceData, Order, OtherMarketsData, PricingSettings, Product, SystemLogModule } from './src/types';
 import { calculateProductPrice, DEFAULT_SETTINGS } from './src/utils/pricingEngine';
 import { formatJalaliDateTime } from './src/utils/persianFormatter';
@@ -301,6 +301,7 @@ seedProductsOnce('pearlAshkiV1', PEARL_PRODUCTS.filter((product) => product.id =
 seedProductsOnce('pearlShirazA3V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-a3'));
 seedProductsOnce('pearlTak5V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-tak5'));
 seedProductsOnce('pearlP6V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p6'));
+seedProductsOnce('pearlGoldA7V1', PEARL_GOLD_PRODUCTS);
 let pricingSettings: PricingSettings = {
   ...(store.get('settings', 'pricing') || DEFAULT_SETTINGS),
   taxPercent: 0,
@@ -931,6 +932,10 @@ app.post('/api/admin/products', requireAdminAuth, (req: AuthenticatedRequest, re
     return;
   }
   const isFixedPrice = req.body.pricingMode === 'fixed';
+  const pearlPriceVal = validateInteger(req.body.pearlPrice ?? 0, 'قیمت ثابت مروارید', 0, 1_000_000_000);
+  if (!pearlPriceVal.isValid) {
+    res.status(400).json({ error: pearlPriceVal.error }); return;
+  }
   const fixedPriceVal = isFixedPrice
     ? validatePositiveNumber(req.body.fixedPrice, 'قیمت ثابت', 1, 1_000_000_000)
     : null;
@@ -978,6 +983,7 @@ app.post('/api/admin/products', requireAdminAuth, (req: AuthenticatedRequest, re
     collection: req.body.collection ? String(req.body.collection).trim().slice(0, 80) : 'INANA SIGNATURE',
     pricingMode: isFixedPrice ? 'fixed' : 'gold',
     fixedPrice: isFixedPrice ? Math.round(fixedPriceVal!.value) : undefined,
+    pearlPrice: isFixedPrice ? 0 : pearlPriceVal.value,
     weight: isFixedPrice ? 0 : Number(weightVal!.value.toFixed(3)),
     purity: req.body.purity ? String(req.body.purity).trim().slice(0, 30) : isFixedPrice ? 'مروارید' : '18 عیار',
     customMakingChargePercent: isFixedPrice ? 0 : makingChargeVal.value,
@@ -1031,6 +1037,10 @@ app.put('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedRequest,
     return;
   }
   const nextFixedPrice = req.body.fixedPrice ?? productsList[index].fixedPrice;
+  const pearlPriceVal = validateInteger(req.body.pearlPrice !== undefined ? req.body.pearlPrice : productsList[index].pearlPrice ?? 0, 'قیمت ثابت مروارید', 0, 1_000_000_000);
+  if (!pearlPriceVal.isValid) {
+    res.status(400).json({ error: pearlPriceVal.error }); return;
+  }
   if (nextPricingMode === 'fixed') {
     const priceVal = validatePositiveNumber(nextFixedPrice, 'قیمت ثابت', 1, 1_000_000_000);
     if (!priceVal.isValid) {
@@ -1069,6 +1079,7 @@ app.put('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedRequest,
     title: req.body.title ? String(req.body.title).trim() : productsList[index].title,
     pricingMode: nextPricingMode,
     fixedPrice: nextPricingMode === 'fixed' ? Math.round(Number(nextFixedPrice)) : undefined,
+    pearlPrice: nextPricingMode === 'fixed' ? 0 : pearlPriceVal.value,
     weight: nextPricingMode === 'fixed' ? 0 : req.body.weight !== undefined ? Number(Number(req.body.weight).toFixed(3)) : productsList[index].weight,
     customMakingChargePercent:
       nextPricingMode === 'fixed' ? 0 : req.body.customMakingChargePercent !== undefined

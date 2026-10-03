@@ -288,6 +288,7 @@ export const AdminDashboard: React.FC = () => {
         collection: productForm.collection || 'INANA SIGNATURE',
         pricingMode: isFixedPrice ? 'fixed' : 'gold',
         fixedPrice: isFixedPrice ? Number(productForm.fixedPrice) : undefined,
+        pearlPrice: isFixedPrice ? 0 : numberOrDefault(productForm.pearlPrice, 0),
         weight: isFixedPrice ? 0 : Number(productForm.weight) || 1,
         purity: isFixedPrice ? 'مروارید' : '18 عیار',
         customMakingChargePercent: isFixedPrice ? 0 : numberOrDefault(productForm.customMakingChargePercent, 20),
@@ -1016,6 +1017,12 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                         </div>
 
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-300 py-1">
+                          {previewBreakdown.pearlCost > 0 && (
+                            <div className="bg-[#060B14] p-2.5 rounded-xl border border-slate-800">
+                              <span className="text-slate-400 block">مروارید (ثابت):</span>
+                              <span className="font-bold text-white mt-0.5 block">{formatToman(previewBreakdown.pearlCost)}</span>
+                            </div>
+                          )}
                           <div className="bg-[#060B14] p-2.5 rounded-xl border border-slate-800">
                             <span className="text-slate-400 block">طلای خام:</span>
                             <span className="font-bold text-white mt-0.5 block">
@@ -1239,7 +1246,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     }}
                     className="w-full bg-[#060B14] border border-slate-700 rounded-xl px-3.5 py-2.5 text-white"
                   >
-                    <option value="gold">طلا؛ محاسبه با نرخ روز</option>
+                    <option value="gold">طلا یا ترکیب مروارید و طلا؛ نرخ روز</option>
                     <option value="fixed">مروارید؛ قیمت ثابت</option>
                   </select>
                 </div>
@@ -1305,8 +1312,16 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                       />
                     </div>
                   ) : <>
+                  <div className="col-span-2 sm:col-span-3">
+                    <label htmlFor="product-pearl-price" className="block text-[#D4AF37] font-bold mb-1">قیمت ثابت مروارید (تومان):</label>
+                    <input id="product-pearl-price" type="number" min="0" max="1000000000" step="1"
+                      value={productForm.pearlPrice ?? 0}
+                      onChange={(e) => setProductForm({ ...productForm, pearlPrice: Number(e.target.value) })}
+                      className="w-full bg-[#0A1120] border border-[#D4AF37]/50 rounded-xl px-3 py-2 text-white" />
+                    <p className="text-xs text-slate-400 mt-1">برای طلای خالص صفر بگذارید؛ اجرت و سود روی این مبلغ محاسبه نمی‌شوند.</p>
+                  </div>
                   <div>
-                    <label className="block text-[#D4AF37] font-bold mb-1">وزن خالص (گرم): *</label>
+                    <label className="block text-[#D4AF37] font-bold mb-1">وزن خالص طلا (گرم): *</label>
                     <input
                       type="number"
                       step="0.01"
@@ -1323,7 +1338,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <label className="block text-[#D4AF37] font-bold mb-1">درصد اجرت ساخت (%): *</label>
                     <input
                       type="number"
-                      step="1"
+                      step="0.1"
                       required
                       placeholder="20"
                       aria-label="اجرت محصول" value={productForm.customMakingChargePercent ?? ''}

@@ -233,6 +233,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
                 {showFormulaBreakdown && (
                   <div className="mt-3 p-4 rounded-2xl bg-[#13254A] border border-slate-700/80 text-xs space-y-2 animate-in fade-in duration-200">
+                    {priceBreakdown.pearlCost > 0 && (
+                      <div className="flex justify-between text-slate-200">
+                        <span>قیمت ثابت مروارید (بدون اجرت و سود):</span>
+                        <span className="font-bold">{formatToman(priceBreakdown.pearlCost)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-slate-200">
                       <span>ارزش طلای خام ({formatWeight(product.weight)}):</span>
                       <span className="font-bold">{formatToman(priceBreakdown.baseGoldValue)}</span>

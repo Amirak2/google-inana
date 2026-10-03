@@ -2,6 +2,16 @@ import { CollectionInfo, Product } from '../types';
 
 export const INITIAL_COLLECTIONS: CollectionInfo[] = [
   {
+    id: 'inana-pearl-gold',
+    name: 'INANA PEARL GOLD',
+    titleFa: 'ترکیب مروارید و طلا',
+    subtitleFa: 'درخشش مروارید در کنار طلای ۱۸ عیار',
+    description: 'قیمت ثابت مروارید به‌علاوهٔ طلای محاسبه‌شده با نرخ روز؛ اجرت و سود فقط برای بخش طلا.',
+    coverImage: '/products/pearls/a7-star-white.webp',
+    accentQuote: 'پیوند ظرافت مروارید و درخشش طلا',
+    tag: 'PEARL & GOLD',
+  },
+  {
     id: 'inana-pearls',
     name: 'INANA PEARLS',
     titleFa: 'کالکشن مروارید',
@@ -74,6 +84,7 @@ export const INITIAL_COLLECTIONS: CollectionInfo[] = [
 ];
 
 export const CATEGORIES_LIST = [
+  'گردنبند مروارید و طلا',
   'گردنبند مروارید',
   'پلاک طلا',
   'حروف انگلیسی',
@@ -86,6 +97,35 @@ export const CATEGORIES_LIST = [
   'نیم‌ست',
   'ست کامل',
   'کالکشن‌های ویژه',
+];
+
+export const PEARL_GOLD_PRODUCTS: Product[] = [
+  {
+    id: 'pearl-gold-a7',
+    title: 'مروارید کلاسیک گرد همراه با آویز ستاره ۸۴۰ سوتی',
+    slug: 'pearl-gold-star-a7',
+    category: 'گردنبند مروارید و طلا',
+    collection: 'INANA PEARL GOLD',
+    pricingMode: 'gold',
+    pearlPrice: 2_000_000,
+    weight: 0.840,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0,
+    stoneCost: 0,
+    discountPercent: 0,
+    images: ['/products/pearls/a7-star-white.webp'],
+    description: 'گردنبند مروارید کلاسیک گرد با کیفیت 3A+ و آویز ستارهٔ طلای ۱۸ عیار با وزن ۰٫۸۴۰ گرم (۸۴۰ سوت). قفل استیل ضد زنگ طلایی، طول ۴۵ سانتی‌متر و سایز مروارید ۳. قیمت مروارید ۲٬۰۰۰٬۰۰۰ تومان ثابت است؛ اجرت ۱۶٫۵٪ و سود ۷٪ فقط برای بخش طلا محاسبه می‌شوند. بدون مالیات.',
+    features: ['کد مروارید: a7', 'کیفیت: 3A+', 'قفل: استیل ضد زنگ طلایی', 'طول گردنبند: ۴۵ سانتی‌متر', 'سایز مروارید: ۳', 'وزن آویز طلا: ۸۴۰ سوت (۰٫۸۴۰ گرم)', 'قیمت ثابت مروارید: ۲٬۰۰۰٬۰۰۰ تومان', 'اجرت ۱۶٫۵٪ و سود ۷٪ فقط برای طلا'],
+    dimensions: 'طول ۴۵ سانتی‌متر؛ سایز مروارید ۳',
+    sku: 'a7',
+    stock: 1,
+    isNewArrival: true,
+    isBestSeller: false,
+    isFeatured: true,
+    createdAt: '2026-10-03T00:00:00.000Z',
+  },
 ];
 
 export const PEARL_PRODUCTS: Product[] = [
@@ -330,6 +370,7 @@ export const PEARL_PRODUCTS: Product[] = [
 ];
 
 export const INITIAL_PRODUCTS: Product[] = [
+  ...PEARL_GOLD_PRODUCTS,
   ...PEARL_PRODUCTS,
   {
     id: 'inana-test-ring-2qty',
