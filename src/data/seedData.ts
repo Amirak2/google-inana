@@ -402,6 +402,27 @@ export const PEARL_PRODUCTS: Product[] = [
 ];
 
 export const LETTER_PRODUCTS: Product[] = [
+  {
+    id: 'inana-letter-i',
+    title: 'آویز طلا حرف I',
+    slug: 'pendant-letter-i',
+    category: 'حروف انگلیسی',
+    collection: 'INANA LETTERS',
+    pricingMode: 'gold',
+    weight: 0.140,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0, stoneCost: 0, discountPercent: 0,
+    images: ['/products/letters/inana-letter-i-white.webp'],
+    description: 'آویز حرف I از طلای ۱۸ عیار، با وزن ۱۴۰ سوت. قیمت با نرخ روز طلا، اجرت ۱۶٫۵٪ و سود ۷٪ محاسبه می‌شود؛ بدون مالیات.',
+    features: ['حرف انگلیسی I', 'طلای ۱۸ عیار', 'وزن: ۱۴۰ سوت (۰٫۱۴۰ گرم)', 'اجرت: ۱۶٫۵٪', 'سود: ۷٪'],
+    dimensions: '',
+    sku: 'INA-LET-I-014',
+    stock: 1, isNewArrival: true, isBestSeller: false, isFeatured: true,
+    letter: 'I',
+    createdAt: '2026-10-03T17:00:00.000Z',
+  },
   ...[230, 260].map(soot => ({
     id: `inana-letter-f-${soot}`,
     title: 'آویز طلا حرف F',
