@@ -621,7 +621,7 @@ const AccountCartDrawer: React.FC = () => {
                           </div>
                           <div>
                             <span className="text-white font-bold block text-xs">
-                              ورود با پیامک جهت ادامه خرید
+                              ورود جهت ادامه خرید
                             </span>
                             <span className="text-[11px] text-amber-200/80 block mt-0.5">
                               برای صدور فاکتور و پرداخت، ابتدا در سامانه عضو شوید.
@@ -634,7 +634,7 @@ const AccountCartDrawer: React.FC = () => {
                           className="bg-gradient-to-r from-[#D4AF37] to-[#AA822A] text-slate-950 px-3 py-1.5 rounded-xl text-xs font-bold hover:brightness-110 active:scale-95 transition-all shadow whitespace-nowrap flex items-center gap-1 cursor-pointer flex-shrink-0"
                         >
                           <UserPlus className="w-3.5 h-3.5" />
-                          <span>ورود با پیامک</span>
+                          <span>ورود</span>
                         </button>
                       </div>
                     ) : (
@@ -1461,7 +1461,7 @@ const AccountCartDrawer: React.FC = () => {
             {/* Explanatory Message */}
             <div className="space-y-2">
               <h3 className="text-base sm:text-lg font-bold text-white">
-                ورود با پیامک برای ادامه پرداخت
+                ورود برای ادامه پرداخت
               </h3>
               <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
                 برای ثبت سفارش و ارسال فیش، شماره موبایل خود را با کد پیامکی تأیید کنید. در ورود اول، حساب شما خودکار ساخته می‌شود.
