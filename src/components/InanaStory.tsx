@@ -51,17 +51,17 @@ export const InanaStory: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           {/* Visual Showcase (5 Cols) */}
           <div className="lg:col-span-5 relative">
-            <div className="relative aspect-[4/5] rounded-3xl overflow-hidden border border-[#D4AF37]/35 shadow-[0_20px_60px_rgba(0,0,0,0.75)] group">
-              <img
-                src="https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=1000&q=85"
-                alt="INANA GOLD Atelier"
-                className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-1000"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#060B15] via-transparent to-transparent opacity-80" />
+            <div className="relative aspect-[4/5] flex flex-col rounded-3xl overflow-hidden bg-[#081224] border border-[#D4AF37]/35 shadow-[0_20px_60px_rgba(0,0,0,0.75)] group">
+              <div className="flex-1 min-h-0 flex items-center justify-center p-6 sm:p-8">
+                <img
+                  src="/inana-logo-gold.png"
+                  alt="لوگوی گالری طلای اینانا - INANA GOLD"
+                  className="w-full h-full object-contain"
+                />
+              </div>
 
-              {/* Floating Story Quote */}
-              <div className="absolute bottom-6 inset-x-6 bg-[#060C18]/90 backdrop-blur-md p-5 rounded-2xl border border-[#D4AF37]/35 shadow-md">
+              {/* Story Quote */}
+              <div className="relative mx-6 mb-6 shrink-0 bg-[#060C18]/90 backdrop-blur-md p-5 rounded-2xl border border-[#D4AF37]/35 shadow-md">
                 <span className="font-serif-brand text-xs text-[#D4AF37] tracking-widest uppercase block mb-1">
                   INANA PHILOSOPHY
                 </span>
