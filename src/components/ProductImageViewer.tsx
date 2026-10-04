@@ -19,6 +19,7 @@ export function ProductImageViewer({ src, title, onClose }: ProductImageViewerPr
     const previousFocus = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     dialog.showModal();
+    dialog.querySelector<HTMLButtonElement>('button')?.focus();
     document.body.style.overflow = 'hidden';
     return () => {
       dialog.close();
@@ -42,7 +43,7 @@ export function ProductImageViewer({ src, title, onClose }: ProductImageViewerPr
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/15 px-3 py-3 sm:px-6">
           <p className="min-w-0 truncate text-sm sm:text-base">{title}</p>
-          <button type="button" autoFocus aria-label="بستن نمای بزرگ تصویر" onClick={onClose}
+          <button type="button" aria-label="بستن نمای بزرگ تصویر" onClick={onClose}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-[#D4AF37]">
             <X className="h-6 w-6" />
           </button>

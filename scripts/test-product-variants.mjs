@@ -75,7 +75,7 @@ await writeFile(output, bundle.outputFiles[0].contents);
 const dom = new JSDOM('<div id="app"></div>', {url: 'https://local.test/shop'});
 for (const name of ['window','document','localStorage','sessionStorage','HTMLElement','HTMLInputElement','HTMLSelectElement','HTMLDialogElement','SVGElement','Element']) Object.defineProperty(globalThis, name, {configurable:true,value:dom.window[name]});
 // jsdom does not implement the browser's native dialog top layer.
-HTMLDialogElement.prototype.showModal = function () { this.open = true; this.querySelector('[autofocus]')?.focus(); };
+HTMLDialogElement.prototype.showModal = function () { this.open = true; };
 HTMLDialogElement.prototype.close = function () { this.open = false; };
 Object.defineProperty(globalThis,'navigator',{configurable:true,value:dom.window.navigator});
 window.scrollTo = () => {};
@@ -122,7 +122,7 @@ try {
   await act(async()=>{viewer.dispatchEvent(new window.Event('cancel',{cancelable:true})); await settle();});
   assert.equal(document.querySelector('dialog'), null);
   assert.equal(document.body.style.overflow, 'auto');
-  assert.equal(document.activeElement, document.querySelector(photoTrigger));
+  assert.ok(document.activeElement === document.querySelector(photoTrigger), 'Focus returns to the photo trigger');
   assert.equal(variantHarness.quickViewProduct.id, options[1].id, 'Closing the photo must preserve product and weight');
   await click('button[aria-label="نمایش تصویر ۲ از آویز طلا حرف F"]');
   await click(photoTrigger);
