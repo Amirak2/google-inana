@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   X,
   Heart,
@@ -7,6 +7,7 @@ import {
   Info,
   Send,
   Link,
+  ZoomIn,
 } from 'lucide-react';
 import { Product } from '../types';
 import { useGoldStore } from '../context/GoldStoreContext';
@@ -14,6 +15,7 @@ import { formatToman, formatWeight, toPersianDigits } from '../utils/persianForm
 import { calculateProductPrice } from '../utils/pricingEngine';
 import { productPath } from '../utils/siteRoutes';
 import { productWeightOptions, productAvailability } from '../utils/productVariants';
+import { ProductImageViewer } from './ProductImageViewer';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -27,11 +29,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   const [showFormulaBreakdown, setShowFormulaBreakdown] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [linkMessage, setLinkMessage] = useState('');
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const closeImageViewer = useCallback(() => setImageViewerOpen(false), []);
 
   useEffect(() => {
     setSelectedImageIndex(0);
     setQuantity(1);
     setLinkMessage('');
+    setImageViewerOpen(false);
   }, [product?.id]);
 
   if (!product) return null;
@@ -127,7 +132,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* Product photo gallery */}
           <div className="lg:col-span-5 flex flex-col gap-4">
             {/* Main Stage Image */}
-            <div className={`relative h-[min(32dvh,280px)] sm:h-[360px] lg:h-auto lg:aspect-[4/5] rounded-2xl overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#0B152B]'} border border-[#D4AF37]/25 group`}>
+            <button type="button" aria-label={`بزرگ‌نمایی تصویر ${product.title}`} aria-haspopup="dialog"
+              onClick={() => setImageViewerOpen(true)}
+              className={`relative w-full h-[min(32dvh,280px)] sm:h-[360px] lg:h-auto lg:aspect-[4/5] rounded-2xl overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#0B152B]'} border border-[#D4AF37]/25 group cursor-zoom-in focus-visible:outline-2 focus-visible:outline-[#D4AF37]`}>
               <img
                 src={images[selectedImageIndex] || images[0]}
                 alt={product.title}
@@ -138,8 +145,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                     'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=85';
                 }}
               />
-
-            </div>
+              <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-slate-950/80 px-2 py-1 text-xs text-white">
+                <ZoomIn className="h-4 w-4" /> بزرگ‌نمایی
+              </span>
+            </button>
 
             {/* Thumbnails */}
             {images.length > 1 && (
@@ -335,6 +344,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           </button>
         </div>
       </div>
+      {imageViewerOpen && <ProductImageViewer
+        src={images[selectedImageIndex] || images[0]} title={product.title} onClose={closeImageViewer} />}
     </div>
   );
 };
