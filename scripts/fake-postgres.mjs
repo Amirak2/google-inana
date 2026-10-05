@@ -15,7 +15,8 @@ export function installFakePostgres() {
   function rows(sql, source, params = []) {
     const allowedBuckets = sql.includes('bucket = ANY') ? new Set(params[0]) : null;
     const requested = sql.includes('jsonb_to_recordset') ? new Set(JSON.parse(params[0]).map(row => JSON.stringify([row.bucket, row.record_key]))) : null;
-    return [...source.values()].filter(row => (!allowedBuckets || allowedBuckets.has(row.bucket)) && (!requested || requested.has(JSON.stringify([row.bucket,row.record_key]))) && (!sql.includes('WHERE bucket NOT IN') || !excluded.has(row.bucket))).map(row => structuredClone(row));
+    const excludedBuckets = new Set([...sql.matchAll(/bucket NOT IN \(([^)]+)\)/g)].flatMap(match => [...match[1].matchAll(/'([^']+)'/g)].map(value => value[1])));
+    return [...source.values()].filter(row => (!allowedBuckets || allowedBuckets.has(row.bucket)) && (!requested || requested.has(JSON.stringify([row.bucket,row.record_key]))) && !excludedBuckets.has(row.bucket)).map(row => structuredClone(row));
   }
   function maybeFail(sql) {
     if (failures[0] && sql.includes(failures[0].match)) throw failures.shift().error;

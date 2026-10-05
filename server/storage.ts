@@ -1,4 +1,5 @@
 import type { D1Database, D1PreparedStatement, R2Bucket, Fetcher } from '@cloudflare/workers-types';
+import { ACCOUNTING_BUCKETS } from './accounting';
 export interface Bindings {
   DB: D1Database;
   BUCKET: R2Bucket;
@@ -33,7 +34,7 @@ export class Store {
       const [version, records] = await env.DB.batch([
         env.DB.prepare('SELECT revision FROM site_revision WHERE id = 1'),
         env.DB.prepare(publicRead
-          ? "SELECT bucket, record_key, value_json FROM site_records WHERE bucket NOT IN ('orders', 'idempotency', 'media', 'logs', 'quotes')"
+          ? `SELECT bucket, record_key, value_json FROM site_records WHERE bucket NOT IN ('orders', 'idempotency', 'media', 'logs', 'quotes', ${ACCOUNTING_BUCKETS.map(bucket => `'${bucket}'`).join(',')})`
           : 'SELECT bucket, record_key, value_json FROM site_records'),
       ]);
       store.revision = Number((version.results[0] as any).revision);

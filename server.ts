@@ -8,6 +8,7 @@ import { validateReceipt } from './server/receiptValidation';
 import express from './server/router';
 import type { Request, Response, NextFunction } from 'express';
 import type { Store } from './server/storage';
+import { createAccounting } from './server/accounting';
 
 
 import crypto from 'crypto';
@@ -41,13 +42,18 @@ const { runDbTransaction,
   deleteProductFromDb,
   getAllOrdersFromDb,
   getOrderByIdOrTrackingFromDb,
-  saveOrderToDb,
+  saveOrderToDb: persistOrderToDb,
   deleteOrderFromDb,
   deleteOrdersBulkFromDb,
   getIdempotentOrderFromDb,
   saveIdempotencyKeyToDb,
   seedDatabaseIfEmpty, seedProductsOnce, } = createDb(store);
 const app = express();
+const accounting = createAccounting(store);
+function saveOrderToDb(order: Order): void {
+  persistOrderToDb(order);
+  accounting.syncOrder(order);
+}
 const PORT = 3000;
 
 app.use(express.json({ limit: '4mb' }));
@@ -168,6 +174,28 @@ const requireAdminAuth = (req: AuthenticatedRequest, res: Response, next: NextFu
   req.user = verified;
   next();
 };
+
+app.post('/api/admin/accounting/sync-site', requireAdminAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await runDbTransaction(() => accounting.syncSiteOrders(req.user!.uid));
+    res.json({ success: true, result });
+  } catch (error: any) { res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'همگام‌سازی سفارش‌های سایت انجام نشد.' }); }
+});
+app.get('/api/admin/accounting', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    res.json(accounting.snapshot(String(req.query.from || ''), String(req.query.to || ''), String(req.query.channel || '')));
+  } catch (error: any) { res.status(error.statusCode || 400).json({ error: error.message }); }
+});
+app.post('/api/admin/accounting/:action', requireAdminAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await runDbTransaction(() => accounting.mutate(req.params.action, req.body, req.user!.uid));
+    productsList = getAllProductsFromDb(); ordersList = getAllOrdersFromDb();
+    res.json({ success: true, result });
+  } catch (error: any) {
+    productsList = getAllProductsFromDb(); ordersList = getAllOrdersFromDb();
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'ثبت حسابداری انجام نشد. دوباره تلاش کنید.' });
+  }
+});
 
 // In-Memory Database with State Persistence across Server Lifecycles
 let currentGoldState: GoldPriceData = {
@@ -1801,6 +1829,7 @@ async function handleOrderStatusUpdate(
         err.statusCode = 409;
         throw err;
       }
+      if (status !== undefined) accounting.assertStatusChange(order, status);
       const wasRejected = order.status === 'رد شده' || order.status === 'لغو شده';
       const quantities = new Map<string, number>();
       for (const item of order.items) quantities.set(item.productId, (quantities.get(item.productId) || 0) + item.quantity);
@@ -1953,6 +1982,7 @@ async function handleDeleteOrder(orderId: string, adminUser: any, res: Response)
       }
 
       const orderToDelete = ordersList[index];
+      accounting.syncOrder(orderToDelete, adminUser?.uid);
 
       // Deleting sales history never changes inventory. Cancel/reject first to restock.
 
@@ -1997,6 +2027,7 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
       if (clearAll === true) {
         const prevCount = ordersList.length;
         const allIds = ordersList.map((o) => o.id);
+        for (const order of ordersList) accounting.syncOrder(order, req.user?.uid);
 
         // Clearing history has no stock effect, including completed sales.
 
@@ -2024,6 +2055,7 @@ app.delete('/api/orders', requireAdminAuth, async (req: AuthenticatedRequest, re
 
         for (const o of ordersList) {
           if (idSet.has(o.id) || idSet.has(o.trackingCode)) {
+            accounting.syncOrder(o, req.user?.uid);
             toDeleteIds.push(o.id);
             // Only the status-update path may release inventory.
           } else {
