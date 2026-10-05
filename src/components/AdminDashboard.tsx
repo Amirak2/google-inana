@@ -1,4 +1,5 @@
 import { AdminProductGallery } from './AdminProductGallery';
+import { AccountingDashboard } from './AccountingDashboard';
 import { useAdminDraft } from '../hooks/useAdminDraft';
 import { changedProductFields, numberOrDefault } from '../utils/adminProductForm';
 import { readApiResponse } from '../utils/apiResponse';
@@ -625,6 +626,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
               { id: 'gold-rate', label: 'نرخ پایه و فرمول', icon: TrendingUp },
               { id: 'calculator', label: 'ماشین‌حساب ادمین', icon: Calculator },
               { id: 'orders', label: 'سفارش‌ها', icon: ShoppingBag },
+              { id: 'accounting', label: 'حسابداری و سود', icon: CreditCard },
               { id: 'logs', label: 'لاگ‌ها و مانیتورینگ', icon: Terminal },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -650,6 +652,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
         {/* ========================================================================= */}
         {/* TAB 1: DIRECT SINGLE-PRODUCT MAKING CHARGE & PROFIT CONFIGURATOR (MAIN) */}
         {/* ========================================================================= */}
+        {activeAdminTab === 'accounting' && <AccountingDashboard />}
         {activeAdminTab === 'direct-pricing' && (
           <div className="space-y-8">
             {/* Top Notification Banner */}

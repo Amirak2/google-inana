@@ -2,6 +2,7 @@ import type { Store } from './storage';
 import { PostgresStore, PostgresConflictError } from './postgresStorage';
 import { externalizeImages, migrateInlineMedia, replaceResponseImages } from './mediaStorage';
 import { requestWrites } from './requestPolicy';
+import { ACCOUNTING_BUCKETS } from './accounting';
 
 type Sms = { send: () => Promise<void>; mobile: string; code: string };
 type Dependencies = {
@@ -42,6 +43,7 @@ export function requestBuckets(pathname: string): string[] {
   if (pathname.startsWith('/api/auth/')) buckets.push('otp', 'phoneOtp');
   if (pathname.includes('/favorites')) buckets.push('favorites');
   if (/^\/api\/(orders|cart|products|admin)/.test(pathname)) buckets.push('orders', 'idempotency', 'quotes', 'quoteOwners', 'reservations', 'trackingCodes', 'inventoryHolds');
+  if (/^\/api\/(orders|admin)/.test(pathname)) buckets.push(...ACCOUNTING_BUCKETS);
   return buckets;
 }
 

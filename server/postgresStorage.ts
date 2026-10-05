@@ -1,4 +1,5 @@
 import { Pool, type PoolClient } from 'pg';
+import { ACCOUNTING_BUCKETS } from './accounting';
 
 let sharedPool: Pool | null = null;
 let schemaReady: Promise<void> | null = null;
@@ -88,6 +89,7 @@ export class PostgresStore {
     const clauses: string[] = [];
     if (this.scopeBuckets) clauses.push('bucket = ANY($1::text[])');
     if (this.publicRead) clauses.push("bucket NOT IN ('orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits','phoneClaims','quoteOwners','trackingCodes')");
+    if (this.publicRead) clauses.push(`bucket NOT IN (${ACCOUNTING_BUCKETS.map(bucket => `'${bucket}'`).join(',')})`);
     return 'SELECT bucket, record_key, value_json FROM site_records' + (clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '');
   }
 
