@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { Store } from './storage';
 import type { Order, Product } from '../src/types';
+import { isApprovedOrderStatus, normalizeOrderStatus } from '../src/utils/orderWorkflow';
 import type { AccountingSale, AccountingLine, AccountingSettings, AccountingData, PurchaseLot, MoneyEntry, ReturnEntry, CostParts, AccountingAudit } from '../src/types/accounting';
 import { emptyCosts, costSum, lineCost, saleTotals, returnedQuantity, returnedCostLayers, accountingDate, accountingDay, normalizeAccountingDay } from '../src/utils/accounting';
 
@@ -65,7 +66,26 @@ export function createAccounting(store: Store) {
     }
     sale.costsLocked = sale.items.every(line => lineCost(line) !== null);
   }
-  function syncOrder(order: Order, actor = 'system', channel: 'site' | 'instagram' = 'site') {
+  function syncSiteReceipt(order: Order, sale: AccountingSale) {
+    if (sale.channel !== 'site' || order.id.startsWith('instagram-') || order.paymentReviewRequired
+      || (!isApprovedOrderStatus(order.status) && normalizeOrderStatus(order.status) !== 'تکمیل شده')
+      || !['card_to_card', 'online'].includes(order.paymentMethod || '')) return;
+    const id = `site-payment:${order.id}`;
+    // A voided automatic receipt stays voided. Synchronization never reverses an admin correction.
+    if (store.get('accountingMoney', id)) return;
+    const received = list<MoneyEntry>('accountingMoney').filter(entry => entry.saleId === sale.id && entry.kind === 'receipt' && !entry.voidedAt)
+      .reduce((sum, entry) => sum + entry.amount, 0);
+    const amount = Math.max(0, sale.totalPrice - received);
+    if (!Number.isSafeInteger(amount) || !amount) return;
+    const entry: MoneyEntry = { id, saleId: sale.id, kind: 'receipt', amount, fee: 0,
+      method: order.paymentMethod === 'online' ? 'pasargad' : 'card_to_card', category: '',
+      reference: order.paymentTrackingNumber || `SITE-${order.trackingCode}`, source: 'site',
+      note: 'دریافت خودکار بر اساس تأیید پرداخت سفارش در مدیریت سایت',
+      occurredAt: order.paymentDate || order.reviewedAt || order.updatedAt || order.createdAt, actor: 'system' };
+    store.set('accountingMoney', id, entry); touch();
+    audit('دریافت خودکار سفارش سایت', 'system', sale.id, entry);
+  }
+  function syncOrder(order: Order, actor = 'system', channel: 'site' | 'instagram' = order.id.startsWith('instagram-') ? 'instagram' : 'site') {
     const previous = store.get<AccountingSale>('accountingSales', order.id);
     const sale: AccountingSale = previous ? structuredClone(previous) : {
       id: order.id, orderId: order.id, trackingCode: order.trackingCode, channel,
@@ -82,6 +102,7 @@ export function createAccounting(store: Store) {
       sale.expensesAt ||= sale.recognizedAt;
       allocate(sale);
     }
+    syncSiteReceipt(order, sale);
     if (JSON.stringify(sale) === JSON.stringify(previous)) return sale;
     sale.revision++;
     store.set('accountingSales', sale.id, sale);
@@ -90,6 +111,11 @@ export function createAccounting(store: Store) {
     if (sale.recognizedAt) touch();
     audit(previous ? 'تغییر وضعیت فروش' : 'ثبت سفارش در حسابداری', actor, sale.id, { status: sale.status, channel: sale.channel });
     return sale;
+  }
+  function syncSiteOrders(actor = 'system') {
+    const orders = list<Order>('orders').sort((a, b) => (a.reviewedAt || a.createdAt).localeCompare(b.reviewedAt || b.createdAt));
+    for (const order of orders) syncOrder(order, actor);
+    return { count: orders.filter(order => !order.id.startsWith('instagram-')).length };
   }
   function assertStatusChange(order: Order, next: string) {
     const sale = store.get<AccountingSale>('accountingSales', order.id);
@@ -141,9 +167,7 @@ export function createAccounting(store: Store) {
       result = { ...previous, voidedAt: new Date().toISOString(), voidReason: reason };
       store.set('accountingMoney', id, result);
     } else if (action === 'sync') {
-      const orders = list<Order>('orders').sort((a, b) => (a.reviewedAt || a.createdAt).localeCompare(b.reviewedAt || b.createdAt));
-      for (const order of orders) syncOrder(order, actor);
-      result = { count: list<Order>('orders').length };
+      result = syncSiteOrders(actor);
     } else if (action === 'purchase') {
       const product = store.get<Product>('products', text(body.productId, 'محصول', true));
       if (!product) fail('محصول یافت نشد.', 404);
@@ -386,20 +410,28 @@ export function createAccounting(store: Store) {
       cashMovement -= returns.filter(entry => inRange(entry.occurredAt)).reduce((sum, entry) => sum + entry.amount, 0);
       cashMovement -= sales.filter(sale => sale.expensesAt && inRange(sale.expensesAt)).reduce((sum, sale) => sum + sale.packaging + sale.shippingPaid + sale.otherCosts, 0);
     }
-    let unknownStock = 0;
-    for (const product of list<Product>('products')) {
+    const catalog = list<Product>('products').map(product => {
       const held = list<Order>('orders').filter(order => order.status !== 'تکمیل شده' && !['لغو شده', 'رد شده'].includes(order.status) && !order.inventoryReleased)
         .reduce((sum, order) => sum + order.items.filter(item => item.productId === product.id).reduce((n, item) => n + item.quantity, 0), 0);
       const known = purchases.filter(lot => lot.productId === product.id).reduce((sum, lot) => sum + lot.remaining, 0);
-      unknownStock += Math.max(0, (product.stock || 0) + held - known);
-    }
-    return { revision: revision(), settings: settings(), purchases, sales, money: allEntries, returns,
+      return { id: product.id, title: product.title, weight: product.weight, stock: product.stock ?? null, held,
+        knownQuantity: known, unknownQuantity: Math.max(0, (product.stock || 0) + held - known),
+        inventoryCost: purchases.filter(lot => lot.productId === product.id).reduce((sum, lot) => sum + lot.remaining * costSum(lot.costs), 0) };
+    });
+    const unknownStock = catalog.reduce((sum, product) => sum + product.unknownQuantity, 0);
+    const periodPurchases = purchases.filter(lot => lot.kind === 'purchase' && inRange(lot.occurredAt));
+    return { catalog, revision: revision(), settings: settings(), purchases, sales, money: allEntries, returns,
       audit: list<AccountingAudit>('accountingAudit').sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 200), totals,
       report: { revenue, cost, expenses, profit: missingCosts ? null : revenue - cost - expenses, knownProfit, missingCosts, refunds,
         inventoryCost: purchases.reduce((sum, lot) => sum + lot.remaining * costSum(lot.costs), 0), unknownStock,
         pendingSettlement: selected.reduce((sum, sale) => sum + totals[sale.id].pendingSettlement, 0),
         receivables: selected.filter(sale => !['لغو شده', 'رد شده'].includes(sale.status)).reduce((sum, sale) => sum + Math.max(0, totals[sale.id].balance), 0),
+        purchaseAmount: periodPurchases.reduce((sum, lot) => sum + lot.quantity * costSum(lot.costs), 0),
+        purchaseQuantity: periodPurchases.reduce((sum, lot) => sum + lot.quantity, 0),
+        siteOrderCount: sales.filter(sale => sale.channel === 'site' && inRange(sale.createdAt)).length,
+        siteSoldQuantity: sales.filter(sale => sale.channel === 'site' && sale.recognizedAt && inRange(sale.recognizedAt)).reduce((sum, sale) => sum + sale.items.reduce((n, line) => n + line.quantity, 0), 0)
+          - returns.filter(entry => entry.items.length && inRange(entry.occurredAt) && sales.find(sale => sale.id === entry.saleId)?.channel === 'site').reduce((sum, entry) => sum + entry.items.reduce((n, item) => n + item.quantity, 0), 0),
         cashMovement, channels: channelSummary, daily: [...daily.values()].sort((a, b) => b.day.localeCompare(a.day)), products: [...byProduct.values()] } };
   }
-  return { syncOrder, assertStatusChange, mutate, snapshot };
+  return { syncOrder, syncSiteOrders, assertStatusChange, mutate, snapshot };
 }

@@ -23,6 +23,7 @@ export type MoneyEntry = {
   amount: number; fee: number; method: 'card_to_card' | 'pasargad';
   category: string; reference: string; note: string; occurredAt: string; actor: string;
   voidedAt?: string; voidReason?: string;
+  source?: 'site';
 };
 export type ReturnEntry = {
   id: string; saleId: string; amount: number; shippingRefund: number;
@@ -38,11 +39,13 @@ export type AccountingReport = {
   revenue: number; cost: number; expenses: number; profit: number | null; knownProfit: number;
   missingCosts: number; refunds: number; inventoryCost: number; unknownStock: number;
   pendingSettlement: number; receivables: number; cashMovement: number;
+  purchaseAmount: number; purchaseQuantity: number; siteOrderCount: number; siteSoldQuantity: number;
   channels: { channel: string; revenue: number; profit: number | null; missingCosts: number }[];
   daily: { day: string; revenue: number; profit: number | null }[];
   products: { productId: string; title: string; revenue: number; quantity: number; profit: number | null }[];
 };
 export type AccountingData = {
+  catalog: { id: string; title: string; weight: number; stock: number | null; held: number; knownQuantity: number; unknownQuantity: number; inventoryCost: number }[];
   revision: number; settings: AccountingSettings; purchases: PurchaseLot[]; sales: AccountingSale[];
   money: MoneyEntry[]; returns: ReturnEntry[]; audit: AccountingAudit[];
   totals: Record<string, SaleTotals>; report: AccountingReport;

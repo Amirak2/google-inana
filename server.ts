@@ -175,6 +175,12 @@ const requireAdminAuth = (req: AuthenticatedRequest, res: Response, next: NextFu
   next();
 };
 
+app.post('/api/admin/accounting/sync-site', requireAdminAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await runDbTransaction(() => accounting.syncSiteOrders(req.user!.uid));
+    res.json({ success: true, result });
+  } catch (error: any) { res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'همگام‌سازی سفارش‌های سایت انجام نشد.' }); }
+});
 app.get('/api/admin/accounting', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
   try {
     res.json(accounting.snapshot(String(req.query.from || ''), String(req.query.to || ''), String(req.query.channel || '')));

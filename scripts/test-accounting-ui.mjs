@@ -21,9 +21,11 @@ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.accountingUser = { isAdmin: true, currentUser: { uid: 'fixture-admin' } };
 globalThis.accountingStore = { products: INITIAL_PRODUCTS.slice(0, 2), refreshProducts: async () => {} };
-let data = createAccounting(new Store({})).snapshot(); let failed = true; const mutations = [];
+const fixture = new Store({}); for (const product of INITIAL_PRODUCTS.slice(0, 2)) fixture.set('products', product.id, product);
+let data = createAccounting(fixture).snapshot(); let failed = true; const mutations = []; let syncs = 0;
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (url, options = {}) => {
+  if (url.endsWith('/sync-site')) { syncs++; return Response.json({ success: true, result: { count: 0 } }); }
   if (!options.method || options.method === 'GET') return Response.json(data);
   const body = JSON.parse(options.body); mutations.push({ url, body });
   if (failed) return Response.json({ error: 'خطای ثبت آزمایشی' }, { status: 409 });
@@ -45,6 +47,10 @@ async function input(label, value) {
 try {
   await update(() => root.render(React.createElement(Harness)));
   assert.match(document.body.textContent, /حسابداری و سود اینانا/);
+  assert.ok(syncs >= 1, 'Mount automatically synchronizes existing site orders');
+  await update(() => button('محصولات سایت').click());
+  assert.match(document.body.textContent, new RegExp(INITIAL_PRODUCTS[0].title));
+  assert.equal(buttons().filter(element => element.textContent.trim() === 'ثبت خرید / قیمت موجودی').length, 2, 'Existing site products appear without registering purchases');
   await update(() => button('هزینه‌های پیش‌فرض').click());
   const field = await input('هزینهٔ بسته‌بندی هر سفارش — تومان', '۱۲۳۴');
   await input('هزینهٔ ساخت هر گردنبند مروارید — تومان', '۵۰۰');

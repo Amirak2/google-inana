@@ -63,6 +63,16 @@ try {
   const recovered = await PostgresStore.load(false);
   assert.equal(createAccounting(recovered).snapshot().totals[sale.id].cost, 200);
   await recovered.release();
+  const legacy = { id: 'persist-site-auto', trackingCode: 'PERSIST-SITE', customerName: 'سایت', status: 'تأیید شده', paymentMethod: 'online', paymentTrackingNumber: 'PERSIST-AUTO-PAY', createdAt: new Date().toISOString(), reviewedAt: new Date().toISOString(), totalPrice: 200,
+    items: [{ productId, productTitle: 'کالا', quantity: 1, weight: 1, unitPrice: 200, totalPrice: 200 }] };
+  db.set('orders', legacy.id, legacy);
+  const syncResults = await Promise.all([request('/api/admin/accounting/sync-site', 'POST'), request('/api/admin/accounting/sync-site', 'POST')]);
+  assert.ok(syncResults.every(result => result.status === 200));
+  const automatic = (await request('/api/admin/accounting')).body;
+  assert.equal(automatic.money.filter(entry => entry.saleId === legacy.id).length, 1, 'Concurrent automatic sync persists one verified receipt');
+  assert.equal(automatic.totals[legacy.id].paid, 200);
+  await request('/api/admin/accounting/sync-site', 'POST');
+  assert.equal((await request('/api/admin/accounting')).body.money.filter(entry => entry.saleId === legacy.id).length, 1, 'Automatic receipt survives separate request reloads without duplication');
   assert.equal(db.activeClients, 0); assert.equal(db.activeTransactions, 0);
   console.log('PASS: PostgreSQL financial persistence, exact payment replay, atomic concurrent Instagram sales, private bucket exclusion, request scoping and no transaction leaks.');
 } finally { db.restore(); }
