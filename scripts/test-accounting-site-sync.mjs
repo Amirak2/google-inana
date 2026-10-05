@@ -61,6 +61,14 @@ await request('/api/admin/accounting/sync-site', 'POST'); data = accounting().sn
 assert.equal(data.totals[legacy.id].paid, 500); assert.equal(data.totals[ig.id].paid, 0);
 assert.equal((await mutation('money-void', { entryId: data.money.find(entry => entry.saleId === legacy.id).id, reason: 'تأیید اشتباه فیش' })).status, 200);
 await request('/api/admin/accounting/sync-site', 'POST'); assert.equal(accounting().snapshot().totals[legacy.id].paid, 0, 'Auto sync does not recreate a voided mistaken payment');
+const manuallyPaid = { ...order, status: 'در انتظار بررسی', id: 'site-previous-manual-payment', trackingCode: 'SITE-MANUAL' }; store.set('orders', manuallyPaid.id, manuallyPaid);
+await request('/api/admin/accounting/sync-site', 'POST');
+const manualReceipt = await mutation('money', { saleId: manuallyPaid.id, kind: 'receipt', method: 'card_to_card', amount: 500, fee: 0, reference: 'MANUAL-OLD-PAY', note: 'ثبت دستی قبلی', date: accountingDay() });
+assert.equal(manualReceipt.status, 200);
+store.set('orders', manuallyPaid.id, { ...manuallyPaid, status: 'تأیید شده' }); await request('/api/admin/accounting/sync-site', 'POST');
+assert.equal(accounting().snapshot().money.filter(entry => entry.saleId === manuallyPaid.id).length, 1, 'Already recorded full manual payment is not counted twice');
+assert.equal((await mutation('money-void', { entryId: manualReceipt.data.result.id, reason: 'اصلاح دریافت قبلی' })).status, 200);
+await request('/api/admin/accounting/sync-site', 'POST'); assert.equal(accounting().snapshot().totals[manuallyPaid.id].paid, 0, 'Auto sync also respects a voided manual receipt');
 assert.equal((await request(`/api/admin/products/${product.id}`, 'DELETE')).status, 200);
 data = accounting().snapshot(); assert.ok(!data.catalog.find(row => row.id === product.id)); assert.equal(data.totals[order.id].cost, 300, 'Product deletion preserves historical costs');
 console.log('PASS: existing and future site catalog, shared stock, automatic order import, trusted admin payment verification, no duplicate or recreated receipts, site sales/purchase statistics and private access.');

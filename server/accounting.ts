@@ -73,7 +73,9 @@ export function createAccounting(store: Store) {
     const id = `site-payment:${order.id}`;
     // A voided automatic receipt stays voided. Synchronization never reverses an admin correction.
     if (store.get('accountingMoney', id)) return;
-    const received = list<MoneyEntry>('accountingMoney').filter(entry => entry.saleId === sale.id && entry.kind === 'receipt' && !entry.voidedAt)
+    const receipts = list<MoneyEntry>('accountingMoney').filter(entry => entry.saleId === sale.id && entry.kind === 'receipt');
+    if (receipts.some(entry => entry.voidedAt)) return;
+    const received = receipts.filter(entry => !entry.voidedAt)
       .reduce((sum, entry) => sum + entry.amount, 0);
     const amount = Math.max(0, sale.totalPrice - received);
     if (!Number.isSafeInteger(amount) || !amount) return;
