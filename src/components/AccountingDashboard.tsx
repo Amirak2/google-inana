@@ -229,7 +229,7 @@ export function AccountingDashboard() {
               <button className={buttonClass} disabled={busy} onClick={() => open('costs', sale)}>ثبت / مشاهدهٔ هزینه‌ها</button>
               <button className={buttonClass} disabled={busy || totals.balance <= 0 || ['لغو شده', 'رد شده'].includes(sale.status)} onClick={() => open('receipt', sale)}>دریافت وجه</button>
               <button className={buttonClass} disabled={busy || totals.pendingSettlement <= 0} onClick={() => open('settlement', sale)}>تسویهٔ پاسارگاد</button>
-              {!sale.recognizedAt && <button className={buttonClass} disabled={busy || totals.balance > 0 || ['لغو شده', 'رد شده'].includes(sale.status)} onClick={() => void perform('complete', { saleId: sale.id, date: today })}>تکمیل فروش پس از تحویل</button>}
+              {!sale.recognizedAt && <button className={buttonClass} disabled={busy || totals.balance > 0 || totals.refunded > 0 || ['لغو شده', 'رد شده'].includes(sale.status)} onClick={() => void perform('complete', { saleId: sale.id, date: today })}>تکمیل فروش پس از تحویل</button>}
               <button className={buttonClass} disabled={busy || totals.paid <= totals.refunded} onClick={() => open('return', sale)}>مرجوعی / بازپرداخت</button>
             </div>
           </article>;

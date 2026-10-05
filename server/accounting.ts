@@ -100,6 +100,7 @@ export function createAccounting(store: Store) {
     };
     sale.status = order.status;
     if (!sale.recognizedAt && order.status === 'تکمیل شده') {
+      assertStatusChange(order, 'تکمیل شده');
       sale.recognizedAt = order.reviewedAt || order.updatedAt || order.createdAt;
       sale.expensesAt ||= sale.recognizedAt;
       allocate(sale);
@@ -121,6 +122,11 @@ export function createAccounting(store: Store) {
   }
   function assertStatusChange(order: Order, next: string) {
     const sale = store.get<AccountingSale>('accountingSales', order.id);
+    if (sale && !sale.recognizedAt && (next !== order.status || next === 'تکمیل شده')
+      && !['لغو شده', 'رد شده'].includes(next)
+      && list<ReturnEntry>('accountingReturns').some(entry => entry.saleId === sale.id)) {
+      fail('وجه این سفارش پیش از تحویل بازپرداخت شده است؛ سفارش را لغو کنید و برای خرید مجدد یک سفارش جدید ثبت کنید.', 409);
+    }
     if (sale?.recognizedAt && next !== order.status && list<ReturnEntry>('accountingReturns').some(entry => entry.saleId === sale.id)) fail('فروش مرجوع‌شده قابل فعال‌سازی مجدد نیست؛ برای تعویض یک فروش جدید ثبت کنید.', 409);
     if (sale?.recognizedAt && ['لغو شده', 'رد شده'].includes(next)) fail('برای فروش تکمیل‌شده، مرجوعی و بازپرداخت را از بخش حسابداری ثبت کنید.', 409);
   }
@@ -262,8 +268,9 @@ export function createAccounting(store: Store) {
       const order = store.get<Order>('orders', sale.orderId);
       if (!order || order.inventoryReleased || ['رد شده', 'لغو شده'].includes(order.status)) fail('سفارش فعال با موجودی نگه‌داشته‌شده لازم است.', 409);
       if (sale.recognizedAt) fail('فروش قبلاً تکمیل شده است.', 409);
-      const paid = saleTotals(sale, list('accountingMoney'), list('accountingReturns')).paid;
-      if (paid < sale.totalPrice + sale.shippingReceived) fail('ابتدا دریافت کامل وجه را ثبت کنید.', 409);
+      assertStatusChange(order, 'تکمیل شده');
+      const totals = saleTotals(sale, list('accountingMoney'), list('accountingReturns'));
+      if (totals.paid - totals.refunded < sale.totalPrice + sale.shippingReceived) fail('ابتدا دریافت کامل وجه را ثبت کنید.', 409);
       const occurredAt = date(body.date);
       const completed = { ...order, status: 'تکمیل شده' as const, reviewedAt: occurredAt, updatedAt: new Date().toISOString() };
       store.set('orders', order.id, completed); result = syncOrder(completed, actor, sale.channel);
@@ -319,10 +326,11 @@ export function createAccounting(store: Store) {
         if (!product || product.stock === undefined) fail('برای برگشت به موجودی، محصول با موجودی عددی لازم است.', 409);
         store.set('products', product.id, { ...product, stock: product.stock + item.quantity });
         // The returned piece becomes a new cost lot; fabrication remains in its cost.
-        const layers = returnedCostLayers(line, returnedQuantity(previousReturns, sale.id, line.key), item.quantity);
+        const layers = returnedCostLayers(line, returnedQuantity(previousReturns, sale.id, line.key), item.quantity,
+          lotId => store.get<PurchaseLot>('accountingPurchases', lotId)?.costs);
         for (const [index, layer] of layers.entries()) {
           const lot: PurchaseLot = { id: `return-${entry.id}-${line.key}-${index}`, productId: product.id, title: line.title,
-            quantity: layer.quantity, remaining: layer.quantity, costs: { ...emptyCosts(), other: layer.unitCost }, kind: 'opening',
+            quantity: layer.quantity, remaining: layer.quantity, costs: layer.costs, kind: 'opening',
             supplier: 'برگشت سالم از مشتری', reference: entry.reference, occurredAt: entry.occurredAt, createdAt: new Date().toISOString(), actor };
           store.set('accountingPurchases', lot.id, lot);
         }

@@ -10,13 +10,19 @@ export function lineCost(line: AccountingLine): number | null {
 export function returnedQuantity(returns: ReturnEntry[], saleId: string, key: string): number {
   return returns.filter(entry => entry.saleId === saleId).reduce((sum, entry) => sum + entry.items.filter(item => item.key === key).reduce((n, item) => n + item.quantity, 0), 0);
 }
-export function returnedCostLayers(line: AccountingLine, skip: number, quantity: number): { quantity: number; unitCost: number }[] {
-  const layers = line.overrideCosts ? [{ quantity: line.quantity, unitCost: costSum(line.overrideCosts) }] : line.allocations;
-  const result: { quantity: number; unitCost: number }[] = [];
+export function returnedCostLayers(line: AccountingLine, skip: number, quantity: number, purchaseCosts?: (lotId: string) => CostParts | undefined): { quantity: number; unitCost: number; costs: CostParts }[] {
+  const layers = line.overrideCosts
+    ? [{ quantity: line.quantity, unitCost: costSum(line.overrideCosts), costs: line.overrideCosts }]
+    : line.allocations.map(layer => ({ ...layer, costs: purchaseCosts?.(layer.lotId) || { ...emptyCosts(), other: layer.unitCost } }));
+  const result: { quantity: number; unitCost: number; costs: CostParts }[] = [];
   for (const layer of layers) {
     const offset = Math.min(skip, layer.quantity); skip -= offset;
     const count = Math.min(quantity, layer.quantity - offset);
-    if (count) { result.push({ quantity: count, unitCost: layer.unitCost + line.extraAssembly }); quantity -= count; }
+    if (count) {
+      result.push({ quantity: count, unitCost: layer.unitCost + line.extraAssembly,
+        costs: { ...layer.costs, assembly: layer.costs.assembly + line.extraAssembly } });
+      quantity -= count;
+    }
     if (!quantity) break;
   }
   return result;

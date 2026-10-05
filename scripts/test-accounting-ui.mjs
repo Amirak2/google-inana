@@ -72,6 +72,21 @@ try {
   // Real Escape handling closes the modal and restores a usable page.
   await update(() => window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' })));
   assert.equal(document.querySelector('[role="dialog"]'), null);
+  const now = new Date().toISOString();
+  const refunded = { id: 'ui-refunded', trackingCode: 'UI-REFUND', customerName: 'بازپرداخت آزمایشی', status: 'تأیید شده', createdAt: now,
+    totalPrice: 500, items: [{ productId: INITIAL_PRODUCTS[0].id, productTitle: 'کالا', weight: 0, quantity: 1, unitPrice: 500, totalPrice: 500 }] };
+  createAccounting(fixture).syncOrder(refunded);
+  fixture.set('accountingMoney', 'ui-payment', { id: 'ui-payment', saleId: refunded.id, kind: 'receipt', amount: 500, fee: 0,
+    method: 'card_to_card', reference: 'UI-PAY', note: 'آزمایش', occurredAt: now, actor: 'test' });
+  fixture.set('accountingReturns', 'ui-return', { id: 'ui-return', saleId: refunded.id, amount: 500, shippingRefund: 0, items: [], restock: false,
+    reference: 'UI-RETURN', note: 'آزمایش', occurredAt: now, actor: 'test' });
+  data = createAccounting(fixture).snapshot();
+  await update(() => button('تازه‌سازی').click());
+  await update(() => button('فروش‌ها').click());
+  assert.equal(button('تکمیل فروش پس از تحویل').disabled, true, 'Refunded undelivered order cannot be completed from the UI');
+  const afterRefundRefresh = mutations.length;
+  await update(() => button('تکمیل فروش پس از تحویل').click());
+  assert.equal(mutations.length, afterRefundRefresh, 'Disabled completion sends no mutation');
   const requestsBeforeCustomer = mutations.length;
   globalThis.accountingUser = { isAdmin: false, currentUser: { uid: 'customer' } };
   await update(() => root.render(React.createElement(Harness)));
