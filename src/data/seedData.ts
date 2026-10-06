@@ -2,6 +2,16 @@ import { CollectionInfo, Product } from '../types';
 
 export const INITIAL_COLLECTIONS: CollectionInfo[] = [
   {
+    id: 'inana-sea',
+    name: 'INANA SEA',
+    titleFa: 'کالکشن دریا',
+    subtitleFa: 'آویزهای طلای ۱۸ عیار با نقش‌های دریایی',
+    description: 'مجموعه‌ای از آویزهای طلای ۱۸ عیار با الهام از دریا.',
+    coverImage: '/products/sea/sunfish-320-white.webp',
+    accentQuote: 'نقشی از دریا، درخشش طلا',
+    tag: 'SEA',
+  },
+  {
     id: 'inana-pearl-gold',
     name: 'INANA PEARL GOLD',
     titleFa: 'ترکیب مروارید و طلا',
@@ -863,7 +873,36 @@ export const LETTER_PRODUCTS: Product[] = [
   },
 ];
 
+export const SEA_PRODUCTS: Product[] = [
+  {
+    id: 'inana-sea-sunfish-320',
+    title: 'آویز ماهی خورشیدی',
+    slug: 'sunfish-gold-pendant',
+    category: 'پلاک طلا',
+    collection: 'INANA SEA',
+    pricingMode: 'gold',
+    weight: 0.320,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0,
+    stoneCost: 0,
+    discountPercent: 0,
+    images: ['/products/sea/sunfish-320-white.webp'],
+    description: 'آویز ماهی خورشیدی از طلای ۱۸ عیار با وزن ۳۲۰ سوت. قیمت با نرخ روز طلا، اجرت ۱۶٫۵٪ و سود ۷٪ محاسبه می‌شود.',
+    features: ['طرح ماهی خورشیدی', 'طلای ۱۸ عیار', 'وزن: ۳۲۰ سوت (۰٫۳۲۰ گرم)', 'اجرت: ۱۶٫۵٪', 'سود: ۷٪'],
+    dimensions: '',
+    sku: 'INA-SEA-SUNFISH-032',
+    stock: 1,
+    isNewArrival: true,
+    isBestSeller: false,
+    isFeatured: true,
+    createdAt: '2026-10-06T11:30:00.000Z',
+  },
+];
+
 export const INITIAL_PRODUCTS: Product[] = [
+  ...SEA_PRODUCTS,
   ...LETTER_PRODUCTS,
   ...PEARL_GOLD_PRODUCTS,
   ...PEARL_PRODUCTS,
