@@ -2,8 +2,10 @@ import crypto from 'node:crypto';
 import type { Store } from './storage';
 import type { Order, Product } from '../src/types';
 import { isApprovedOrderStatus, normalizeOrderStatus } from '../src/utils/orderWorkflow';
-import type { AccountingSale, AccountingLine, AccountingSettings, AccountingData, PurchaseLot, MoneyEntry, ReturnEntry, CostParts, AccountingAudit, GoldPurchase } from '../src/types/accounting';
-import { emptyCosts, costSum, lineCost, saleTotals, returnedQuantity, returnedCostLayers, accountingDate, accountingDay, normalizeAccountingDay, roundGrams, goldPurchaseCost, lineGoldCost, saleGoldTotals, goldReturnMovement, returnedGoldLayers } from '../src/utils/accounting';
+import type { AccountingSale, AccountingLine, AccountingSettings, AccountingData, PurchaseLot, MoneyEntry, ReturnEntry, CostParts, AccountingAudit, GoldPurchase, GoldSaleTerms } from '../src/types/accounting';
+import { emptyCosts, costSum, lineCost, saleTotals, returnedQuantity, returnedCostLayers, accountingDate, accountingDay, normalizeAccountingDay, roundGrams, goldPurchaseCost, lineGoldCost, saleGoldTotals, goldReturnMovement, returnedGoldLayers, productGoldSale } from '../src/utils/accounting';
+
+import { DEFAULT_SETTINGS } from '../src/utils/pricingEngine';
 
 export const ACCOUNTING_BUCKETS = ['accountingMeta', 'accountingPurchases', 'accountingSales', 'accountingMoney', 'accountingReturns', 'accountingAudit', 'accountingActions'];
 function fail(message: string, statusCode = 400): never { throw Object.assign(new Error(message), { statusCode }); }
@@ -45,6 +47,12 @@ function goldPurchase(value: any): GoldPurchase {
   return { weight, makingPercent, costGrams: goldPurchaseCost(weight, makingPercent) };
 }
 
+function goldSale(value: any): GoldSaleTerms {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('درصدهای فروش طلا را وارد کنید.');
+  return { makingPercent: gramNumber(value.makingPercent, 'اجرت فروش', 100),
+    profitPercent: gramNumber(value.profitPercent, 'سود فروش', 100), discountPercent: gramNumber(value.discountPercent, 'تخفیف فروش', 100) };
+}
+
 export function createAccounting(store: Store) {
   const list = <T>(bucket: string): T[] => [...store.map<T>(bucket).values()];
   const revision = () => store.get<{ revision: number }>('accountingMeta', 'revision')?.revision || 0;
@@ -70,7 +78,7 @@ export function createAccounting(store: Store) {
         const lot = structuredClone(original);
         const count = Math.min(needed, lot.remaining);
         if (lot.costs.assembly && line.extraAssembly) fail('هزینهٔ ساخت در خرید محصول آماده ثبت شده است؛ ساخت بعد از سفارش را صفر کنید.', 409);
-        line.allocations.push({ lotId: lot.id, quantity: count, unitCost: costSum(lot.costs), ...(lot.goldPurchase ? { unitGoldCost: lot.goldPurchase.costGrams, unitGoldWeight: lot.goldPurchase.weight } : {}) });
+        line.allocations.push({ lotId: lot.id, quantity: count, unitCost: costSum(lot.costs), ...(lot.goldPurchase ? { unitGoldCost: lot.goldPurchase.costGrams, unitGoldWeight: lot.goldPurchase.weight, unitGoldMakingPercent: lot.goldPurchase.makingPercent } : {}) });
         lot.remaining -= count; needed -= count;
         store.set('accountingPurchases', lot.id, lot);
       }
@@ -105,7 +113,7 @@ export function createAccounting(store: Store) {
       customerName: order.customerName, status: order.status, totalPrice: order.totalPrice || 0,
       createdAt: order.createdAt,
       items: order.items.map((item, index) => ({ key: String(index), productId: item.productId, title: item.productTitle,
-        quantity: item.quantity, weight: item.weight, unitPrice: item.unitPrice, totalPrice: item.totalPrice, goldRevenueGrams: item.goldRevenueGrams,
+        quantity: item.quantity, weight: item.weight, unitPrice: item.unitPrice, totalPrice: item.totalPrice, goldRevenueGrams: item.goldRevenueGrams, goldSale: item.goldSale,
         allocations: [], extraAssembly: 0 })),
       packaging: settings().packaging, shippingReceived: 0, shippingPaid: 0, otherCosts: 0, revision: 0,
     };
@@ -221,7 +229,8 @@ export function createAccounting(store: Store) {
         requested.set(product.id, (requested.get(product.id) || 0) + count);
         return { productId: product.id, productTitle: product.title, productImage: product.images?.[0] || '', weight: product.weight,
           unitPrice, quantity: count, totalPrice: unitPrice * count, goldPriceAtOrder: 0, makingChargePercent: 0,
-          ...(product.pricingMode !== 'fixed' && product.weight > 0 && item.goldRevenueGrams !== undefined ? { goldRevenueGrams: gramNumber(item.goldRevenueGrams, 'معادل طلای فروش هر قطعه', 100000) } : {}) };
+          ...(product.pricingMode !== 'fixed' && product.weight > 0 && item.goldSale !== undefined ? { goldSale: goldSale(item.goldSale) } : {}),
+          ...(product.pricingMode !== 'fixed' && product.weight > 0 && item.goldSale === undefined && item.goldRevenueGrams !== undefined ? { goldRevenueGrams: gramNumber(item.goldRevenueGrams, 'معادل طلای فروش هر قطعه', 100000) } : {}) };
       });
       for (const [id, count] of requested) {
         const product = store.get<Product>('products', id)!;
@@ -262,7 +271,7 @@ export function createAccounting(store: Store) {
           line.overrideGoldPurchase = goldPurchase(update.goldPurchase); line.overrideCosts = emptyCosts();
         }
         if (update.goldRevenueGrams !== undefined) {
-          if (line.weight <= 0 || line.goldRevenueGrams !== undefined) fail('معادل طلای فروش قبلاً ثبت شده یا کالا بدون طلاست.', 409);
+          if (line.weight <= 0 || line.goldSale || line.goldRevenueGrams !== undefined) fail('معادل طلای فروش قبلاً ثبت شده یا کالا بدون طلاست.', 409);
           line.goldRevenueGrams = gramNumber(update.goldRevenueGrams, 'معادل طلای فروش', 100000);
         }
         if (update.costs !== undefined) {
@@ -354,7 +363,7 @@ export function createAccounting(store: Store) {
         const goldLayers = returnedGoldLayers(line, returnedQuantity(previousReturns, sale.id, line.key), item.quantity);
         for (const [index, layer] of layers.entries()) {
           const goldLayer = goldLayers[index];
-          const restoredGold = goldLayer?.unitGoldCost !== undefined && goldLayer.unitGoldWeight ? { weight: goldLayer.unitGoldWeight, costGrams: goldLayer.unitGoldCost, makingPercent: roundGrams((goldLayer.unitGoldCost / goldLayer.unitGoldWeight - 1) * 100) } : undefined;
+          const restoredGold = goldLayer?.unitGoldCost !== undefined && goldLayer.unitGoldWeight ? { weight: goldLayer.unitGoldWeight, costGrams: goldLayer.unitGoldCost, makingPercent: goldLayer.unitGoldMakingPercent ?? roundGrams((goldLayer.unitGoldCost / goldLayer.unitGoldWeight - 1) * 100) } : undefined;
           const lot: PurchaseLot = { id: `return-${entry.id}-${line.key}-${index}`, productId: product.id, title: line.title,
             quantity: layer.quantity, remaining: layer.quantity, costs: layer.costs, ...(restoredGold ? { goldPurchase: restoredGold } : {}), kind: 'opening',
             supplier: 'برگشت سالم از مشتری', reference: entry.reference, occurredAt: entry.occurredAt, createdAt: new Date().toISOString(), actor };
@@ -472,7 +481,7 @@ export function createAccounting(store: Store) {
       const held = list<Order>('orders').filter(order => order.status !== 'تکمیل شده' && !['لغو شده', 'رد شده'].includes(order.status) && !order.inventoryReleased)
         .reduce((sum, order) => sum + order.items.filter(item => item.productId === product.id).reduce((n, item) => n + item.quantity, 0), 0);
       const known = purchases.filter(lot => lot.productId === product.id).reduce((sum, lot) => sum + lot.remaining, 0);
-      return { id: product.id, title: product.title, weight: product.weight, isGold: product.pricingMode !== 'fixed' && product.weight > 0, stock: product.stock ?? null, held,
+      return { id: product.id, title: product.title, weight: product.weight, isGold: product.pricingMode !== 'fixed' && product.weight > 0, goldSale: productGoldSale(product, store.get('settings', 'pricing') || DEFAULT_SETTINGS), stock: product.stock ?? null, held,
         knownQuantity: known, unknownQuantity: Math.max(0, (product.stock || 0) + held - known),
         inventoryCost: purchases.filter(lot => lot.productId === product.id).reduce((sum, lot) => sum + lot.remaining * costSum(lot.costs), 0) };
     });

@@ -16,7 +16,7 @@ import crypto from 'crypto';
 import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS } from './src/data/seedData';
 import { GoldHistoryPoint, GoldPriceData, Order, OtherMarketsData, PricingSettings, Product, SystemLogModule } from './src/types';
 import { calculateProductPrice, DEFAULT_SETTINGS } from './src/utils/pricingEngine';
-import { productGoldRevenue } from './src/utils/accounting';
+import { productGoldSale } from './src/utils/accounting';
 import { formatJalaliDateTime } from './src/utils/persianFormatter';
 import { createAuthStore } from './server/authStore';
 import {
@@ -1286,7 +1286,7 @@ interface ServerPriceQuote {
     quantity: number;
     totalPrice: number;
     goldPriceAtOrder: number;
-    goldRevenueGrams?: number;
+    goldSale?: import('./src/types/accounting').GoldSaleTerms;
     makingChargePercent: number;
   }>;
   totalWeight: number;
@@ -1419,7 +1419,7 @@ app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Resp
       quantity: qty,
       totalPrice: itemTotal,
       goldPriceAtOrder: product.pricingMode === 'fixed' ? 0 : currentGoldPrice,
-      goldRevenueGrams: productGoldRevenue(product, pricingSettings),
+      goldSale: productGoldSale(product, pricingSettings),
       makingChargePercent: priceBreakdown.effectiveMakingChargePercent,
     });
   }
@@ -1655,7 +1655,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
             quantity: itm.quantity,
             totalPrice: itemTotal,
             goldPriceAtOrder: product.pricingMode === 'fixed' ? 0 : effectiveGoldPrice,
-            goldRevenueGrams: productGoldRevenue(product, pricingSettings),
+            goldSale: productGoldSale(product, pricingSettings),
             makingChargePercent: priceBreakdown.effectiveMakingChargePercent,
           });
         }

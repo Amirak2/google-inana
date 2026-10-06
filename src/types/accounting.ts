@@ -1,16 +1,17 @@
 export type CostParts = { gold: number; making: number; pearl: number; assembly: number; other: number };
 export type GoldPurchase = { weight: number; makingPercent: number; costGrams: number };
+export type GoldSaleTerms = { makingPercent: number; profitPercent: number; discountPercent: number };
 export type AccountingSettings = { packaging: number; assembly: number };
 export type PurchaseLot = {
   id: string; productId: string; title: string; quantity: number; remaining: number;
   costs: CostParts; goldPurchase?: GoldPurchase; kind: 'opening' | 'purchase'; supplier: string; reference: string;
   occurredAt: string; createdAt: string; actor: string;
 };
-export type CostAllocation = { lotId: string; quantity: number; unitCost: number; unitGoldCost?: number; unitGoldWeight?: number };
+export type CostAllocation = { lotId: string; quantity: number; unitCost: number; unitGoldCost?: number; unitGoldWeight?: number; unitGoldMakingPercent?: number };
 export type AccountingLine = {
   key: string; productId: string; title: string; quantity: number; weight: number;
   unitPrice: number; totalPrice: number; allocations: CostAllocation[];
-  overrideCosts?: CostParts; overrideGoldPurchase?: GoldPurchase; goldRevenueGrams?: number; extraAssembly: number;
+  overrideCosts?: CostParts; overrideGoldPurchase?: GoldPurchase; goldRevenueGrams?: number; goldSale?: GoldSaleTerms; extraAssembly: number;
 };
 export type AccountingSale = {
   id: string; orderId: string; trackingCode: string; channel: 'site' | 'instagram';
@@ -47,7 +48,7 @@ export type AccountingReport = {
   products: { productId: string; title: string; revenue: number; quantity: number; profit: number | null }[];
 };
 export type AccountingData = {
-  catalog: { id: string; title: string; weight: number; isGold: boolean; stock: number | null; held: number; knownQuantity: number; unknownQuantity: number; inventoryCost: number }[];
+  catalog: { id: string; title: string; weight: number; isGold: boolean; goldSale?: GoldSaleTerms; stock: number | null; held: number; knownQuantity: number; unknownQuantity: number; inventoryCost: number }[];
   revision: number; settings: AccountingSettings; purchases: PurchaseLot[]; sales: AccountingSale[];
   money: MoneyEntry[]; returns: ReturnEntry[]; audit: AccountingAudit[];
   totals: Record<string, SaleTotals>; goldTotals: Record<string, { revenueGrams: number; costGrams: number | null; profitGrams: number | null }>; report: AccountingReport;

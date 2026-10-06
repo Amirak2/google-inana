@@ -77,6 +77,17 @@ try {
   assert.deepEqual(mutations.at(-1).body.goldPurchase, { weight: 0.84, makingPercent: 16.5 });
   assert.equal(mutations.at(-1).body.costs, undefined, 'Gold purchase sends no market rate or monetary gold cost');
   await update(() => button('فروش اینستاگرام').click());
+  const saleSelect = document.querySelector('[role="dialog"] select');
+  await update(() => { saleSelect.value = INITIAL_PRODUCTS[1].id; saleSelect.dispatchEvent(new window.Event('change', { bubbles: true })); });
+  await input('نام مشتری', 'آزمایش درصدها');
+  await input('قیمت نهایی فروش هر عدد پس از تخفیف — تومان', '۱۰۰۰۰');
+  await input('اجرت فروش — درصد', '۱۶٫۵');
+  await input('سود فروش — درصد', '۷');
+  await input('تخفیف بخش طلا — درصد', '۰');
+  await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+  assert.deepEqual(mutations.at(-1).body.items[0].goldSale, { makingPercent: 16.5, profitPercent: 7, discountPercent: 0 });
+  assert.equal(mutations.at(-1).body.items[0].goldRevenueGrams, undefined);
+  await update(() => button('فروش اینستاگرام').click());
   await update(() => button('افزودن کالا').click());
   assert.equal(document.querySelectorAll('select').length, 4, 'Two product rows, exchange selector and channel selector');
   await update(() => button('بستن فرم حسابداری')?.click());
