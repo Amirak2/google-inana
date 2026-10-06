@@ -1026,7 +1026,36 @@ export const SEA_PRODUCTS: Product[] = [
   },
 ];
 
+export const UNCOLLECTED_GOLD_PRODUCTS: Product[] = [
+  {
+    id: 'inana-earrings-vancleef-medium-520',
+    title: 'گوشواره ونکلیف اندازه متوسط',
+    slug: 'medium-clover-gold-earrings',
+    category: 'گوشواره',
+    collection: '',
+    pricingMode: 'gold',
+    weight: 0.520,
+    purity: '18 عیار',
+    customMakingChargePercent: 16.5,
+    customProfitPercent: 7,
+    additionalCost: 0,
+    stoneCost: 0,
+    discountPercent: 0,
+    images: ['/products/catalog/vancleef-medium-520-front-white.webp', '/products/catalog/vancleef-medium-520-side-white.webp'],
+    description: 'یک جفت گوشواره ونکلیف اندازه متوسط از طلای ۱۸ عیار، با وزن کل ۵۲۰ سوت. قیمت جفت با نرخ روز طلا، اجرت ۱۶٫۵٪ و سود ۷٪ محاسبه می‌شود.',
+    features: ['گوشواره ونکلیف اندازه متوسط', 'طلای ۱۸ عیار', 'وزن کل جفت: ۵۲۰ سوت (۰٫۵۲۰ گرم)', 'واحد فروش: یک جفت', 'اجرت: ۱۶٫۵٪', 'سود: ۷٪'],
+    dimensions: '',
+    sku: 'INA-EAR-CLOVER-M-052',
+    stock: 1,
+    isNewArrival: true,
+    isBestSeller: false,
+    isFeatured: true,
+    createdAt: '2026-10-06T14:35:00.000Z',
+  },
+];
+
 export const INITIAL_PRODUCTS: Product[] = [
+  ...UNCOLLECTED_GOLD_PRODUCTS,
   ...SEA_PRODUCTS,
   ...LETTER_PRODUCTS,
   ...PEARL_GOLD_PRODUCTS,

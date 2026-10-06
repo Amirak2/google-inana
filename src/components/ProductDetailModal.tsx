@@ -79,9 +79,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         {/* Top Header Bar */}
         <div className="flex shrink-0 items-center justify-between gap-2 p-3 sm:p-5 border-b border-[#D4AF37]/25 bg-[#0A1224]">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="px-2.5 py-1 rounded-full bg-[#0B152B] text-[#E6CA65] border border-[#D4AF37]/35 text-xs font-semibold">
+            {product.collection ? <span className="px-2.5 py-1 rounded-full bg-[#0B152B] text-[#E6CA65] border border-[#D4AF37]/35 text-xs font-semibold">
               {product.collection}
-            </span>
+            </span> : null}
             <span className="text-xs text-slate-400">کد محصول: {product.sku}</span>
           </div>
 

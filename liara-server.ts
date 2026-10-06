@@ -9,7 +9,7 @@ import { configureTrustedProxy, normalizeClientIp } from './server/clientIp';
 import { runPostgresRequest } from './server/postgresRequest';
 import { securityHeaders } from './server/securityHeaders';
 import { startGoldScheduler } from './server/goldScheduler';
-import { PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS } from './src/data/seedData';
+import { PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS, UNCOLLECTED_GOLD_PRODUCTS } from './src/data/seedData';
 
 const app = express();
 app.disable('x-powered-by');
@@ -80,9 +80,9 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
 app.all(['/api/*', '/media/*'], (req, res) => { void handleRequest(req, res); });
 
 // Preserve existing product URLs while serving their bytes from the private bucket.
-const productMediaPaths = new Set([...PEARL_PRODUCTS, ...PEARL_GOLD_PRODUCTS, ...LETTER_PRODUCTS, ...SEA_PRODUCTS].flatMap(product => product.images)
-  .filter(url => /^\/products\/(pearls|letters|sea)\/[\w.-]+$/.test(url)));
-app.get(['/products/pearls/:filename', '/products/letters/:filename', '/products/sea/:filename'], async (req, res) => {
+const productMediaPaths = new Set([...PEARL_PRODUCTS, ...PEARL_GOLD_PRODUCTS, ...LETTER_PRODUCTS, ...SEA_PRODUCTS, ...UNCOLLECTED_GOLD_PRODUCTS].flatMap(product => product.images)
+  .filter(url => /^\/products\/(pearls|letters|sea|catalog)\/[\w.-]+$/.test(url)));
+app.get(['/products/pearls/:filename', '/products/letters/:filename', '/products/sea/:filename', '/products/catalog/:filename'], async (req, res) => {
   if (!productMediaPaths.has(req.path)) {
     res.sendStatus(404); return;
   }
