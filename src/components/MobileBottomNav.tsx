@@ -9,8 +9,8 @@ export const MobileBottomNav: React.FC = () => {
 
   const tabs = [
     { id: 'home', label: 'خانه', icon: Home },
-    { id: 'shop', label: 'فروشگاه', icon: Layers },
     { id: 'gold-price', label: 'نرخ طلا', icon: TrendingUp },
+    { id: 'shop', label: 'فروشگاه', icon: Layers },
     { id: 'favorites', label: 'علاقه‌مندی', icon: Heart, badge: favorites.length },
     { id: 'cart-action', label: 'سبد خرید', icon: ShoppingBag, badge: totalCartCount },
   ];
