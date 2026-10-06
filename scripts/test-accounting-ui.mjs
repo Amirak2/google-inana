@@ -21,7 +21,7 @@ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.accountingUser = { isAdmin: true, currentUser: { uid: 'fixture-admin' } };
 globalThis.accountingStore = { products: INITIAL_PRODUCTS.slice(0, 2), refreshProducts: async () => {} };
-const fixture = new Store({}); for (const product of INITIAL_PRODUCTS.slice(0, 2)) fixture.set('products', product.id, product);
+const fixture = new Store({}); for (const [index, product] of INITIAL_PRODUCTS.slice(0, 2).entries()) fixture.set('products', product.id, index === 0 ? { ...product, pricingMode: 'fixed', weight: 0 } : product);
 let data = createAccounting(fixture).snapshot(); let failed = true; const mutations = []; let syncs = 0;
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (url, options = {}) => {
@@ -65,6 +65,28 @@ try {
   await input('خرید مروارید — تومان برای هر عدد', '۹۰۰۰');
   await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   const purchase = mutations.at(-1); assert.ok(purchase.url.endsWith('/purchase')); assert.equal(purchase.body.costs.pearl, 9000); assert.equal(purchase.body.kind, 'opening');
+  await update(() => button('خرید / موجودی اولیه').click());
+  const goldSelect = document.querySelector('[role="dialog"] select');
+  await update(() => { goldSelect.value = INITIAL_PRODUCTS[1].id; goldSelect.dispatchEvent(new window.Event('change', { bubbles: true })); });
+  const weight = await input('وزن طلای هر قطعه — گرم', '۰٫۸۴۰');
+  assert.equal(weight.inputMode, 'decimal');
+  await input('اجرت بنکدار — درصد', '۱۶٫۵');
+  assert.match(document.querySelector('[role="dialog"]').textContent, /۰.۹۷۸۶ گرم/);
+  assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent, /تومان برای هر عدد/);
+  await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+  assert.deepEqual(mutations.at(-1).body.goldPurchase, { weight: 0.84, makingPercent: 16.5 });
+  assert.equal(mutations.at(-1).body.costs, undefined, 'Gold purchase sends no market rate or monetary gold cost');
+  await update(() => button('فروش اینستاگرام').click());
+  const saleSelect = document.querySelector('[role="dialog"] select');
+  await update(() => { saleSelect.value = INITIAL_PRODUCTS[1].id; saleSelect.dispatchEvent(new window.Event('change', { bubbles: true })); });
+  await input('نام مشتری', 'آزمایش درصدها');
+  await input('قیمت نهایی فروش هر عدد پس از تخفیف — تومان', '۱۰۰۰۰');
+  await input('اجرت فروش — درصد', '۱۶٫۵');
+  await input('سود فروش — درصد', '۷');
+  await input('تخفیف بخش طلا — درصد', '۰');
+  await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+  assert.deepEqual(mutations.at(-1).body.items[0].goldSale, { makingPercent: 16.5, profitPercent: 7, discountPercent: 0 });
+  assert.equal(mutations.at(-1).body.items[0].goldRevenueGrams, undefined);
   await update(() => button('فروش اینستاگرام').click());
   await update(() => button('افزودن کالا').click());
   assert.equal(document.querySelectorAll('select').length, 4, 'Two product rows, exchange selector and channel selector');

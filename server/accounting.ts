@@ -2,8 +2,10 @@ import crypto from 'node:crypto';
 import type { Store } from './storage';
 import type { Order, Product } from '../src/types';
 import { isApprovedOrderStatus, normalizeOrderStatus } from '../src/utils/orderWorkflow';
-import type { AccountingSale, AccountingLine, AccountingSettings, AccountingData, PurchaseLot, MoneyEntry, ReturnEntry, CostParts, AccountingAudit } from '../src/types/accounting';
-import { emptyCosts, costSum, lineCost, saleTotals, returnedQuantity, returnedCostLayers, accountingDate, accountingDay, normalizeAccountingDay } from '../src/utils/accounting';
+import type { AccountingSale, AccountingLine, AccountingSettings, AccountingData, PurchaseLot, MoneyEntry, ReturnEntry, CostParts, AccountingAudit, GoldPurchase, GoldSaleTerms } from '../src/types/accounting';
+import { emptyCosts, costSum, lineCost, saleTotals, returnedQuantity, returnedCostLayers, accountingDate, accountingDay, normalizeAccountingDay, roundGrams, goldPurchaseCost, lineGoldCost, saleGoldTotals, goldReturnMovement, returnedGoldLayers, productGoldSale } from '../src/utils/accounting';
+
+import { DEFAULT_SETTINGS } from '../src/utils/pricingEngine';
 
 export const ACCOUNTING_BUCKETS = ['accountingMeta', 'accountingPurchases', 'accountingSales', 'accountingMoney', 'accountingReturns', 'accountingAudit', 'accountingActions'];
 function fail(message: string, statusCode = 400): never { throw Object.assign(new Error(message), { statusCode }); }
@@ -33,6 +35,23 @@ function date(value: unknown): string {
   try { return accountingDate(value === undefined ? undefined : text(value, 'تاریخ')); }
   catch (error) { return fail((error as Error).message); }
 }
+function gramNumber(value: unknown, label: string, max = 10000, positive = false): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max || (positive && value === 0)
+    || Math.abs(value * 1_000_000 - Math.round(value * 1_000_000)) > 0.00001) fail(`${label} را با عدد معتبر و حداکثر شش رقم اعشار وارد کنید.`);
+  return value as number;
+}
+function goldPurchase(value: any): GoldPurchase {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('وزن و درصد اجرت خرید طلا را وارد کنید.');
+  const weight = gramNumber(value.weight, 'وزن طلا', 10000, true);
+  const makingPercent = gramNumber(value.makingPercent, 'درصد اجرت بنکدار', 100);
+  return { weight, makingPercent, costGrams: goldPurchaseCost(weight, makingPercent) };
+}
+
+function goldSale(value: any): GoldSaleTerms {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('درصدهای فروش طلا را وارد کنید.');
+  return { makingPercent: gramNumber(value.makingPercent, 'اجرت فروش', 100),
+    profitPercent: gramNumber(value.profitPercent, 'سود فروش', 100), discountPercent: gramNumber(value.discountPercent, 'تخفیف فروش', 100) };
+}
 
 export function createAccounting(store: Store) {
   const list = <T>(bucket: string): T[] => [...store.map<T>(bucket).values()];
@@ -59,12 +78,12 @@ export function createAccounting(store: Store) {
         const lot = structuredClone(original);
         const count = Math.min(needed, lot.remaining);
         if (lot.costs.assembly && line.extraAssembly) fail('هزینهٔ ساخت در خرید محصول آماده ثبت شده است؛ ساخت بعد از سفارش را صفر کنید.', 409);
-        line.allocations.push({ lotId: lot.id, quantity: count, unitCost: costSum(lot.costs) });
+        line.allocations.push({ lotId: lot.id, quantity: count, unitCost: costSum(lot.costs), ...(lot.goldPurchase ? { unitGoldCost: lot.goldPurchase.costGrams, unitGoldWeight: lot.goldPurchase.weight, unitGoldMakingPercent: lot.goldPurchase.makingPercent } : {}) });
         lot.remaining -= count; needed -= count;
         store.set('accountingPurchases', lot.id, lot);
       }
     }
-    sale.costsLocked = sale.items.every(line => lineCost(line) !== null);
+    sale.costsLocked = sale.items.every(line => lineCost(line) !== null || lineGoldCost(line) !== null && (line.overrideGoldPurchase || line.allocations.some(layer => layer.unitGoldCost !== undefined)));
   }
   function syncSiteReceipt(order: Order, sale: AccountingSale) {
     if (sale.channel !== 'site' || order.id.startsWith('instagram-') || order.paymentReviewRequired
@@ -94,7 +113,7 @@ export function createAccounting(store: Store) {
       customerName: order.customerName, status: order.status, totalPrice: order.totalPrice || 0,
       createdAt: order.createdAt,
       items: order.items.map((item, index) => ({ key: String(index), productId: item.productId, title: item.productTitle,
-        quantity: item.quantity, weight: item.weight, unitPrice: item.unitPrice, totalPrice: item.totalPrice,
+        quantity: item.quantity, weight: item.weight, unitPrice: item.unitPrice, totalPrice: item.totalPrice, goldRevenueGrams: item.goldRevenueGrams, goldSale: item.goldSale,
         allocations: [], extraAssembly: 0 })),
       packaging: settings().packaging, shippingReceived: 0, shippingPaid: 0, otherCosts: 0, revision: 0,
     };
@@ -152,7 +171,7 @@ export function createAccounting(store: Store) {
       if (!previous) fail('خرید یافت نشد.', 404);
       if (previous.remaining !== previous.quantity || id.startsWith('return-')) fail('هزینهٔ خرید مصرف‌شده یا برگشتی قابل اصلاح نیست.', 409);
       const reason = text(body.reason, 'دلیل اصلاح', true);
-      const next = { ...previous, costs: costs(body.costs) };
+      const next = previous.goldPurchase ? { ...previous, goldPurchase: goldPurchase(body.goldPurchase) } : { ...previous, costs: costs(body.costs) };
       store.set('accountingPurchases', id, next);
       audit('اصلاح قیمت خرید', actor, id, { before: previous, after: next, reason }); result = next;
     } else if (action === 'money-void') {
@@ -181,7 +200,9 @@ export function createAccounting(store: Store) {
       if (!product) fail('محصول یافت نشد.', 404);
       if (!['opening', 'purchase'].includes(body.kind)) fail('نوع خرید نامعتبر است.');
       const count = quantity(body.quantity);
-      const componentCosts = costs(body.costs);
+      const grams = body.goldPurchase === undefined ? undefined : goldPurchase(body.goldPurchase);
+      if (grams && (product.pricingMode === 'fixed' || product.weight <= 0)) fail('ثبت طلایی فقط برای محصول دارای وزن طلاست.');
+      const componentCosts = grams ? emptyCosts() : costs(body.costs);
       if (body.kind === 'opening') {
         const held = list<Order>('orders').filter(order => order.status !== 'تکمیل شده' && !['لغو شده', 'رد شده'].includes(order.status) && !order.inventoryReleased)
           .reduce((sum, order) => sum + order.items.filter(item => item.productId === product.id).reduce((n, item) => n + item.quantity, 0), 0);
@@ -193,7 +214,7 @@ export function createAccounting(store: Store) {
         store.set('products', product.id, { ...product, stock: product.stock + count });
       }
       const lot: PurchaseLot = { id: crypto.randomUUID(), productId: product.id, title: product.title,
-        quantity: count, remaining: count, costs: componentCosts, kind: body.kind,
+        quantity: count, remaining: count, costs: componentCosts, ...(grams ? { goldPurchase: grams } : {}), kind: body.kind,
         supplier: text(body.supplier, 'تأمین‌کننده'), reference: text(body.reference, 'شماره فاکتور'),
         occurredAt: date(body.date), createdAt: new Date().toISOString(), actor };
       store.set('accountingPurchases', lot.id, lot);
@@ -207,7 +228,9 @@ export function createAccounting(store: Store) {
         const count = quantity(item.quantity); const unitPrice = money(item.unitPrice, 'قیمت فروش');
         requested.set(product.id, (requested.get(product.id) || 0) + count);
         return { productId: product.id, productTitle: product.title, productImage: product.images?.[0] || '', weight: product.weight,
-          unitPrice, quantity: count, totalPrice: unitPrice * count, goldPriceAtOrder: 0, makingChargePercent: 0 };
+          unitPrice, quantity: count, totalPrice: unitPrice * count, goldPriceAtOrder: 0, makingChargePercent: 0,
+          ...(product.pricingMode !== 'fixed' && product.weight > 0 && item.goldSale !== undefined ? { goldSale: goldSale(item.goldSale) } : {}),
+          ...(product.pricingMode !== 'fixed' && product.weight > 0 && item.goldSale === undefined && item.goldRevenueGrams !== undefined ? { goldRevenueGrams: gramNumber(item.goldRevenueGrams, 'معادل طلای فروش هر قطعه', 100000) } : {}) };
       });
       for (const [id, count] of requested) {
         const product = store.get<Product>('products', id)!;
@@ -243,8 +266,17 @@ export function createAccounting(store: Store) {
       for (const update of body.items) {
         const line = sale.items.find(item => item.key === update.key);
         if (!line) fail('ردیف سفارش یافت نشد.');
+        if (update.goldPurchase !== undefined) {
+          if (line.weight <= 0 || line.allocations.length || sale.costsLocked) fail('بهای طلای فروش قطعی یا کالای بدون طلا قابل جایگزینی نیست.', 409);
+          line.overrideGoldPurchase = goldPurchase(update.goldPurchase); line.overrideCosts = emptyCosts();
+        }
+        if (update.goldRevenueGrams !== undefined) {
+          if (line.weight <= 0 || line.goldSale || line.goldRevenueGrams !== undefined) fail('معادل طلای فروش قبلاً ثبت شده یا کالا بدون طلاست.', 409);
+          line.goldRevenueGrams = gramNumber(update.goldRevenueGrams, 'معادل طلای فروش', 100000);
+        }
         if (update.costs !== undefined) {
           if (line.allocations.length || sale.costsLocked) fail('قیمت خرید ثبت‌شدهٔ فروش قطعی قابل جایگزینی نیست.', 409);
+          if (line.overrideGoldPurchase) fail('خرید طلایی را به گرم ثبت کنید.');
           line.overrideCosts = costs(update.costs);
         }
         if (update.extraAssembly !== undefined) {
@@ -302,7 +334,7 @@ export function createAccounting(store: Store) {
       const previousShipping = previousReturns.filter(entry => entry.saleId === sale.id).reduce((sum, entry) => sum + entry.shippingRefund, 0);
       if (shippingRefund + previousShipping > sale.shippingReceived) fail('بازپرداخت ارسال بیش از هزینهٔ ارسال دریافتی است.');
       if (typeof body.restock !== 'boolean' || !Array.isArray(body.items) || body.items.length > sale.items.length) fail('جزئیات مرجوعی نامعتبر است.');
-      if (sale.recognizedAt && !sale.items.every(item => lineCost(item) !== null)) fail('پیش از مرجوعی، هزینهٔ خرید فروش را تکمیل کنید.', 409);
+      if (sale.recognizedAt && !sale.items.every(item => lineCost(item) !== null || lineGoldCost(item) !== null && (item.overrideGoldPurchase || item.allocations.some(layer => layer.unitGoldCost !== undefined)))) fail('پیش از مرجوعی، هزینهٔ خرید فروش را تکمیل کنید.', 409);
       const selected = new Set<string>();
       const items = body.items.map((item: any) => {
         const line = sale.items.find(line => line.key === item.key);
@@ -328,9 +360,12 @@ export function createAccounting(store: Store) {
         // The returned piece becomes a new cost lot; fabrication remains in its cost.
         const layers = returnedCostLayers(line, returnedQuantity(previousReturns, sale.id, line.key), item.quantity,
           lotId => store.get<PurchaseLot>('accountingPurchases', lotId)?.costs);
+        const goldLayers = returnedGoldLayers(line, returnedQuantity(previousReturns, sale.id, line.key), item.quantity);
         for (const [index, layer] of layers.entries()) {
+          const goldLayer = goldLayers[index];
+          const restoredGold = goldLayer?.unitGoldCost !== undefined && goldLayer.unitGoldWeight ? { weight: goldLayer.unitGoldWeight, costGrams: goldLayer.unitGoldCost, makingPercent: goldLayer.unitGoldMakingPercent ?? roundGrams((goldLayer.unitGoldCost / goldLayer.unitGoldWeight - 1) * 100) } : undefined;
           const lot: PurchaseLot = { id: `return-${entry.id}-${line.key}-${index}`, productId: product.id, title: line.title,
-            quantity: layer.quantity, remaining: layer.quantity, costs: layer.costs, kind: 'opening',
+            quantity: layer.quantity, remaining: layer.quantity, costs: layer.costs, ...(restoredGold ? { goldPurchase: restoredGold } : {}), kind: 'opening',
             supplier: 'برگشت سالم از مشتری', reference: entry.reference, occurredAt: entry.occurredAt, createdAt: new Date().toISOString(), actor };
           store.set('accountingPurchases', lot.id, lot);
         }
@@ -362,6 +397,28 @@ export function createAccounting(store: Store) {
     const entries = allEntries.filter(entry => !entry.voidedAt); const returns = list<ReturnEntry>('accountingReturns');
     const selected = sales.filter(sale => !channel || sale.channel === channel);
     const totals = Object.fromEntries(sales.map(sale => [sale.id, saleTotals(sale, entries, returns)]));
+    const goldTotals = Object.fromEntries(sales.map(sale => [sale.id, saleGoldTotals(sale, returns)]));
+    const gold = { revenueGrams: 0, costGrams: 0, profitGrams: 0 as number | null, knownProfitGrams: 0, missingCosts: 0,
+      purchasedWeightGrams: 0, purchaseCostGrams: 0, inventoryWeightGrams: 0, inventoryCostGrams: 0 };
+    for (const lot of purchases) if (lot.goldPurchase) {
+      gold.inventoryWeightGrams += lot.remaining * lot.goldPurchase.weight; gold.inventoryCostGrams += lot.remaining * lot.goldPurchase.costGrams;
+      if (!lot.id.startsWith('return-') && inRange(lot.occurredAt)) { gold.purchasedWeightGrams += lot.quantity * lot.goldPurchase.weight; gold.purchaseCostGrams += lot.quantity * lot.goldPurchase.costGrams; }
+    }
+    const addGold = (r: number, c: number | null, known = true) => {
+      gold.revenueGrams += r; gold.costGrams += c || 0;
+      if (!known || c === null) gold.missingCosts++; else gold.knownProfitGrams += r - c;
+    };
+    for (const sale of selected) {
+      if (!sale.recognizedAt) continue;
+      if (inRange(sale.recognizedAt)) { const original = saleGoldTotals(sale, []); addGold(original.revenueGrams, original.costGrams); }
+      const prior: ReturnEntry[] = [];
+      for (const entry of returns.filter(entry => entry.saleId === sale.id)) {
+        if (inRange(entry.occurredAt)) { const movement = goldReturnMovement(sale, entry, prior); addGold(-movement.revenueGrams, movement.costGrams === null ? null : -movement.costGrams, movement.known); }
+        prior.push(entry);
+      }
+    }
+    for (const key of Object.keys(gold)) if (key !== 'missingCosts' && key !== 'profitGrams') gold[key] = roundGrams(gold[key]);
+    gold.profitGrams = gold.missingCosts ? null : gold.knownProfitGrams;
     const daily = new Map<string, { day: string; revenue: number; profit: number | null }>();
     const byProduct = new Map<string, { productId: string; title: string; revenue: number; quantity: number; profit: number | null }>();
     const channelSummary = ['site', 'instagram'].map(name => ({ channel: name, revenue: 0, profit: 0 as number | null, missingCosts: 0 }));
@@ -424,15 +481,15 @@ export function createAccounting(store: Store) {
       const held = list<Order>('orders').filter(order => order.status !== 'تکمیل شده' && !['لغو شده', 'رد شده'].includes(order.status) && !order.inventoryReleased)
         .reduce((sum, order) => sum + order.items.filter(item => item.productId === product.id).reduce((n, item) => n + item.quantity, 0), 0);
       const known = purchases.filter(lot => lot.productId === product.id).reduce((sum, lot) => sum + lot.remaining, 0);
-      return { id: product.id, title: product.title, weight: product.weight, stock: product.stock ?? null, held,
+      return { id: product.id, title: product.title, weight: product.weight, isGold: product.pricingMode !== 'fixed' && product.weight > 0, goldSale: productGoldSale(product, store.get('settings', 'pricing') || DEFAULT_SETTINGS), stock: product.stock ?? null, held,
         knownQuantity: known, unknownQuantity: Math.max(0, (product.stock || 0) + held - known),
         inventoryCost: purchases.filter(lot => lot.productId === product.id).reduce((sum, lot) => sum + lot.remaining * costSum(lot.costs), 0) };
     });
     const unknownStock = catalog.reduce((sum, product) => sum + product.unknownQuantity, 0);
     const periodPurchases = purchases.filter(lot => lot.kind === 'purchase' && inRange(lot.occurredAt));
     return { catalog, revision: revision(), settings: settings(), purchases, sales, money: allEntries, returns,
-      audit: list<AccountingAudit>('accountingAudit').sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 200), totals,
-      report: { revenue, cost, expenses, profit: missingCosts ? null : revenue - cost - expenses, knownProfit, missingCosts, refunds,
+      audit: list<AccountingAudit>('accountingAudit').sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 200), totals, goldTotals,
+      report: { gold, revenue, cost, expenses, profit: missingCosts ? null : revenue - cost - expenses, knownProfit, missingCosts, refunds,
         inventoryCost: purchases.reduce((sum, lot) => sum + lot.remaining * costSum(lot.costs), 0), unknownStock,
         pendingSettlement: selected.reduce((sum, sale) => sum + totals[sale.id].pendingSettlement, 0),
         receivables: selected.filter(sale => !['لغو شده', 'رد شده'].includes(sale.status)).reduce((sum, sale) => sum + Math.max(0, totals[sale.id].balance), 0),

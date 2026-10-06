@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import { Store } from '../server/storage.ts';
+import { createAccounting } from '../server/accounting.ts';
+import { accountingDay, goldPurchaseCost, productGoldSale, goldSaleRevenue, emptyCosts } from '../src/utils/accounting.ts';
+import { DEFAULT_SETTINGS } from '../src/utils/pricingEngine.ts';
+const store = new Store({}); const acc = createAccounting(store); const date = accountingDay(); let sequence = 0;
+const product = { id: 'gram-gold', title: 'طلا', weight: 10, stock: 2, pricingMode: 'gold', images: [], customMakingChargePercent: 16.5, customProfitPercent: 7, discountPercent: 0 };
+store.set('products', product.id, product);
+const mutation = (action, body, actionId = `gold-check-${++sequence}`) => acc.mutate(action, { actionId, expectedRevision: acc.snapshot().revision, date, ...body }, 'test-admin');
+assert.equal(goldPurchaseCost(0.84, 16.5), 0.9786);
+const terms = productGoldSale(product, DEFAULT_SETTINGS);
+assert.equal(goldSaleRevenue(10, 9, terms), 11.5025);
+assert.equal(Number((goldSaleRevenue(10, 9, terms) - 10).toFixed(6)), 1.5025, 'First subtract wholesale percentage, then compound sale profit');
+assert.equal(goldSaleRevenue(10, 9, { ...terms, discountPercent: 10 }), 10.35225);
+assert.deepEqual(productGoldSale({ ...product, pearlPrice: 2000000, additionalCost: 900000 }, DEFAULT_SETTINGS), terms);
+assert.equal(productGoldSale({ ...product, pricingMode: 'fixed' }, DEFAULT_SETTINGS), undefined);
+assert.deepEqual(acc.snapshot().catalog[0].goldSale, terms);
+for (const bad of [null, { makingPercent: -1, profitPercent: 7, discountPercent: 0 }, { makingPercent: 16.5, profitPercent: 101, discountPercent: 0 }]) {
+  assert.throws(() => mutation('sale', { customerName: 'invalid', method: 'card_to_card', items: [{ productId: product.id, quantity: 1, unitPrice: 15000, goldSale: bad }] }));
+  assert.equal(acc.snapshot().sales.length, 0);
+}
+for (const goldPurchase of [{ weight: 0, makingPercent: 10 }, { weight: -1, makingPercent: 10 }, { weight: 1, makingPercent: 101 }, { weight: 1, makingPercent: -1 }, { weight: 0.1234567, makingPercent: 10 }, { weight: 1, makingPercent: NaN }]) {
+  assert.throws(() => mutation('purchase', { productId: product.id, kind: 'opening', quantity: 1, goldPurchase }));
+  assert.equal(acc.snapshot().purchases.length, 0);
+}
+const firstBody = { productId: product.id, kind: 'opening', quantity: 1, goldPurchase: { weight: 10, makingPercent: 10, costGrams: 900 }, costs: { ...emptyCosts(), gold: 99999999 } };
+const first = mutation('purchase', firstBody, 'gold-idempotent-0001');
+assert.equal(first.goldPurchase.costGrams, 11, 'Server computes cost and ignores supplied money or costGrams');
+assert.deepEqual(first.costs, emptyCosts());
+assert.equal(mutation('purchase', firstBody, 'gold-idempotent-0001').id, first.id);
+assert.equal(acc.snapshot().purchases.length, 1);
+const second = mutation('purchase', { productId: product.id, kind: 'opening', quantity: 1, goldPurchase: { weight: 10, makingPercent: 20 } });
+assert.equal(acc.snapshot().report.gold.inventoryCostGrams, 23);
+assert.equal(acc.snapshot().report.gold.purchasedWeightGrams, 20);
+assert.equal(acc.snapshot().report.cashMovement, 0, 'A purchase in grams is not a cash payment');
+const sale = mutation('sale', { customerName: 'آزمون', method: 'card_to_card', items: [{ productId: product.id, quantity: 2, unitPrice: 15000, goldSale: { makingPercent: 30, profitPercent: 7, discountPercent: 0 } }] });
+mutation('money', { saleId: sale.id, kind: 'receipt', method: 'card_to_card', amount: 30000, fee: 0, reference: 'GRAM-PAID', note: 'test' });
+mutation('complete', { saleId: sale.id });
+let snapshot = acc.snapshot(); assert.equal(snapshot.goldTotals[sale.id].profitGrams, 4.61); assert.equal(snapshot.report.gold.profitGrams, 4.61); assert.equal(snapshot.report.gold.costGrams, 20, 'Purchase net weight; wholesale charge was deducted before applying profit');
+assert.equal(snapshot.totals[sale.id].profit, null, 'Never subtract grams from monetary revenue');
+assert.throws(() => mutation('purchase-correction', { purchaseId: first.id, goldPurchase: { weight: 1, makingPercent: 0 }, reason: 'bad' }), /مصرف/);
+store.set('market', 'gold', { pricePerGram: 99999999 }); store.set('settings', 'pricing', { ...DEFAULT_SETTINGS, profitPercent: 50 });
+store.set('products', product.id, { ...store.get('products', product.id), customMakingChargePercent: 50 });
+assert.equal(acc.snapshot().goldTotals[sale.id].profitGrams, 4.61, 'Historical gram profit does not change with live rate or pricing edits');
+mutation('return', { saleId: sale.id, amount: 15000, shippingRefund: 0, restock: true, reference: 'GRAM-RETURN-1', note: 'return', items: [{ key: '0', quantity: 1 }] });
+snapshot = acc.snapshot(); assert.equal(snapshot.goldTotals[sale.id].profitGrams, 1.77); assert.equal(snapshot.report.gold.profitGrams, 1.77);
+assert.equal(snapshot.report.gold.inventoryWeightGrams, 10); assert.equal(snapshot.report.gold.inventoryCostGrams, 11, 'Return restores original FIFO gold cost, not average');
+const resale = mutation('sale', { customerName: 'بازفروش', method: 'card_to_card', items: [{ productId: product.id, quantity: 1, unitPrice: 15000, goldSale: { makingPercent: 30, profitPercent: 7, discountPercent: 0 } }] });
+mutation('money', { saleId: resale.id, kind: 'receipt', method: 'card_to_card', amount: 15000, fee: 0, reference: 'GRAM-REPAID', note: 'test' }); mutation('complete', { saleId: resale.id });
+assert.equal(acc.snapshot().goldTotals[resale.id].profitGrams, 2.84, 'Resale uses the returned cost layer');
+assert.equal(acc.snapshot().report.gold.profitGrams, 4.61);
+mutation('return', { saleId: sale.id, amount: 15000, shippingRefund: 0, restock: true, reference: 'GRAM-RETURN-2', note: 'return second layer', items: [{ key: '0', quantity: 1 }] });
+assert.equal(acc.snapshot().goldTotals[sale.id].profitGrams, 0); assert.equal(acc.snapshot().report.gold.inventoryCostGrams, second.goldPurchase.costGrams);
+const legacy = { id: 'legacy-gold-grams', trackingCode: 'LEGACY', status: 'تکمیل شده', createdAt: new Date().toISOString(), customerName: 'قدیمی', totalPrice: 15000,
+  items: [{ productId: 'old-product', productTitle: 'قدیمی', weight: 1, quantity: 1, unitPrice: 15000, totalPrice: 15000 }] };
+acc.syncOrder(legacy); assert.equal(acc.snapshot().goldTotals[legacy.id].profitGrams, null, 'Missing old gram data remains unknown');
+mutation('costs', { saleId: legacy.id, items: [{ key: '0', goldPurchase: { weight: 1, makingPercent: 10 }, goldRevenueGrams: 1.5, extraAssembly: 0 }], packaging: 0, shippingReceived: 0, shippingPaid: 0, otherCosts: 0 });
+assert.equal(acc.snapshot().goldTotals[legacy.id].profitGrams, 0.5);
+assert.throws(() => mutation('costs', { saleId: legacy.id, items: [{ key: '0', goldRevenueGrams: 2 }], packaging: 0, shippingReceived: 0, shippingPaid: 0, otherCosts: 0 }), /قبلاً/);
+console.log('PASS: gram purchase validation, rate-free pricing, FIFO profit, returns, resale, idempotency and legacy accounting');

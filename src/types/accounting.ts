@@ -1,15 +1,17 @@
 export type CostParts = { gold: number; making: number; pearl: number; assembly: number; other: number };
+export type GoldPurchase = { weight: number; makingPercent: number; costGrams: number };
+export type GoldSaleTerms = { makingPercent: number; profitPercent: number; discountPercent: number };
 export type AccountingSettings = { packaging: number; assembly: number };
 export type PurchaseLot = {
   id: string; productId: string; title: string; quantity: number; remaining: number;
-  costs: CostParts; kind: 'opening' | 'purchase'; supplier: string; reference: string;
+  costs: CostParts; goldPurchase?: GoldPurchase; kind: 'opening' | 'purchase'; supplier: string; reference: string;
   occurredAt: string; createdAt: string; actor: string;
 };
-export type CostAllocation = { lotId: string; quantity: number; unitCost: number };
+export type CostAllocation = { lotId: string; quantity: number; unitCost: number; unitGoldCost?: number; unitGoldWeight?: number; unitGoldMakingPercent?: number };
 export type AccountingLine = {
   key: string; productId: string; title: string; quantity: number; weight: number;
   unitPrice: number; totalPrice: number; allocations: CostAllocation[];
-  overrideCosts?: CostParts; extraAssembly: number;
+  overrideCosts?: CostParts; overrideGoldPurchase?: GoldPurchase; goldRevenueGrams?: number; goldSale?: GoldSaleTerms; extraAssembly: number;
 };
 export type AccountingSale = {
   id: string; orderId: string; trackingCode: string; channel: 'site' | 'instagram';
@@ -36,6 +38,7 @@ export type SaleTotals = {
   balance: number; pendingSettlement: number; fees: number; expenses: number; profit: number | null;
 };
 export type AccountingReport = {
+  gold: { revenueGrams: number; costGrams: number; profitGrams: number | null; knownProfitGrams: number; missingCosts: number; purchasedWeightGrams: number; purchaseCostGrams: number; inventoryWeightGrams: number; inventoryCostGrams: number };
   revenue: number; cost: number; expenses: number; profit: number | null; knownProfit: number;
   missingCosts: number; refunds: number; inventoryCost: number; unknownStock: number;
   pendingSettlement: number; receivables: number; cashMovement: number;
@@ -45,8 +48,8 @@ export type AccountingReport = {
   products: { productId: string; title: string; revenue: number; quantity: number; profit: number | null }[];
 };
 export type AccountingData = {
-  catalog: { id: string; title: string; weight: number; stock: number | null; held: number; knownQuantity: number; unknownQuantity: number; inventoryCost: number }[];
+  catalog: { id: string; title: string; weight: number; isGold: boolean; goldSale?: GoldSaleTerms; stock: number | null; held: number; knownQuantity: number; unknownQuantity: number; inventoryCost: number }[];
   revision: number; settings: AccountingSettings; purchases: PurchaseLot[]; sales: AccountingSale[];
   money: MoneyEntry[]; returns: ReturnEntry[]; audit: AccountingAudit[];
-  totals: Record<string, SaleTotals>; report: AccountingReport;
+  totals: Record<string, SaleTotals>; goldTotals: Record<string, { revenueGrams: number; costGrams: number | null; profitGrams: number | null }>; report: AccountingReport;
 };

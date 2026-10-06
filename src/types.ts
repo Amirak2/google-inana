@@ -105,6 +105,8 @@ export interface OrderItem {
   quantity: number;
   totalPrice: number;
   goldPriceAtOrder: number;
+  goldRevenueGrams?: number; // Explicit legacy proceeds per piece after wholesale charge; excludes fixed components.
+  goldSale?: import('./types/accounting').GoldSaleTerms;
   makingChargePercent: number;
 }
 
