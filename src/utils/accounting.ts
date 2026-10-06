@@ -1,8 +1,58 @@
 import type { AccountingSale, MoneyEntry, ReturnEntry, CostParts, AccountingLine } from '../types/accounting';
+import type { Product, PricingSettings } from '../types';
+
+export const roundGrams = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
+export const goldPurchaseCost = (weight: number, makingPercent: number) => roundGrams(weight * (1 + makingPercent / 100));
+export function productGoldRevenue(product: Product, settings: PricingSettings): number | undefined {
+  if (product.pricingMode === 'fixed' || product.weight <= 0) return undefined;
+  // INANA's gram ledger adds both sale percentages against the net gold weight.
+  return roundGrams(product.weight * (1 + ((product.customMakingChargePercent ?? settings.globalMakingChargePercent)
+    + (product.customProfitPercent ?? settings.profitPercent)) / 100) * (1 - product.discountPercent / 100));
+}
+export function lineGoldCost(line: AccountingLine): number | null {
+  if (line.weight <= 0) return 0;
+  if (line.overrideGoldPurchase) return roundGrams(line.overrideGoldPurchase.costGrams * line.quantity);
+  if (line.allocations.reduce((sum, layer) => sum + layer.quantity, 0) !== line.quantity || line.allocations.some(layer => layer.unitGoldCost === undefined)) return null;
+  return roundGrams(line.allocations.reduce((sum, layer) => sum + layer.quantity * layer.unitGoldCost!, 0));
+}
+export function goldReturnMovement(sale: AccountingSale, entry: ReturnEntry, previousReturns: ReturnEntry[] = []) {
+  const value = entry.items.reduce((sum, item) => sum + sale.items.find(line => line.key === item.key)!.unitPrice * item.quantity, 0);
+  const proceeds = entry.items.reduce((sum, item) => sum + (sale.items.find(line => line.key === item.key)!.goldRevenueGrams || 0) * item.quantity, 0);
+  const goldLines = entry.items.filter(item => sale.items.find(line => line.key === item.key)!.weight > 0);
+  const known = goldLines.every(item => { const line = sale.items.find(line => line.key === item.key)!; return line.goldRevenueGrams !== undefined && lineGoldCost(line) !== null; });
+  // Refunds reverse the same fraction of the original sale's gold proceeds.
+  const revenueGrams = roundGrams(proceeds * Math.min(1, (entry.amount - entry.shippingRefund) / Math.max(1, value)));
+  const costGrams = !entry.restock ? 0 : known ? roundGrams(goldLines.reduce((sum, item) => {
+    const line = sale.items.find(line => line.key === item.key)!;
+    return sum + returnedGoldLayers(line, returnedQuantity(previousReturns, sale.id, line.key), item.quantity).reduce((n, layer) => n + (layer.unitGoldCost || 0) * layer.quantity, 0);
+  }, 0)) : null;
+  return { revenueGrams, costGrams, known };
+}
+export function returnedGoldLayers(line: AccountingLine, skip: number, count: number): { quantity: number; unitGoldCost?: number; unitGoldWeight?: number }[] {
+  const layers = line.overrideGoldPurchase ? [{ quantity: line.quantity, unitGoldCost: line.overrideGoldPurchase.costGrams, unitGoldWeight: line.overrideGoldPurchase.weight }] : line.allocations;
+  const result: { quantity: number; unitGoldCost?: number; unitGoldWeight?: number }[] = [];
+  for (const layer of layers) { const offset = Math.min(skip, layer.quantity); skip -= offset; const take = Math.min(count, layer.quantity - offset);
+    if (take) { result.push({ quantity: take, unitGoldCost: layer.unitGoldCost, unitGoldWeight: layer.unitGoldWeight }); count -= take; } if (!count) break; }
+  return result;
+}
+export function saleGoldTotals(sale: AccountingSale, returns: ReturnEntry[]) {
+  const lines = sale.items.filter(line => line.weight > 0);
+  const known = lines.every(line => line.goldRevenueGrams !== undefined && lineGoldCost(line) !== null);
+  if (!sale.recognizedAt) return { revenueGrams: 0, costGrams: 0, profitGrams: 0 };
+  let revenueGrams = lines.reduce((sum, line) => sum + (line.goldRevenueGrams || 0) * line.quantity, 0);
+  let costGrams = lines.reduce((sum, line) => sum + (lineGoldCost(line) || 0), 0);
+  const previous: ReturnEntry[] = [];
+  for (const entry of returns.filter(entry => entry.saleId === sale.id)) {
+    const movement = goldReturnMovement(sale, entry, previous); revenueGrams -= movement.revenueGrams; costGrams -= movement.costGrams || 0;
+    previous.push(entry);
+  }
+  return { revenueGrams: roundGrams(revenueGrams), costGrams: known ? roundGrams(costGrams) : null, profitGrams: known ? roundGrams(revenueGrams - costGrams) : null };
+}
 
 export const emptyCosts = (): CostParts => ({ gold: 0, making: 0, pearl: 0, assembly: 0, other: 0 });
 export const costSum = (costs: CostParts): number => Object.values(costs).reduce((sum, value) => sum + value, 0);
 export function lineCost(line: AccountingLine): number | null {
+  if (line.overrideGoldPurchase || line.allocations.some(layer => layer.unitGoldCost !== undefined)) return null;
   if (line.overrideCosts) return (costSum(line.overrideCosts) + line.extraAssembly) * line.quantity;
   if (line.allocations.reduce((sum, allocation) => sum + allocation.quantity, 0) !== line.quantity) return null;
   return line.allocations.reduce((sum, allocation) => sum + allocation.quantity * allocation.unitCost, 0) + line.extraAssembly * line.quantity;

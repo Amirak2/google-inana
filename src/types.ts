@@ -105,6 +105,7 @@ export interface OrderItem {
   quantity: number;
   totalPrice: number;
   goldPriceAtOrder: number;
+  goldRevenueGrams?: number; // Gold proceeds per piece, frozen from sale percentages; excludes fixed components.
   makingChargePercent: number;
 }
 

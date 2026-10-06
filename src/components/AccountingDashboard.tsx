@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { readApiResponse } from '../utils/apiResponse';
 import { formatToman, toPersianDigits } from '../utils/persianFormatter';
-import { accountingDay, costSum, emptyCosts, lineCost, returnedQuantity, safeCsv, latinDigits } from '../utils/accounting';
+import { accountingDay, costSum, emptyCosts, lineCost, returnedQuantity, safeCsv, latinDigits, goldPurchaseCost, lineGoldCost } from '../utils/accounting';
 import type { AccountingData, AccountingSale, CostParts } from '../types/accounting';
 
 const panel = 'bg-[#0A1120] border border-slate-800 rounded-2xl p-4 sm:p-5';
@@ -15,13 +15,22 @@ const moneyKinds: Record<string, string> = { receipt: 'دریافت وجه مش�
 const titles: Record<string, string> = { purchase: 'ثبت خرید و موجودی اولیه', 'purchase-correction': 'اصلاح قیمت خرید', 'money-void': 'ابطال ثبت اشتباه', sale: 'ثبت فروش اینستاگرام', costs: 'هزینه‌های سفارش', return: 'مرجوعی و بازپرداخت', settings: 'هزینه‌های پیش‌فرض', ...moneyKinds };
 const costLabels: Record<keyof CostParts, string> = { gold: 'اصل طلای خریداری‌شده', making: 'اجرت خرید طلا', pearl: 'خرید مروارید', assembly: 'ساخت محصول آماده', other: 'سایر هزینه‌های خرید' };
 const dateText = (iso: string) => toPersianDigits(accountingDay(iso));
-const numberValue = (value: string) => { const normalized = latinDigits(value).replace(/[,٬\s]/g, ''); return normalized === '' ? '' : normalized; };
+const numberValue = (value: string) => latinDigits(value).replace(/٫/g, '.').replace(/[,٬\s]/g, '');
+const gramsText = (value: number) => `${toPersianDigits(Number(value.toFixed(6)))} گرم`;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block space-y-1.5 text-xs text-slate-400"><span>{label}</span>{children}</label>;
 }
-function NumberField({ label, value, onChange, required = true }: { key?: string; label: string; value: any; onChange: (value: any) => void; required?: boolean }) {
-  return <Field label={label}><input className={inputClass} inputMode="numeric" value={value} required={required} onChange={event => onChange(numberValue(event.target.value))} /></Field>;
+function NumberField({ label, value, onChange, required = true, decimal = false }: { key?: string; label: string; value: any; onChange: (value: any) => void; required?: boolean; decimal?: boolean }) {
+  return <Field label={label}><input className={inputClass} inputMode={decimal ? 'decimal' : 'numeric'} value={value} required={required} onChange={event => onChange(numberValue(event.target.value))} /></Field>;
+}
+function GoldFields({ value, onChange }: { value: { weight: any; makingPercent: any }; onChange: (value: any) => void }) {
+  const valid = Number(value.weight) > 0 && Number(value.weight) <= 10000 && String(value.makingPercent).trim() !== '' && Number(value.makingPercent) >= 0 && Number(value.makingPercent) <= 100;
+  return <div className="space-y-3"><div className="grid sm:grid-cols-2 gap-3">
+    <NumberField decimal label="وزن طلای هر قطعه — گرم" value={value.weight} onChange={weight => onChange({ ...value, weight })} />
+    <NumberField decimal label="اجرت بنکدار — درصد" value={value.makingPercent} onChange={makingPercent => onChange({ ...value, makingPercent })} />
+  </div><p className="text-sm text-[#D4AF37]">بهای خرید وزنی هر قطعه: {valid ? gramsText(goldPurchaseCost(Number(value.weight), Number(value.makingPercent))) : 'وزن و اجرت را وارد کنید'}</p>
+  <p className="text-xs text-slate-400">وزن × (۱ + اجرت بنکدار ÷ ۱۰۰). نرخ روز طلا در این محاسبه دخالت ندارد.</p></div>;
 }
 function CostFields({ value, onChange }: { value: CostParts; onChange: (value: CostParts) => void }) {
   return <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{Object.keys(costLabels).map(key => <NumberField key={key} label={`${costLabels[key]} — تومان برای هر عدد`} value={value[key]} onChange={next => onChange({ ...value, [key]: next })} />)}</div>;
@@ -97,12 +106,12 @@ export function AccountingDashboard() {
 
   function open(kind: string, sale?: AccountingSale, productId?: string) {
     setError(''); setSuccess(''); setActionTarget(sale?.id || '');
-    if (kind === 'purchase') setDraft({ productId: productId || products[0]?.id || '', kind: 'opening', quantity: String(productId ? Math.max(1, products.find(product => product.id === productId)?.unknownQuantity || 1) : 1), costs: emptyCosts(), supplier: '', reference: '', date: today });
+    if (kind === 'purchase') setDraft({ productId: productId || products[0]?.id || '', kind: 'opening', quantity: String(productId ? Math.max(1, products.find(product => product.id === productId)?.unknownQuantity || 1) : 1), costs: emptyCosts(), goldPurchase: { weight: String(products.find(product => product.id === (productId || products[0]?.id))?.weight || ''), makingPercent: '' }, supplier: '', reference: '', date: today });
     else if (kind === 'sale') setDraft({ customerName: '', customerPhone: '', customerAddress: '', method: 'card_to_card', date: today, exchangeForSaleId: '', items: [{ productId: products[0]?.id || '', quantity: '1', unitPrice: '' }] });
     else if (kind === 'settings') setDraft({ ...data!.settings });
     else if (kind === 'costs' && sale) setDraft({ packaging: sale.packaging, shippingReceived: sale.shippingReceived, shippingPaid: sale.shippingPaid, otherCosts: sale.otherCosts,
       expensesDate: sale.expensesAt ? accountingDay(sale.expensesAt) : '', recognizedDate: sale.recognizedAt ? accountingDay(sale.recognizedAt) : '', reason: '',
-      items: sale.items.map(line => ({ key: line.key, costs: line.overrideCosts || emptyCosts(), enterCosts: !!line.overrideCosts, extraAssembly: line.extraAssembly })) });
+      items: sale.items.map(line => ({ key: line.key, costs: line.overrideCosts || emptyCosts(), goldPurchase: line.overrideGoldPurchase || { weight: String(line.weight), makingPercent: '' }, goldRevenueGrams: '', enterCosts: !!line.overrideCosts, extraAssembly: line.extraAssembly })) });
     else if (kind === 'return' && sale) setDraft({ amount: '', shippingRefund: 0, restock: true, reference: '', note: '', date: today,
       items: sale.recognizedAt ? sale.items.map(line => ({ key: line.key, quantity: '0' })) : [] });
     else setDraft({ amount: sale ? (kind === 'settlement' ? data!.totals[sale.id].pendingSettlement : Math.max(0, data!.totals[sale.id].balance)) : '', fee: 0,
@@ -134,14 +143,16 @@ export function AccountingDashboard() {
     try {
       const n = (value: any) => { if (String(value).trim() === '' || !/^\d+$/.test(String(value))) throw new Error('مبلغ و تعداد را با عدد صحیح وارد کنید.'); return Number(value); };
       const convertCosts = (value: CostParts) => Object.fromEntries(Object.entries(value).map(([key, value]) => [key, n(value)]));
-      if (dialog === 'purchase') await perform('purchase', { ...draft, quantity: n(draft.quantity), costs: convertCosts(draft.costs) });
-      else if (dialog === 'purchase-correction') await perform('purchase-correction', { purchaseId: actionTarget, costs: convertCosts(draft.costs), reason: draft.reason });
+      const decimal = (value: any) => { const normalized = numberValue(String(value)); if (!/^\d+(?:\.\d{1,6})?$/.test(normalized)) throw new Error('وزن و درصد را با عدد معتبر و حداکثر شش رقم اعشار وارد کنید.'); return Number(normalized); };
+      const convertGold = (value: any) => ({ weight: decimal(value.weight), makingPercent: decimal(value.makingPercent) });
+      if (dialog === 'purchase') { const { costs, goldPurchase, ...rest } = draft; await perform('purchase', { ...rest, quantity: n(draft.quantity), ...(products.find(product => product.id === draft.productId)?.isGold ? { goldPurchase: convertGold(goldPurchase) } : { costs: convertCosts(costs) }) }); }
+      else if (dialog === 'purchase-correction') await perform('purchase-correction', { purchaseId: actionTarget, ...(draft.goldPurchase ? { goldPurchase: convertGold(draft.goldPurchase) } : { costs: convertCosts(draft.costs) }), reason: draft.reason });
       else if (dialog === 'money-void') await perform('money-void', { entryId: actionTarget, reason: draft.reason });
-      else if (dialog === 'sale') await perform('sale', { ...draft, items: draft.items.map((item: any) => ({ ...item, quantity: n(item.quantity), unitPrice: n(item.unitPrice) })) });
+      else if (dialog === 'sale') await perform('sale', { ...draft, items: draft.items.map((item: any) => ({ productId: item.productId, quantity: n(item.quantity), unitPrice: n(item.unitPrice), ...(products.find(product => product.id === item.productId)?.isGold ? { goldRevenueGrams: decimal(item.goldRevenueGrams ?? '') } : {}) })) });
       else if (dialog === 'settings') await perform('settings', { packaging: n(draft.packaging), assembly: n(draft.assembly) });
       else if (dialog === 'costs') await perform('costs', { ...draft, saleId: actionTarget,
         packaging: n(draft.packaging), shippingReceived: n(draft.shippingReceived), shippingPaid: n(draft.shippingPaid), otherCosts: n(draft.otherCosts),
-        items: draft.items.map((item: any) => ({ key: item.key, ...(item.enterCosts && !selectedSale?.costsLocked ? { costs: convertCosts(item.costs) } : {}), extraAssembly: n(item.extraAssembly) })) });
+        items: draft.items.map((item: any, index: number) => ({ key: item.key, ...(item.enterCosts && !selectedSale?.costsLocked ? selectedSale!.items[index].weight > 0 ? { goldPurchase: convertGold(item.goldPurchase) } : { costs: convertCosts(item.costs) } : {}), ...(selectedSale!.items[index].weight > 0 && selectedSale!.items[index].goldRevenueGrams === undefined && item.goldRevenueGrams !== '' ? { goldRevenueGrams: decimal(item.goldRevenueGrams) } : {}), extraAssembly: n(item.extraAssembly) })) });
       else if (dialog === 'return') await perform('return', { ...draft, saleId: actionTarget, amount: n(draft.amount), shippingRefund: n(draft.shippingRefund),
         items: draft.items.map((item: any) => ({ ...item, quantity: n(item.quantity) })).filter((item: any) => item.quantity > 0) });
       else if (dialog) await perform('money', { ...draft, kind: dialog, ...(actionTarget ? { saleId: actionTarget } : {}), amount: n(draft.amount), fee: n(draft.fee) });
@@ -150,7 +161,7 @@ export function AccountingDashboard() {
   function exportCsv() {
     if (!data) return;
     const report = data.report;
-    const rows: unknown[][] = [['گزارش حسابداری اینانا', from, to, channel || 'همهٔ کانال‌ها'], ['فروش خالص', report.revenue], ['هزینهٔ کالای فروخته‌شدهٔ دارای قیمت خرید', report.cost], ['هزینه‌های ثبت‌شده', report.expenses], ['سود خالص', report.profit ?? 'اطلاعات خرید ناقص'], [],
+    const rows: unknown[][] = [['گزارش حسابداری اینانا', from, to, channel || 'همهٔ کانال‌ها'], ['فروش خالص', report.revenue], ['هزینهٔ کالای فروخته‌شدهٔ دارای قیمت خرید', report.cost], ['هزینه‌های ثبت‌شده', report.expenses], ['سود تومانی', report.profit ?? 'خرید طلایی به گرم / اطلاعات ناقص'], ['سود وزنی طلا — گرم', report.gold.profitGrams ?? 'اطلاعات طلایی ناقص'], ['فروش وزنی طلا — گرم', report.gold.revenueGrams], ['بهای طلایی فروش — گرم', report.gold.costGrams], ['خرید طلا — گرم', report.gold.purchasedWeightGrams], ['بهای خرید طلا با اجرت — گرم', report.gold.purchaseCostGrams], ['موجودی خالص طلا — گرم', report.gold.inventoryWeightGrams], ['بهای موجودی طلا — گرم', report.gold.inventoryCostGrams], [],
       ['کد سفارش', 'کانال', 'تاریخ سفارش', 'تاریخ تکمیل', 'فروش خالص کل عمر سفارش', 'هزینهٔ کالا', 'هزینهٔ سفارش', 'سود کل عمر سفارش', 'دریافت', 'بازپرداخت', 'ماندهٔ تسویهٔ پاسارگاد']];
     for (const sale of data.sales.filter(sale => (!channel || sale.channel === channel))) {
       const totals = data.totals[sale.id]; rows.push([sale.trackingCode, sale.channel === 'site' ? 'سایت' : 'اینستاگرام', accountingDay(sale.createdAt), sale.recognizedAt ? accountingDay(sale.recognizedAt) : '', totals.revenue, totals.cost ?? 'ناقص', totals.expenses, totals.profit ?? 'ناقص', totals.paid, totals.refunded, totals.pendingSettlement]);
@@ -173,7 +184,7 @@ export function AccountingDashboard() {
 
   return <div dir="rtl" className="space-y-5 text-slate-200" aria-label="حسابداری خصوصی ادمین">
     <div className={`${panel} flex flex-col sm:flex-row gap-4 justify-between`}>
-      <div><div className="flex items-center gap-2 text-[#D4AF37]"><ShieldCheck size={20} /><h2 className="text-xl font-bold">حسابداری و سود اینانا</h2></div><p className="mt-2 text-xs text-slate-400">خرید، فروش سایت و اینستاگرام، هزینه‌ها و مرجوعی — همهٔ مبالغ به تومان</p></div>
+      <div><div className="flex items-center gap-2 text-[#D4AF37]"><ShieldCheck size={20} /><h2 className="text-xl font-bold">حسابداری و سود اینانا</h2></div><p className="mt-2 text-xs text-slate-400">خرید و سود طلا به گرم؛ مروارید، هزینه‌ها و گردش پول به تومان</p></div>
       <div className="flex flex-wrap gap-2"><button className={buttonClass} onClick={() => open('settings')} disabled={!data || busy}><Settings size={15} />هزینه‌های پیش‌فرض</button><button className={buttonClass} onClick={() => void load()} disabled={busy || loading}><RefreshCw size={15} />تازه‌سازی</button><button className={buttonClass} onClick={exportCsv} disabled={!data}><Download size={15} />خروجی اکسل CSV</button></div>
     </div>
     {!dialog && error && <div role="alert" className="bg-red-950/40 border border-red-800 rounded-xl p-3 text-sm text-red-300">{error}<button className={`${buttonClass} mr-3`} onClick={() => void load()}>تازه‌سازی</button></div>}
@@ -189,12 +200,18 @@ export function AccountingDashboard() {
     {data && <>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">{[
         { label: 'فروش خالص بازه', value: formatToman(data.report.revenue), icon: Wallet },
-        { label: 'سود خالص بازه', value: data.report.profit === null ? 'قیمت خرید ناقص است' : formatToman(data.report.profit), icon: TrendingUp },
+        { label: 'سود تومانی بازه', value: data.report.profit === null ? 'حساب طلایی جداست / خرید ناقص' : formatToman(data.report.profit), icon: TrendingUp },
         { label: 'ارزش موجودی دارای قیمت خرید', value: formatToman(data.report.inventoryCost), icon: Package },
         { label: 'منتظر تسویهٔ پاسارگاد', value: formatToman(data.report.pendingSettlement), icon: ArrowDownLeft },
       ].map(card => <div key={card.label} className={panel}><div className="flex justify-between text-xs text-slate-400"><span>{card.label}</span><card.icon size={18} className="text-[#D4AF37]" /></div><p className="text-lg font-bold mt-4 text-white">{card.value}</p></div>)}</div>
+      {<div className={panel} aria-label="گزارش وزنی طلا"><h3 className="font-bold text-[#D4AF37]">حساب طلا — گرم</h3><div className="grid sm:grid-cols-3 gap-4 mt-4 text-sm">
+        <p>سود وزنی طلا در بازه: <strong>{data.report.gold.profitGrams === null ? 'اطلاعات خرید یا فروش طلا ناقص است' : gramsText(data.report.gold.profitGrams)}</strong></p>
+        <p>فروش وزنی طلا: {gramsText(data.report.gold.revenueGrams)}</p><p>بهای طلایی کالای فروخته‌شده: {gramsText(data.report.gold.costGrams)}</p>
+        <p>وزن خرید ثبت‌شده در بازه: {gramsText(data.report.gold.purchasedWeightGrams)}</p><p>بهای خرید با اجرت بنکدار: {gramsText(data.report.gold.purchaseCostGrams)}</p>
+        <p>موجودی خالص طلا: {gramsText(data.report.gold.inventoryWeightGrams)} · بهای وزنی: {gramsText(data.report.gold.inventoryCostGrams)}</p>
+      </div><p className="text-xs text-slate-400 mt-3 leading-7">سود وزنی = مبنای وزنی بخش طلایی فروش پس از تخفیف − وزن خرید با اجرت بنکدار. اجرت بنکدار فقط یک‌بار کسر می‌شود. بدون تخفیف: وزن × (اجرت فروش − اجرت بنکدار + درصد سود) ÷ ۱۰۰؛ مثلاً ۱۶٫۵٪ − ۹٪ + ۷٪ = ۱۴٫۵٪. اجرت و سود فروش هنگام سفارش حفظ می‌شوند؛ نرخ روز، مروارید و هزینه‌های تومانی در سود وزنی دخالت ندارند. برای خریدهای قدیمیِ تومانی، دادهٔ وزنی را از فاکتور تکمیل کنید.</p></div>}
       {(data.report.missingCosts > 0 || data.report.unknownStock > 0) && <div className="rounded-xl border border-amber-600/40 bg-amber-950/30 p-4 text-xs text-amber-200 leading-7">
-        {toPersianDigits(data.report.missingCosts)} فروش این بازه و {toPersianDigits(data.report.unknownStock)} عدد موجودی، قیمت خرید کامل ندارند. ابتدا موجودی اولیه و هزینه‌های سفارش را ثبت کنید؛ سود قطعی تا تکمیل قیمت خرید نمایش داده نمی‌شود.
+        {toPersianDigits(data.report.missingCosts)} فروش این بازه و {toPersianDigits(data.report.unknownStock)} عدد موجودی، قیمت خرید کامل ندارند. ابتدا موجودی اولیه و هزینه‌های سفارش را ثبت کنید؛ سود تومانی برای خریدهای طلایی بدون تبدیل نرخ محاسبه نمی‌شود؛ گزارش طلا را به گرم بخوانید.
       </div>}
       <div className="flex flex-wrap gap-2">
         <button className={primary} disabled={busy} onClick={() => open('purchase')}><Plus size={16} />خرید / موجودی اولیه</button>
@@ -222,9 +239,10 @@ export function AccountingDashboard() {
         {data.sales.filter(sale => (!channel || sale.channel === channel) && `${sale.customerName} ${sale.trackingCode}`.includes(search)).map(sale => {
           const totals = data.totals[sale.id];
           return <article key={sale.id} className={panel}>
-            <div className="flex flex-wrap justify-between gap-3"><div><h3 className="font-bold text-white">{sale.customerName} <span className="text-xs text-[#D4AF37] mr-2">{sale.trackingCode}</span></h3><p className="text-xs text-slate-400 mt-2">{sale.channel === 'site' ? 'سایت' : 'اینستاگرام'} · {dateText(sale.createdAt)} · {sale.status}</p>{sale.exchangeForSaleId && <p className="text-xs text-slate-500 mt-1">تعویض مرتبط با {data.sales.find(previous => previous.id === sale.exchangeForSaleId)?.trackingCode || sale.exchangeForSaleId}</p>}</div><div className="text-left text-xs"><p>فروش: {formatToman(sale.totalPrice)}</p><p className="mt-2 text-emerald-300">سود: {!sale.recognizedAt ? 'پس از تکمیل فروش' : totals.profit === null ? 'قیمت خرید ناقص' : formatToman(totals.profit)}</p></div></div>
+            <div className="flex flex-wrap justify-between gap-3"><div><h3 className="font-bold text-white">{sale.customerName} <span className="text-xs text-[#D4AF37] mr-2">{sale.trackingCode}</span></h3><p className="text-xs text-slate-400 mt-2">{sale.channel === 'site' ? 'سایت' : 'اینستاگرام'} · {dateText(sale.createdAt)} · {sale.status}</p>{sale.exchangeForSaleId && <p className="text-xs text-slate-500 mt-1">تعویض مرتبط با {data.sales.find(previous => previous.id === sale.exchangeForSaleId)?.trackingCode || sale.exchangeForSaleId}</p>}</div><div className="text-left text-xs"><p>فروش: {formatToman(sale.totalPrice)}</p><p className="mt-2 text-emerald-300">سود تومانی: {!sale.recognizedAt ? 'پس از تکمیل فروش' : totals.profit === null ? 'حساب طلایی جداست / خرید ناقص' : formatToman(totals.profit)}</p></div></div>
+            {sale.items.some(line => line.weight > 0) && <p className="text-sm text-[#D4AF37] mt-3">سود طلا: {!sale.recognizedAt ? 'پس از تکمیل فروش' : data.goldTotals[sale.id].profitGrams === null ? 'اطلاعات طلایی ناقص' : gramsText(data.goldTotals[sale.id].profitGrams! )}</p>}
             <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-400 mt-4"><span>دریافت: {formatToman(totals.paid)}</span><span>بازپرداخت: {formatToman(totals.refunded)}</span><span>مانده: {formatToman(totals.balance)}</span><span>تسویهٔ درگاه: {formatToman(totals.pendingSettlement)}</span></div>
-            <div className="text-xs text-slate-500 space-y-1 mt-3">{sale.items.map(line => <p key={line.key}>{line.title} × {toPersianDigits(line.quantity)} — هزینهٔ خرید کل: {lineCost(line) === null ? 'ثبت نشده' : formatToman(lineCost(line))}</p>)}</div>
+            <div className="text-xs text-slate-500 space-y-1 mt-3">{sale.items.map(line => <p key={line.key}>{line.title} × {toPersianDigits(line.quantity)} — هزینهٔ خرید کل: {lineGoldCost(line) !== null && line.weight > 0 ? gramsText(lineGoldCost(line)!) : lineCost(line) === null ? 'ثبت نشده' : formatToman(lineCost(line))}</p>)}</div>
             <div className="flex flex-wrap gap-2 mt-4">
               <button className={buttonClass} disabled={busy} onClick={() => open('costs', sale)}>ثبت / مشاهدهٔ هزینه‌ها</button>
               <button className={buttonClass} disabled={busy || totals.balance <= 0 || ['لغو شده', 'رد شده'].includes(sale.status)} onClick={() => open('receipt', sale)}>دریافت وجه</button>
@@ -235,7 +253,7 @@ export function AccountingDashboard() {
           </article>;
         })}
       </div>}
-      {section === 'purchases' && <div className="space-y-3"><p className="text-xs text-slate-400">موجودی اولیه فقط هزینهٔ کالاهای موجود را ثبت می‌کند. خرید جدید، تعداد موجودی فروشگاه را هم افزایش می‌دهد. قیمت خرید هر قطعه در همان نوبت خرید حفظ می‌شود.</p>{!data.purchases.length && <p className={panel}>هنوز قیمت خریدی ثبت نشده است.</p>}{data.purchases.map(lot => <div className={panel} key={lot.id}><div className="flex flex-wrap justify-between gap-2"><strong>{lot.title}</strong><span className="text-xs text-slate-400">{dateText(lot.occurredAt)} · {lot.kind === 'purchase' ? 'خرید جدید' : lot.supplier === 'برگشت سالم از مشتری' ? 'برگشت سالم' : 'موجودی اولیه'}</span></div><p className="text-sm mt-3">خرید هر عدد: {formatToman(costSum(lot.costs))} · تعداد: {toPersianDigits(lot.quantity)} · باقی‌مانده: {toPersianDigits(lot.remaining)}</p><p className="text-xs text-slate-500 mt-2">{lot.supplier} {lot.reference && `· فاکتور ${lot.reference}`}</p>{lot.remaining === lot.quantity && !lot.id.startsWith('return-') && <button className={`${buttonClass} mt-3`} disabled={busy} onClick={() => { setActionTarget(lot.id); setDraft({ costs: lot.costs, reason: '' }); setError(''); setDialog('purchase-correction'); }}>اصلاح قیمت خرید</button>}</div>)}</div>}
+      {section === 'purchases' && <div className="space-y-3"><p className="text-xs text-slate-400">موجودی اولیه فقط هزینهٔ کالاهای موجود را ثبت می‌کند. خرید جدید، تعداد موجودی فروشگاه را هم افزایش می‌دهد. قیمت خرید هر قطعه در همان نوبت خرید حفظ می‌شود.</p>{!data.purchases.length && <p className={panel}>هنوز قیمت خریدی ثبت نشده است.</p>}{data.purchases.map(lot => <div className={panel} key={lot.id}><div className="flex flex-wrap justify-between gap-2"><strong>{lot.title}</strong><span className="text-xs text-slate-400">{dateText(lot.occurredAt)} · {lot.kind === 'purchase' ? 'خرید جدید' : lot.supplier === 'برگشت سالم از مشتری' ? 'برگشت سالم' : 'موجودی اولیه'}</span></div><p className="text-sm mt-3">خرید هر عدد: {lot.goldPurchase ? gramsText(lot.goldPurchase.costGrams) : formatToman(costSum(lot.costs))} {lot.goldPurchase && ` (وزن ${gramsText(lot.goldPurchase.weight)}؛ اجرت ${toPersianDigits(lot.goldPurchase.makingPercent)}٪)`} · تعداد: {toPersianDigits(lot.quantity)} · باقی‌مانده: {toPersianDigits(lot.remaining)}</p><p className="text-xs text-slate-500 mt-2">{lot.supplier} {lot.reference && `· فاکتور ${lot.reference}`}</p>{lot.remaining === lot.quantity && !lot.id.startsWith('return-') && <button className={`${buttonClass} mt-3`} disabled={busy} onClick={() => { setActionTarget(lot.id); setDraft({ costs: lot.costs, goldPurchase: lot.goldPurchase, reason: '' }); setError(''); setDialog('purchase-correction'); }}>اصلاح قیمت خرید</button>}</div>)}</div>}
       {section === 'money' && <div className="space-y-3"><p className="text-xs text-slate-400">دریافت پاسارگاد تا ثبت تسویه، وجه منتظر تسویه محسوب می‌شود. کارمزد واقعی را یک‌بار، هنگام دریافت یا تسویه وارد کنید.</p>{[...data.money].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).map(entry => <div key={entry.id} className={panel}><div className="flex flex-wrap justify-between gap-2"><strong>{moneyKinds[entry.kind]} {entry.voidedAt && <span className="text-red-300">— باطل‌شده</span>}</strong><span>{formatToman(entry.amount)}</span></div><p className="text-xs text-slate-400 mt-2">{dateText(entry.occurredAt)} · {entry.method === 'pasargad' ? 'پاسارگاد' : 'حساب بانکی / کارت‌به‌کارت'} · {entry.reference}</p><p className="text-xs mt-2">{entry.note} {entry.fee > 0 && `· کارمزد ${formatToman(entry.fee)}`}</p>{entry.voidedAt ? <p className="text-xs text-slate-500 mt-2">دلیل ابطال: {entry.voidReason}</p> : <button className={`${buttonClass} mt-3`} disabled={busy} onClick={() => { setActionTarget(entry.id); setDraft({ reason: '' }); setError(''); setDialog('money-void'); }}>ابطال ثبت اشتباه</button>}</div>)}{data.returns.map(entry => <div key={entry.id} className={panel}><strong>بازپرداخت مشتری: {formatToman(entry.amount)}</strong><p className="text-xs text-slate-400 mt-2">{dateText(entry.occurredAt)} · {entry.reference} · {entry.note}</p></div>)}</div>}
       {section === 'reports' && <div className="space-y-4">
         <div className={`${panel} grid sm:grid-cols-2 gap-4 text-sm`}><p>تعداد سفارش‌های سایت در بازه: {toPersianDigits(data.report.siteOrderCount)}</p><p>تعداد خالص کالاهای فروخته‌شدهٔ سایت: {toPersianDigits(data.report.siteSoldQuantity)}</p><p>خرید جدید ثبت‌شدهٔ کل کسب‌وکار در بازه: {formatToman(data.report.purchaseAmount)}</p><p>تعداد خرید جدید: {toPersianDigits(data.report.purchaseQuantity)}</p></div>
@@ -251,15 +269,14 @@ export function AccountingDashboard() {
         <div className="flex justify-between gap-3 mb-5"><div><h3 id="accounting-dialog-title" className="font-bold text-lg text-white">{titles[dialog]}</h3>{selectedSale && <p className="text-xs text-slate-400 mt-1">{selectedSale.customerName} · {selectedSale.trackingCode}</p>}</div><button className={buttonClass} aria-label="بستن فرم حسابداری" disabled={busy} onClick={() => setDialog(null)}><X size={16} /></button></div>
         <form onSubmit={submit} className="space-y-4">
           {dialog === 'settings' && <><p className="text-xs text-slate-400">این مقادیر برای ثبت‌های جدید هستند. مبلغ سفارش‌های قبلی حفظ می‌شود.</p>{moneyInput('packaging', 'هزینهٔ بسته‌بندی هر سفارش — تومان')}{moneyInput('assembly', 'هزینهٔ ساخت هر گردنبند مروارید — تومان')}</>}
-          {dialog === 'purchase-correction' && <><CostFields value={draft.costs} onChange={value => edit('costs', value)} />{textInput('reason', 'دلیل اصلاح قیمت خرید', true)}<p className="text-xs text-slate-400">فقط خریدی که هنوز در فروش مصرف نشده قابل اصلاح است. سابقهٔ قیمت قبلی حفظ می‌شود.</p></>}
+          {dialog === 'purchase-correction' && <>{draft.goldPurchase ? <GoldFields value={draft.goldPurchase} onChange={value => edit('goldPurchase', value)} /> : <CostFields value={draft.costs} onChange={value => edit('costs', value)} />}{textInput('reason', 'دلیل اصلاح قیمت خرید', true)}<p className="text-xs text-slate-400">فقط خریدی که هنوز در فروش مصرف نشده قابل اصلاح است. سابقهٔ قیمت قبلی حفظ می‌شود.</p></>}
           {dialog === 'money-void' && <><p className="text-sm text-amber-200">این کار فقط ثبت اشتباه را از محاسبات خارج می‌کند و وجهی جابه‌جا نمی‌کند. برای پولی که واقعاً به مشتری پس داده‌ای، «مرجوعی / بازپرداخت» را ثبت کن.</p>{textInput('reason', 'دلیل ابطال ثبت اشتباه', true)}</>}
           {dialog === 'purchase' && <>
-            {productSelect(draft.productId, next => edit('productId', next))}
+            {productSelect(draft.productId, next => setDraft((previous: any) => ({ ...previous, productId: next, costs: emptyCosts(), goldPurchase: { weight: String(products.find(product => product.id === next)?.weight || ''), makingPercent: '' } })))}
             <Field label="نوع ثبت"><select className={inputClass} value={draft.kind} onChange={event => edit('kind', event.target.value)}><option value="opening">موجودی اولیه — بدون افزایش تعداد سایت</option><option value="purchase">خرید جدید — افزایش تعداد سایت</option></select></Field>
-            <p className="text-xs text-slate-400">قیمت‌ها برای هر عدد هستند. برای قطعات با قیمت خرید متفاوت، ثبت جدا انجام دهید. برای سفارش‌های قدیمیِ فروخته‌شده، هزینه را در کارت همان سفارش وارد کنید.</p>
+            <p className="text-xs text-slate-400">وزن و اجرت برای هر قطعه هستند؛ تعداد جداگانه اعمال می‌شود. برای خریدهای با اجرت متفاوت، ثبت جدا انجام دهید.</p>
             {moneyInput('quantity', 'تعداد قطعه')}
-            <CostFields value={draft.costs} onChange={value => edit('costs', value)} />
-            <button type="button" className={buttonClass} onClick={() => edit('costs', { ...draft.costs, assembly: data.settings.assembly })}>استفاده از هزینهٔ ثابت ساخت برای محصول آماده</button>
+            {products.find(product => product.id === draft.productId)?.isGold ? <GoldFields value={draft.goldPurchase} onChange={value => edit('goldPurchase', value)} /> : <><CostFields value={draft.costs} onChange={value => edit('costs', value)} /><button type="button" className={buttonClass} onClick={() => edit('costs', { ...draft.costs, assembly: data.settings.assembly })}>استفاده از هزینهٔ ثابت ساخت برای محصول آماده</button></>}
             {textInput('supplier', 'تأمین‌کننده')}{textInput('reference', 'شماره فاکتور خرید')}
           </>}
           {dialog === 'sale' && <>
@@ -267,6 +284,7 @@ export function AccountingDashboard() {
             {draft.items.map((item: any, index: number) => <div key={index} className={`${panel} space-y-3`}>
               {productSelect(item.productId, next => updateLine(index, 'productId', next))}
               <div className="grid sm:grid-cols-2 gap-3"><NumberField label="تعداد" value={item.quantity} onChange={next => updateLine(index, 'quantity', next)} /><NumberField label="قیمت نهایی فروش هر عدد پس از تخفیف — تومان" value={item.unitPrice} onChange={next => updateLine(index, 'unitPrice', next)} /></div>
+              {products.find(product => product.id === item.productId)?.isGold && <NumberField decimal label="مبنای وزنی بخش طلایی فروش هر قطعه پس از تخفیف — گرم" value={item.goldRevenueGrams ?? ''} onChange={next => updateLine(index, 'goldRevenueGrams', next)} />}
               {draft.items.length > 1 && <button type="button" className={buttonClass} onClick={() => edit('items', draft.items.filter((_: any, i: number) => i !== index))}>حذف این ردیف</button>}
             </div>)}
             <button type="button" className={buttonClass} onClick={() => edit('items', [...draft.items, { productId: products[0]?.id || '', quantity: '1', unitPrice: '' }])}>افزودن کالا</button>
@@ -275,9 +293,10 @@ export function AccountingDashboard() {
           </>}
           {dialog === 'costs' && selectedSale && <>
             {selectedSale.items.map((line, index) => <div key={line.key} className={`${panel} space-y-3`}><strong className="text-sm">{line.title} × {toPersianDigits(line.quantity)}</strong>
-              <p className="text-xs text-slate-400">{lineCost(line) === null ? 'قیمت خرید ثبت نشده؛ برای سفارش قدیمی یا ساخت بعد از سفارش، هزینه‌های هر عدد را وارد کنید.' : `هزینهٔ خرید ثبت‌شده: ${formatToman(lineCost(line))}`}</p>
+              <p className="text-xs text-slate-400">{line.weight > 0 && lineGoldCost(line) !== null ? `بهای خرید وزنی ثبت‌شده: ${gramsText(lineGoldCost(line)!)}` : lineCost(line) === null ? 'بهای خرید ثبت نشده؛ اطلاعات فاکتور هر قطعه را وارد کنید.' : `هزینهٔ خرید ثبت‌شده: ${formatToman(lineCost(line))}`}</p>
               {!selectedSale.costsLocked && !line.allocations.length && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={draft.items[index].enterCosts} onChange={event => updateLine(index, 'enterCosts', event.target.checked)} />ورود مستقیم هزینهٔ خرید هر عدد</label>}
-              {draft.items[index].enterCosts && !selectedSale.costsLocked && <CostFields value={draft.items[index].costs} onChange={value => updateLine(index, 'costs', value)} />}
+              {draft.items[index].enterCosts && !selectedSale.costsLocked && (line.weight > 0 ? <GoldFields value={draft.items[index].goldPurchase} onChange={value => updateLine(index, 'goldPurchase', value)} /> : <CostFields value={draft.items[index].costs} onChange={value => updateLine(index, 'costs', value)} />)}
+              {line.weight > 0 && line.goldRevenueGrams === undefined && <><NumberField decimal required={false} label="مبنای وزنی بخش طلایی فروش قدیمی هر قطعه — گرم" value={draft.items[index].goldRevenueGrams} onChange={next => updateLine(index, 'goldRevenueGrams', next)} /><p className="text-xs text-slate-400">از فاکتور واقعی وارد کنید. نرخ یا اجرت فعلی جایگزین اطلاعات فروش قدیمی نمی‌شود.</p></>}
               <NumberField label="ساخت بعد از سفارش — تومان برای هر عدد (اگر قبلاً در خرید منظور نشده)" value={draft.items[index].extraAssembly} onChange={next => updateLine(index, 'extraAssembly', next)} />
               {!selectedSale.costsLocked && <button type="button" className={buttonClass} onClick={() => updateLine(index, 'extraAssembly', data.settings.assembly)}>استفاده از هزینهٔ ثابت ساخت</button>}
             </div>)}
