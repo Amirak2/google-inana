@@ -22,7 +22,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
   const hasWeightOptions = weightOptions.length > 1;
   const available = weightOptions.reduce((total, option) => total + productAvailability(option), 0);
   const isFixed = product.pricingMode === 'fixed';
-  const showFullPhoto = isFixed || (product.pearlPrice ?? 0) > 0 || product.images?.some(url => url.startsWith('/products/letters/'));
+  const showFullPhoto = isFixed || (product.pearlPrice ?? 0) > 0 || product.images?.some(url => url.startsWith('/products/letters/') || url.startsWith('/products/sea/') || url.startsWith('/products/catalog/'));
   const priceReady = isFixed ? (product.fixedPrice ?? 0) > 0 : goldPrice.pricePerGram > 0;
 
   // Dynamic live calculation

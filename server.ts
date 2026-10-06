@@ -13,7 +13,7 @@ import { createAccounting } from './server/accounting';
 
 import crypto from 'crypto';
 
-import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS } from './src/data/seedData';
+import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS, UNCOLLECTED_GOLD_PRODUCTS } from './src/data/seedData';
 import { GoldHistoryPoint, GoldPriceData, Order, OtherMarketsData, PricingSettings, Product, SystemLogModule } from './src/types';
 import { calculateProductPrice, DEFAULT_SETTINGS } from './src/utils/pricingEngine';
 import { productGoldSale } from './src/utils/accounting';
@@ -322,6 +322,8 @@ const DEFAULT_SEED_ORDERS: Order[] = [
 function saveSettingsToDb(settings: PricingSettings): void { store.set('settings', 'pricing', settings); }
 seedDatabaseIfEmpty(INITIAL_PRODUCTS, []);
 for (const product of LETTER_PRODUCTS) seedProductsOnce(`letterCatalogV1-${product.id}`, [product]);
+for (const product of SEA_PRODUCTS) seedProductsOnce(`seaCatalogV1-${product.id}`, [product]);
+for (const product of UNCOLLECTED_GOLD_PRODUCTS) seedProductsOnce(`uncollectedGoldV1-${product.id}`, [product]);
 seedProductsOnce('pearlProductsV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p3'));
 seedProductsOnce('pearlClass10V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-class10'));
 seedProductsOnce('pearlP9V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p9'));
