@@ -52,7 +52,9 @@ try {
     const bytes = await sharp(validBuffer).toFormat(format).toBuffer();
     assert.equal(await validateReceipt(`data:image/${format};base64,` + bytes.toString('base64')), null);
   }
-  const items = products.map(p => ({ productId: p.id, quantity: 1 }));
+  // Keep quota fixtures within the 50-row cart limit as the catalog grows.
+  const items = products.slice(0, 7).map(p => ({ productId: p.id, quantity: 1 }));
+  assert.equal(items.length, 7, 'Quota scenarios require seven distinct products');
   const payload = (selected, image = receipt) => ({ customerName: 'مشتری آزمایشی', customerPhone: users[0].phoneNumber, customerAddress: 'تهران خیابان آزمایشی پلاک یک', items: selected, paymentReceiptImage: image });
   assert.equal((await request('/api/orders', 'POST', payload(items, 'data:image/png;base64,iVBORw0KGgo='), tokens[0])).status, 400);
   assert.equal((await request('/api/orders', 'POST', payload(items), tokens[0])).status, 429);
