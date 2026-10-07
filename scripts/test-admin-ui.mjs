@@ -178,7 +178,15 @@ try {
   await click(button('ماشین‌حساب ادمین'));
   gold={...gold,pricePerGram:26272862};await update(()=>adminHarness.refreshGoldPrice());
   await input(field('وزن طلا برای پیش‌فاکتور'),0.410);
-  await input(field('درصد اجرت ساخت پیش‌فاکتور'),16.5);
+  const makingInput=field('درصد اجرت ساخت پیش‌فاکتور');
+  for(const value of ['', '1', '16', '16.5']) {
+    await input(makingInput,value);
+    assert.equal(makingInput.value,value,'Typing a percentage keeps the in-progress entry intact');
+  }
+  await input(makingInput,99);
+  await update(()=>makingInput.dispatchEvent(new window.FocusEvent('focusout',{bubbles:true})));
+  assert.equal(makingInput.value,'40','Bounds normalize when leaving the field');
+  await input(makingInput,16.5);
   assert.equal(field('درصد اجرت ساخت پیش‌فاکتور').value,'16.5');
   const makingSlider=document.querySelector('input[type="range"][aria-label="تنظیم درصد اجرت ساخت پیش‌فاکتور"]');
   assert.equal(makingSlider.value,'16.5');assert.equal(makingSlider.step,'0.1');

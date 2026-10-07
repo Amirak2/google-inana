@@ -125,6 +125,7 @@ export const AdminDashboard: React.FC = () => {
   // Exclusive Admin Calculator State
   const [calcWeight, setCalcWeight] = useState<number>(2.5);
   const [calcMakingCharge, setCalcMakingCharge] = useState<number>(20);
+  const [calcMakingChargeDraft, setCalcMakingChargeDraft] = useState<string | null>(null);
   const [calcProfit, setCalcProfit] = useState<number>(7);
   const [calcDiscount, setCalcDiscount] = useState<number>(0);
   const [copiedQuotation, setCopiedQuotation] = useState(false);
@@ -1833,8 +1834,12 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                       min="5"
                       max="40"
                       step="0.1"
-                      value={calcMakingCharge}
-                      onChange={(e) => setCalcMakingCharge(Math.min(40, Math.max(5, parseFloat(e.target.value) || 5)))}
+                      value={calcMakingChargeDraft ?? calcMakingCharge}
+                      onChange={(e) => {
+                        setCalcMakingChargeDraft(e.target.value);
+                        setCalcMakingCharge(Math.min(40, Math.max(5, parseFloat(e.target.value) || 5)));
+                      }}
+                      onBlur={() => setCalcMakingChargeDraft(null)}
                       className="w-full bg-[#081224] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-4 py-3 mb-3 text-lg font-bold text-white outline-none"
                     />
                     <input
@@ -1844,7 +1849,10 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                       max="40"
                       step="0.1"
                       value={calcMakingCharge}
-                      onChange={(e) => setCalcMakingCharge(parseFloat(e.target.value))}
+                      onChange={(e) => {
+                        setCalcMakingChargeDraft(null);
+                        setCalcMakingCharge(parseFloat(e.target.value));
+                      }}
                       className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]"
                     />
                     <div className="flex justify-between text-[11px] text-slate-500 mt-1">
