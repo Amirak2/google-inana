@@ -22,6 +22,8 @@ await writeFile(output,bundle.outputFiles[0].contents);
 const dom=new JSDOM('<div id="app"></div>',{url:'https://local.test/admin'});
 for(const name of ['window','document','localStorage','sessionStorage','HTMLElement','HTMLInputElement','HTMLSelectElement']) Object.defineProperty(globalThis,name,{configurable:true,value:dom.window[name]});
 Object.defineProperty(globalThis,'navigator',{configurable:true,value:dom.window.navigator});
+let copiedQuotationText='', failClipboard=false;
+Object.defineProperty(navigator,'clipboard',{configurable:true,value:{async writeText(text){if(failClipboard)throw new Error('Clipboard denied');copiedQuotationText=text;}}});
 window.scrollTo=()=>{};
 globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 let products=structuredClone(INITIAL_PRODUCTS.filter(p=>p.pricingMode!=='fixed').sort((a,b)=>Number(b.id==='inana-letter-f')-Number(a.id==='inana-letter-f')).slice(0,2));
@@ -173,7 +175,36 @@ try {
   failOrders=true;await click(button('بروزرسانی زنده لیست'));
   assert.ok(document.body.textContent.includes('خطای دریافت سفارش آزمایشی'));
   assert.ok(row(),'Stale list remains available after refresh failure');
-   console.log('PASS: real admin React/provider failure recovery, dirty drafts, zero fees, delta product edits, gallery preservation, independent settings/rate save, server order feedback, reversible archive filters and confirmed cleanup.');
+  await click(button('ماشین‌حساب ادمین'));
+  gold={...gold,pricePerGram:26272862};await update(()=>adminHarness.refreshGoldPrice());
+  await input(field('وزن طلا برای پیش‌فاکتور'),0.410);
+  await input(field('درصد اجرت ساخت پیش‌فاکتور'),16.5);
+  assert.equal(field('درصد اجرت ساخت پیش‌فاکتور').value,'16.5');
+  const makingSlider=document.querySelector('input[type="range"][aria-label="تنظیم درصد اجرت ساخت پیش‌فاکتور"]');
+  assert.equal(makingSlider.value,'16.5');assert.equal(makingSlider.step,'0.1');
+  assert.ok(document.body.textContent.includes('اعتبار پیش‌فاکتور: تا یک ساعت'));
+  await click(button('کپی پیش‌فاکتور'));
+  assert.equal(copiedQuotationText,`✨ استعلام قیمت و پیش‌فاکتور گالری طلای اینانا
+
+وزن طلا: ۰.۴۱۰ گرم
+نرخ طلای ۱۸ عیار: ۲۶,۲۷۲,۸۶۲ تومان / گرم
+اجرت ساخت: 16.5٪
+سود طلافروش: 7٪ (مصوب رسمی اتحادیه)
+مبلغ نهایی قابل پرداخت: ۱۳,۴۲۸,۰۰۰ تومان
+اعتبار پیش‌فاکتور: تا یک ساعت`);
+  await input(makingSlider,17.5);
+  assert.equal(field('درصد اجرت ساخت پیش‌فاکتور').value,'17.5','Slider preserves fractional percentages');
+  await click(button('متن پیش‌فاکتور کپی شد'));
+  assert.ok(copiedQuotationText.includes('اجرت ساخت: 17.5٪'));
+  const discountSlider=[...document.querySelectorAll('input[type="range"]')].find(el=>el!==makingSlider);
+  await input(discountSlider,5);await click(button('متن پیش‌فاکتور کپی شد'));
+  assert.ok(copiedQuotationText.includes('تخفیف ویژه اختصاصی: 5٪'));
+  failClipboard=true;await click(button('متن پیش‌فاکتور کپی شد'));
+  assert.ok(document.querySelector('[role="alert"]').textContent.includes('کپی پیش‌فاکتور انجام نشد'));
+  assert.equal(button('کپی شد!'),undefined,'Clipboard failure is not reported as copied');
+  failClipboard=false;await click(button('کپی پیش‌فاکتور'));
+  assert.equal(document.querySelector('[role="alert"]'),null,'Retry clears copy error');
+   console.log('PASS: real admin UI, draft/save recovery, archive safety, decimal calculator, exact one-hour quotation text, discount preservation and clipboard retry.');
 } finally {
   await act(async()=>root.unmount());globalThis.fetch=originalFetch;dom.window.close();await unlink(output);
 }
