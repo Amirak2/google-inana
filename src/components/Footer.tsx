@@ -7,7 +7,6 @@ import {
   Send,
   Phone,
   ShieldCheck,
-  Award,
   ArrowUp,
 } from 'lucide-react';
 import { CATEGORIES_LIST } from '../data/seedData';
@@ -170,13 +169,25 @@ export const Footer: React.FC = () => {
                 <span className="text-[9px] text-slate-300 font-mono">مجوز ۱۱۰۱/۱۲۵۰۹</span>
               </div>
 
-              <div className="bg-[#070E1E] border border-[#D4AF37]/25 rounded-xl p-3 text-center flex flex-col items-center justify-center shadow-sm">
-                <Award className="w-6 h-6 text-[#D4AF37] mb-1" />
-                <span className="text-[10px] text-slate-200 font-semibold block">
-                  نماد اعتماد الکترونیک
+              <a
+                referrerPolicy="origin"
+                target="_blank"
+                rel="noopener"
+                href="https://trustseal.enamad.ir/?id=8085844&Code=rtBl30Q7yemmFt2Bpy6J6zqv6VnhfhI9"
+                className="bg-white border border-[#D4AF37]/25 rounded-xl p-3 text-center flex flex-col items-center justify-center shadow-sm cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37]"
+                aria-label="مشاهده اعتبار نماد اعتماد الکترونیکی اینانا گلد"
+              >
+                <img
+                  referrerPolicy="origin"
+                  src="https://trustseal.enamad.ir/logo.aspx?id=8085844&Code=rtBl30Q7yemmFt2Bpy6J6zqv6VnhfhI9"
+                  alt="نماد اعتماد الکترونیکی اینانا گلد"
+                  className="w-24 h-28 max-w-full object-contain cursor-pointer"
+                  {...{ code: 'rtBl30Q7yemmFt2Bpy6J6zqv6VnhfhI9' }}
+                />
+                <span className="text-[10px] text-slate-700 font-semibold mt-1">
+                  مشاهده اعتبار اینماد
                 </span>
-                <span className="text-[9px] text-slate-400">پرداخت امن و معتبر</span>
-              </div>
+              </a>
             </div>
 
             <p className="text-[11px] text-slate-300 font-light">
