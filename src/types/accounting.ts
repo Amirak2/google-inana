@@ -12,6 +12,7 @@ export type AccountingLine = {
   key: string; productId: string; title: string; quantity: number; weight: number;
   unitPrice: number; totalPrice: number; allocations: CostAllocation[];
   overrideCosts?: CostParts; overrideGoldPurchase?: GoldPurchase; goldRevenueGrams?: number; goldSale?: GoldSaleTerms; extraAssembly: number;
+  extraAssemblyPaid?: boolean; extraAssemblyPaidAt?: string;
 };
 export type AccountingSale = {
   id: string; orderId: string; trackingCode: string; channel: 'site' | 'instagram';
