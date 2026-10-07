@@ -128,6 +128,7 @@ export const AdminDashboard: React.FC = () => {
   const [calcProfit, setCalcProfit] = useState<number>(7);
   const [calcDiscount, setCalcDiscount] = useState<number>(0);
   const [copiedQuotation, setCopiedQuotation] = useState(false);
+  const [quotationCopyError, setQuotationCopyError] = useState<string | null>(null);
 
   const quotationResult = calculateCustomGoldQuotation(
     calcWeight,
@@ -466,18 +467,25 @@ export const AdminDashboard: React.FC = () => {
     } finally { setArchivingRejected(false); }
   };
 
-  const copyQuotationText = () => {
-    const text = `📋 استعلام قیمت و پیش‌فاکتور گالری طلای اینانا:
+  const copyQuotationText = async () => {
+    const text = `✨ استعلام قیمت و پیش‌فاکتور گالری طلای اینانا
+
 وزن طلا: ${formatWeight(calcWeight)}
 نرخ طلای ۱۸ عیار: ${formatToman(goldPrice.pricePerGram)} / گرم
 اجرت ساخت: ${calcMakingCharge}٪
 سود طلافروش: ${calcProfit}٪ (مصوب رسمی اتحادیه)
 ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${formatToman(quotationResult.discountAmount)})\n` : ''}مبلغ نهایی قابل پرداخت: ${formatToman(quotationResult.finalPrice)}
-اعتبار پیش‌فاکتور: تا پایان ساعات کاری روز جاری`;
+اعتبار پیش‌فاکتور: تا یک ساعت`;
 
-    navigator.clipboard.writeText(text);
-    setCopiedQuotation(true);
-    setTimeout(() => setCopiedQuotation(false), 2500);
+    setCopiedQuotation(false);
+    setQuotationCopyError(null);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedQuotation(true);
+      setTimeout(() => setCopiedQuotation(false), 2500);
+    } catch {
+      setQuotationCopyError('کپی پیش‌فاکتور انجام نشد. دوباره تلاش کنید.');
+    }
   };
 
   // Filtered products for selection
@@ -1793,6 +1801,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     </div>
                     <div className="relative">
                       <input
+                        aria-label="وزن طلا برای پیش‌فاکتور"
                         type="number"
                         step="0.01"
                         min="0.05"
@@ -1809,7 +1818,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   {/* 2. Making Charge Slider (اجرت ساخت) */}
                   <div className="bg-[#060B14] p-4 rounded-2xl border border-slate-800">
                     <div className="flex justify-between items-center mb-2">
-                      <label className="text-sm font-semibold text-slate-200">
+                      <label htmlFor="quotation-making-charge" className="text-sm font-semibold text-slate-200">
                         درصد اجرت ساخت این قطعه:
                       </label>
                       <span className="text-sm font-bold text-[#D4AF37]">
@@ -1817,12 +1826,25 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                       </span>
                     </div>
                     <input
+                      id="quotation-making-charge"
+                      aria-label="درصد اجرت ساخت پیش‌فاکتور"
+                      type="number"
+                      inputMode="decimal"
+                      min="5"
+                      max="40"
+                      step="0.1"
+                      value={calcMakingCharge}
+                      onChange={(e) => setCalcMakingCharge(Math.min(40, Math.max(5, parseFloat(e.target.value) || 5)))}
+                      className="w-full bg-[#081224] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-4 py-3 mb-3 text-lg font-bold text-white outline-none"
+                    />
+                    <input
+                      aria-label="تنظیم درصد اجرت ساخت پیش‌فاکتور"
                       type="range"
                       min="5"
                       max="40"
-                      step="1"
+                      step="0.1"
                       value={calcMakingCharge}
-                      onChange={(e) => setCalcMakingCharge(parseInt(e.target.value, 10))}
+                      onChange={(e) => setCalcMakingCharge(parseFloat(e.target.value))}
                       className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#D4AF37]"
                     />
                     <div className="flex justify-between text-[11px] text-slate-500 mt-1">
@@ -1927,9 +1949,13 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   <span className="text-[11px] text-slate-400 mt-1 block">
                     محاسبه شده بر مبنای وزن {formatWeight(calcWeight)}
                   </span>
+                  <span className="text-[11px] text-[#D4AF37] mt-2 block">
+                    اعتبار پیش‌فاکتور: تا یک ساعت
+                  </span>
                 </div>
 
                 <div className="mt-6 flex flex-col gap-3">
+                  {quotationCopyError && <p role="alert" className="text-xs text-rose-300">{quotationCopyError}</p>}
                   <button
                     onClick={copyQuotationText}
                     className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all shadow-md text-xs sm:text-sm cursor-pointer"
