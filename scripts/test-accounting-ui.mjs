@@ -3,6 +3,7 @@ import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { Store } from '../server/storage.ts';
 import { createAccounting } from '../server/accounting.ts';
+import { emptyCosts } from '../src/utils/accounting.ts';
 import { INITIAL_PRODUCTS } from '../src/data/seedData.ts';
 
 const { build } = await import(process.platform === 'win32' ? 'esbuild-wasm' : 'esbuild');
@@ -72,10 +73,12 @@ try {
   assert.equal(weight.inputMode, 'decimal');
   await input('اجرت بنکدار — درصد', '۱۶٫۵');
   assert.match(document.querySelector('[role="dialog"]').textContent, /۰.۹۷۸۶ گرم/);
-  assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent, /تومان برای هر عدد/);
+  assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent, /اصل طلای خریداری‌شده/);
+  await input('خرید مروارید — تومان برای هر عدد', '۲۰۰۰۰۰');
+  await input('ساخت محصول آماده — تومان برای هر عدد', '۵۰۰۰۰');
   await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   assert.deepEqual(mutations.at(-1).body.goldPurchase, { weight: 0.84, makingPercent: 16.5 });
-  assert.equal(mutations.at(-1).body.costs, undefined, 'Gold purchase sends no market rate or monetary gold cost');
+  assert.deepEqual(mutations.at(-1).body.costs, { ...emptyCosts(), pearl: 200000, assembly: 50000 }, 'Gold purchase retains independent cash components');
   await update(() => button('فروش اینستاگرام').click());
   const saleSelect = document.querySelector('[role="dialog"] select');
   await update(() => { saleSelect.value = INITIAL_PRODUCTS[1].id; saleSelect.dispatchEvent(new window.Event('change', { bubbles: true })); });
@@ -95,6 +98,23 @@ try {
   await update(() => window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' })));
   assert.equal(document.querySelector('[role="dialog"]'), null);
   const now = new Date().toISOString();
+  const assemblyOrder = { id: 'ui-assembly', trackingCode: 'UI-ASSEMBLY', customerName: 'ساخت آزمایشی', status: 'تأیید شده', createdAt: now,
+    totalPrice: 1000000, items: [{ productId: INITIAL_PRODUCTS[0].id, productTitle: 'کالا', weight: 0, quantity: 1, unitPrice: 1000000, totalPrice: 1000000 }] };
+  createAccounting(fixture).syncOrder(assemblyOrder);
+  data = createAccounting(fixture).snapshot();
+  await update(() => button('تازه‌سازی').click());
+  await update(() => button('فروش‌ها').click());
+  await update(() => button('ثبت / مشاهدهٔ هزینه‌ها').click());
+  await input('ساخت بعد از سفارش — تومان برای هر عدد (اگر قبلاً در خرید منظور نشده)', '۱۰۰۰۰۰');
+  const paidCheckbox = [...document.querySelectorAll('label')].find(label => label.textContent.includes('هزینهٔ ساخت پرداخت شده است')).querySelector('input');
+  await update(() => paidCheckbox.click());
+  await input('تاریخ واقعی پرداخت ساخت — شمسی', '۱۴۰۵/۰۷/۱۳');
+  await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+  assert.equal(mutations.at(-1).body.items[0].extraAssembly, 100000);
+  assert.equal(mutations.at(-1).body.items[0].extraAssemblyPaid, true);
+  assert.equal(mutations.at(-1).body.items[0].extraAssemblyDate, '۱۴۰۵/۰۷/۱۳');
+  fixture.map('accountingSales').delete(assemblyOrder.id);
+  fixture.map('orders').delete(assemblyOrder.id);
   const refunded = { id: 'ui-refunded', trackingCode: 'UI-REFUND', customerName: 'بازپرداخت آزمایشی', status: 'تأیید شده', createdAt: now,
     totalPrice: 500, items: [{ productId: INITIAL_PRODUCTS[0].id, productTitle: 'کالا', weight: 0, quantity: 1, unitPrice: 500, totalPrice: 500 }] };
   createAccounting(fixture).syncOrder(refunded);
