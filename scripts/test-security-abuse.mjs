@@ -60,24 +60,26 @@ try {
   assert.equal((await request('/api/orders', 'POST', payload(items), tokens[0])).status, 429);
   assert.ok(products.every(p => db.get('products', p.id).stock === 10));
 
-  // Reservation capacity is shared across drafts, quotes, and pending orders.
-  assert.equal((await request('/api/cart/reserve-batch', 'POST', { items }, tokens[1])).status, 429);
-  const first = await request('/api/cart/reserve-batch', 'POST', { items: items.slice(0, 3) }, tokens[1]);
+  // Drafts never hold stock; payment quotes and pending orders share the capacity cap.
+  assert.equal((await request('/api/cart/reserve-batch', 'POST', { items }, tokens[1])).status, 200);
+  assert.ok(products.every(p => db.get('products', p.id).stock === 10));
+  assert.equal((await request('/api/orders/quote', 'POST', { items }, tokens[1])).status, 429);
+  const first = await request('/api/orders/quote', 'POST', { items: items.slice(0, 3) }, tokens[1]);
   assert.equal(first.status, 200);
-  const originalExpiry = first.body.reservedUntil;
+  assert.equal(first.body.expiresAt, now + 5 * 60000);
   now += 5 * 60000;
   const repeat = await request('/api/cart/reserve-batch', 'POST', { items: items.slice(0, 3) }, tokens[1]);
   assert.equal(repeat.status, 200);
-  assert.equal(repeat.body.reservedUntil, originalExpiry, 'Repeated drafts do not extend the reservation');
+  assert.equal(repeat.body.reserved, false, 'Drafts cannot create or extend payment reservations');
   const quote = await request('/api/orders/quote', 'POST', { items: items.slice(0, 3) }, tokens[1]);
   assert.equal(quote.status, 200);
-  assert.equal(quote.body.expiresAt, now + 15 * 60000, 'Checkout retains a full payment window');
+  assert.equal(quote.body.expiresAt, now + 5 * 60000, 'Checkout reserves inventory for five minutes');
   await request('/api/cart/release-reservation', 'POST', {}, tokens[1]);
   assert.equal((await request('/api/orders/quote', 'POST', { items: items.slice(3, 4) }, tokens[1])).status, 429);
   now += 26 * 60000;
-  assert.equal((await request('/api/cart/reserve-batch', 'POST', { items: items.slice(0, 1) }, tokens[1])).status, 429, 'Release/recreate cannot reset the owner hold budget');
+  assert.equal((await request('/api/orders/quote', 'POST', { items: items.slice(0, 1) }, tokens[1])).status, 429, 'Release/recreate cannot reset the owner hold budget');
   now += 15 * 60000;
-  assert.equal((await request('/api/cart/reserve-batch', 'POST', { items: items.slice(0, 1) }, tokens[1])).status, 200);
+  assert.equal((await request('/api/orders/quote', 'POST', { items: items.slice(0, 1) }, tokens[1])).status, 200);
 
   // Concurrent quotes cannot race past the per-account product quota.
   const raced = await Promise.all([
@@ -91,7 +93,7 @@ try {
   assert.equal(order.status, 201);
   assert.equal((await request('/api/orders', 'POST', payload(items.slice(5, 6)), tokens[3])).status, 201);
   assert.equal((await request('/api/orders', 'POST', payload(items.slice(6, 7)), tokens[3])).status, 429);
-  assert.equal((await request('/api/cart/reserve-batch', 'POST', { items: items.slice(6, 7) }, tokens[3])).status, 429);
+  assert.equal((await request('/api/cart/reserve-batch', 'POST', { items: items.slice(6, 7) }, tokens[3])).status, 200, 'Draft validation does not consume pending-order slots');
   assert.equal((await request('/api/orders/quote', 'POST', { items: items.slice(6, 7) }, tokens[3])).status, 429, 'Pending-order caps must be enforced BEFORE the customer pays');
   const id = order.body.order.id, productId = items[4].productId;
   assert.equal(db.get('products', productId).stock, 9);
@@ -167,3 +169,4 @@ try {
   } finally { await new Promise(resolve => server.close(resolve)); }
   console.log('PASS: decoded receipts, pixel limits, account stock/pending caps, non-renewable draft/quote budget, concurrent quota guards, 48h durable exact-once release and safe approval, logout forgery/rate/revocation, client log provenance, CSV formula protection, HTML/error security headers. All data/services isolated; simulated PG only.');
 } finally { Date.now = originalNow; globalThis.fetch = originalFetch; db.restore(); }
+

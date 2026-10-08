@@ -80,7 +80,7 @@ const AccountCartDrawer: React.FC = () => {
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Price quote lock state (15-minute guarantee)
+  // Payment quote and inventory reservation (five-minute guarantee)
   const [activeQuote, setActiveQuote] = useState<{
     quoteId: string;
     expiresAt: number;
@@ -100,7 +100,7 @@ const AccountCartDrawer: React.FC = () => {
     setActiveQuote(null);
   }, [cart]);
 
-  // Countdown timer for 15-minute locked price quote
+  // Countdown uses the server's five-minute reservation deadline.
   useEffect(() => {
     if (!activeQuote) {
       setQuoteSecondsLeft(null);
@@ -115,7 +115,7 @@ const AccountCartDrawer: React.FC = () => {
     return () => clearInterval(interval);
   }, [activeQuote]);
 
-  // Request/refresh guaranteed 15-minute price quote from server
+  // Reserve inventory and lock the price only when entering payment.
   const obtainPriceQuote = async () => {
     if (paymentReceiptImage) {
       setFormError('فیش پرداخت دارید؛ مبلغ قبلی تغییر نمی‌کند. فیش را برای بررسی مدیر ارسال کنید.');
@@ -172,7 +172,7 @@ const AccountCartDrawer: React.FC = () => {
     if (isAuthenticated && showAuthRequiredModal) {
       setShowAuthRequiredModal(false);
       setCheckoutStep('cart');
-      setFormError('وارد حساب شدید؛ برای رزرو کالا دکمه ادامه خرید را بزنید.');
+      setFormError('وارد حساب شدید؛ برای ثبت مشخصات دکمه ادامه خرید را بزنید.');
     }
   }, [isAuthenticated, showAuthRequiredModal]);
 
@@ -287,7 +287,7 @@ const AccountCartDrawer: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleProceedToPayment = async () => {
+  const handleProceedToPayment = () => {
     if (!priceReady) {
       setFormError('نرخ لحظه‌ای طلا هنوز دریافت نشده است. لطفاً چند لحظه صبر کنید.');
       return;
@@ -300,26 +300,9 @@ const AccountCartDrawer: React.FC = () => {
     // Issue #4 Fix: Generate fresh idempotency key for this checkout session
     setIdempotencyKey(generateIdempotencyKey());
 
-    // Concurrency Lock: Pre-reserve cart items on server to prevent race conditions during payment
-    setIsReserving(true);
+    // Browsing the cart and completing buyer information never hold inventory.
     setFormError(null);
-    try {
-      const res = await fetch('/api/cart/reserve-batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ items: cart.map(item => ({ productId: item.product.id, quantity: item.quantity })) }),
-      });
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        setFormError(error.error || 'رزرو سبد انجام نشد. لطفاً دوباره تلاش کنید.');
-        return;
-      }
-      setCheckoutStep('info');
-    } catch {
-      setFormError('ارتباط با سرور قطع شد؛ رزرو تأیید نشده است. دوباره تلاش کنید.');
-    } finally {
-      setIsReserving(false);
-    }
+    setCheckoutStep('info');
   };
 
   const handleProceedToPaymentStep = async (e?: React.FormEvent) => {
@@ -350,7 +333,7 @@ const AccountCartDrawer: React.FC = () => {
 
     setCustomerPhone(normalizedPhone);
 
-    // Lock price quote on server (15-min guarantee)
+    // Lock inventory and price for the five-minute payment window.
     setIsReserving(true);
     const quoteSuccess = await obtainPriceQuote();
     setIsReserving(false);
@@ -733,6 +716,7 @@ const AccountCartDrawer: React.FC = () => {
             {/* STEP 2: BUYER INFORMATION FORM */}
             {checkoutStep === 'info' && (
               <form onSubmit={handleProceedToPaymentStep} className="space-y-4 text-xs animate-in fade-in">
+                <p className="p-3 rounded-xl border border-[#D4AF37]/30 text-[#F5E8C7] leading-6">پس از ورود به مرحلهٔ پرداخت، کالا و مبلغ نهایی فقط ۵ دقیقه رزرو می‌شوند. در این مهلت واریز و فیش را ارسال کنید؛ سپس رزرو خودکار آزاد می‌شود.</p>
                 {/* Registration requirement warning banner if unauthenticated */}
                 {!isAuthenticated && (
                   <div className="p-4 bg-gradient-to-br from-[#241705] via-[#1A1208] to-[#0E1A33] border-2 border-amber-500/60 rounded-2xl space-y-3 shadow-xl text-xs">
@@ -927,7 +911,7 @@ const AccountCartDrawer: React.FC = () => {
                   </div>
                 )}
 
-                {/* Guaranteed Gold Price Lock Banner (15-minute TTL) */}
+                {/* Five-minute payment reservation and price guarantee */}
                 {activeQuote && (
                   <div
                     className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs transition-colors ${
@@ -942,13 +926,14 @@ const AccountCartDrawer: React.FC = () => {
                       <Clock className="w-4 h-4 text-[#D4AF37] flex-shrink-0" />
                       <div>
                         <span className="font-bold block text-white text-xs">
-                          تضمین و قفل نرخ طلا پیش‌فاکتور (۱۵ دقیقه)
+                          رزرو کالا و تضمین مبلغ پرداخت (۵ دقیقه)
                         </span>
                         <span className="text-[10px] opacity-80 block mt-0.5">
                           {quoteSecondsLeft !== null && quoteSecondsLeft > 0
-                            ? `مهلت واریز با نرخ تضمین‌شده: ${toPersianDigits(Math.floor(quoteSecondsLeft / 60))}:${toPersianDigits(String(quoteSecondsLeft % 60).padStart(2, '0'))}`
-                            : 'مهلت واریز تمام شده؛ اگر پرداخت کرده‌اید، فیش را با مبلغ همین پیش‌فاکتور برای بررسی مدیر ارسال کنید.'}
+                            ? `زمان باقی‌ماندهٔ رزرو: ${toPersianDigits(Math.floor(quoteSecondsLeft / 60))}:${toPersianDigits(String(quoteSecondsLeft % 60).padStart(2, '0'))}`
+                            : 'مهلت رزرو تمام شد و کالا برای سایر مشتریان آزاد شد. اگر پرداخت کرده‌اید، فیش را با مبلغ همین پیش‌فاکتور برای بررسی مدیر ارسال کنید؛ اگر پرداخت نکرده‌اید، ابتدا موجودی و مبلغ جدید را دریافت کنید.'}
                         </span>
+                        {quoteSecondsLeft !== null && quoteSecondsLeft > 0 && <p className="text-[10px] leading-5 mt-1">برای واریز و ارسال فیش ۵ دقیقه فرصت دارید؛ پس از پایان مهلت، رزرو خودکار آزاد می‌شود.</p>}
                       </div>
                     </div>
                     {quoteSecondsLeft === 0 && !paymentReceiptImage && (
@@ -1382,7 +1367,7 @@ const AccountCartDrawer: React.FC = () => {
                   className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3.5 rounded-xl hover:brightness-110 active:scale-98 transition-all shadow-[0_4px_20px_rgba(212,175,55,0.3)] text-sm cursor-pointer disabled:opacity-75"
                 >
                   {isReserving ? (
-                    <span>در حال بررسی و رزرو محصول...</span>
+                    <span>در حال بررسی محصول...</span>
                   ) : (
                     <>
                       {!isAuthenticated && <Lock className="w-4 h-4 text-slate-950" />}
@@ -1403,9 +1388,10 @@ const AccountCartDrawer: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleProceedToPaymentStep}
-                    className="flex-[2] flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3 rounded-xl hover:brightness-110 active:scale-98 transition-all text-xs shadow-md cursor-pointer"
+                    disabled={isReserving}
+                    className="flex-[2] flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3 rounded-xl hover:brightness-110 active:scale-98 transition-all text-xs shadow-md cursor-pointer disabled:opacity-75"
                   >
-                    <span>ثبت اطلاعات و رفتن به صفحه کارت به کارت</span>
+                    <span>{isReserving ? 'در حال رزرو ۵ دقیقه‌ای...' : 'ثبت اطلاعات و رفتن به صفحه کارت به کارت'}</span>
                     <ArrowLeft className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -1562,3 +1548,4 @@ export const CartDrawer: React.FC = () => {
   const { currentUser } = useAuth();
   return <AccountCartDrawer key={currentUser?.uid || 'guest'} />;
 };
+

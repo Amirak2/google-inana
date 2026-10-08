@@ -16,7 +16,8 @@ export function createReservationEngine(store: Store, products: () => Product[])
   function cleanExpiredReservations(): void {
     const now = Date.now();
     for (const [pId, resList] of stockReservations.entries()) {
-      const valid = resList.filter((r) => r.expiresAt > now && !r.userId.startsWith('anon_'));
+      // Retire draft holds created by old clients; only checkout quotes reserve stock.
+      const valid = resList.filter((r) => r.expiresAt > now && !r.userId.startsWith('anon_') && r.reservationId?.startsWith('quote_'));
       if (valid.length === 0) stockReservations.delete(pId);
       else stockReservations.set(pId, valid);
     }
@@ -54,5 +55,7 @@ export function createReservationEngine(store: Store, products: () => Product[])
     }
     policy.touchOwner(owner.replace(/^usr_/, ''));
   }
+  cleanExpiredReservations();
   return { stockReservations, getAvailableStock, reserveCart };
 }
+

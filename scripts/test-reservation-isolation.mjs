@@ -35,6 +35,6 @@ const completed = await request('/api/orders', { ...payload, quoteId: second.bod
 assert.equal(completed.status, 201, JSON.stringify(completed.body));
 assert.equal(completed.body.order.paymentReviewRequired, false);
 assert.equal(store.get('products', product.id).stock, 1);
-assert.equal(store.get('reservations', product.id).length, 1);
-assert.equal(store.get('reservations', product.id)[0].userId, `usr_${two.user.uid}`);
-console.log('PASS: separate quote reservations survive another checkout, competitor draft and draft release; all reservation routes reject anonymous requests.');
+assert.equal(store.map('reservations').size, 0, 'Competitor draft validation never creates a hold');
+console.log('PASS: separate payment quotes survive other checkout/draft requests; drafts never reserve stock and reservation routes reject anonymous requests.');
+

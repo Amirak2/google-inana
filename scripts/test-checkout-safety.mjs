@@ -35,26 +35,30 @@ assert.equal((await request('/api/cart/reserve-batch', { items: [...items, { pro
 assert.equal(store.map('reservations').size, 0);
 a.stock = 1;
 assert.equal((await request('/api/cart/reserve-batch', { items })).status, 200);
-const oldReservation = store.get('reservations', a.id)[0];
-oldReservation.expiresAt = Date.now() + 1000;
+assert.equal(store.map('reservations').size, 0, 'Draft validation never holds inventory');
+store.set('reservations', a.id, [{ productId: a.id, quantity: 1, userId: `usr_${admin.uid}`, reservationId: `cart_usr_${admin.uid}`, expiresAt: Date.now() + 900000 }]);
 const quote = await request('/api/orders/quote', { items });
 assert.equal(quote.status, 200);
+assert.equal(quote.body.expiresInSeconds, 300, 'Only payment reserves stock, for five minutes');
+assert.deepEqual(store.get('reservations', a.id).map(r => r.reservationId), [quote.body.quoteId], 'Legacy draft hold is released on upgrade');
 assert.ok(store.get('reservations', a.id)[0].expiresAt >= quote.body.expiresAt);
 const realNow = Date.now;
 const issuedAt = realNow();
 try {
-  Date.now = () => issuedAt + 11 * 60000;
+  Date.now = () => issuedAt + 4 * 60000;
   const competitor = await app.fetch(new Request('http://localhost/api/cart/reserve', {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${competitorToken}` },
     body: JSON.stringify({ productId: a.id, quantity: 1 }),
   }), { clientIp: '198.51.100.20' });
-  assert.equal(competitor.status, 409, 'at minute eleven the paid quote still owns the last item');
+  assert.equal(competitor.status, 409, 'At minute four the payment quote still owns the last item');
+  Date.now = () => quote.body.expiresAt + 1;
+  const available = await createApp(store, env).fetch(new Request('http://localhost/api/products'));
+  assert.equal((await available.json()).find(p => p.id === a.id).availableStock, 1, 'Abandoned payment releases stock after five minutes without customer action');
 } finally { Date.now = realNow; }
 
 // Expiration and a changed market must keep the paid quote's original amount.
 const q = store.get('quotes', quote.body.quoteId);
 q.expiresAt = Date.now() - 1;
-store.get('reservations', a.id)[0].expiresAt = Date.now() - 1;
 const originalPrice = q.totalPrice;
 store.set('market', 'gold', { pricePerGram: 30000000, isManualOverride: true });
 a.stock = 0;
@@ -110,3 +114,4 @@ try {
   await next.release();
 } finally { db.restore(); }
 console.log('PASS: atomic reservation, quote deadline/limits/auth, original paid amount, stock-safe review/cancel/approval, idempotency, favorites, long logs, PostgreSQL quote retention. No live data touched.');
+
