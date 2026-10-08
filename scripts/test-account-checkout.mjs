@@ -61,8 +61,7 @@ globalThis.fetch = async (url, options = {}) => {
   }
   if (url === '/api/auth/logout') {serverUser = null; return json({success: true});}
   if (url === '/api/auth/otp/verify') {serverUser = second; return json({success: true, user: second});}
-  if (url === '/api/cart/reserve-batch') return json({success: true});
-  if (url === '/api/orders/quote') return json({quoteId: 'q', expiresAt: Date.now() + 900000,
+  if (url === '/api/orders/quote') return json({quoteId: 'q', expiresAt: Date.now() + 300000,
     totalPrice: 7000000, goldPriceAtQuote: 23932462});
   if (url === '/api/orders') {
     const result = json({order: {id: 'order-first', trackingCode: 'FIRST-ORDER', ...JSON.parse(options.body),
@@ -84,10 +83,23 @@ async function click(text) {
   assert.equal(button.disabled, false, text);
   await act(async () => {button.click(); await settle();});
 }
-async function checkout(expectedName = authHarness.userProfile.displayName) {
+async function checkout(expectedName = authHarness.userProfile.displayName, testExpiry = false) {
   await click('ادامه و ثبت مشخصات خریدار');
   assert.equal(document.querySelector('input[placeholder="مثال: سارا محمدی"]').value, expectedName);
   await click('ثبت اطلاعات و رفتن به صفحه کارت به کارت');
+  assert.ok(document.body.textContent.includes('رزرو کالا و تضمین مبلغ پرداخت (۵ دقیقه)'), 'Customer sees five-minute reservation');
+  assert.ok(document.body.textContent.includes('پس از پایان مهلت، رزرو خودکار آزاد می‌شود.'), 'Customer knows what happens at expiry');
+  assert.ok(document.body.textContent.includes('زمان باقی‌ماندهٔ رزرو:'), 'Countdown is visible at payment');
+  if (testExpiry) {
+    const realNow = Date.now, expiredNow = realNow() + 300001;
+    try {
+      Date.now = () => expiredNow;
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+      assert.ok(document.body.textContent.includes('مهلت رزرو تمام شد و کالا برای سایر مشتریان آزاد شد.'), 'Expiry explains stock release');
+      await click('واریز نکرده‌ام؛ دریافت نرخ جدید');
+      assert.ok(document.body.textContent.includes('زمان باقی‌ماندهٔ رزرو:'), 'Customer can start a new payment window before paying');
+    } finally { Date.now = realNow; }
+  }
   const input = document.querySelector('input[type="file"]');
   assert.ok(input);
   Object.defineProperty(input, 'files', {value: [new File(['receipt'], 'receipt.png', {type: 'image/png'})]});
@@ -101,7 +113,7 @@ try {
   await act(async () => {await authHarness.updateUserProfileData({displayName: 'نام ویرایش‌شده'});});
   assert.equal(authHarness.userProfile.displayName, 'نام ویرایش‌شده', 'Cookie session must support profile editing after refresh');
   assert.equal(localStorage.getItem('inana_user_session'), null, 'Profile must not be persisted in browser storage');
-  await checkout(first.displayName);
+  await checkout(first.displayName, true);
   await click('تأیید نهایی و ارسال فیش');
   assert.ok(document.body.textContent.includes('FIRST-ORDER'));
   await act(async () => {await authHarness.logout();});
@@ -138,9 +150,10 @@ try {
   await act(async () => {pendingMe(); await settle();});
   assert.equal(authHarness.currentUser.uid, second.uid, 'Old restored account must not overwrite a new login');
   assert.equal(authHarness.loading, false);
-  console.log('PASS: cookie-only profile edit, checkout privacy on account switch, stale profile and order responses.');
+  console.log('PASS: no draft reservation, five-minute customer countdown/expiry/renewal, cookie-only profile edit, checkout privacy and stale responses.');
 } finally {
   await act(async () => root.unmount());
   dom.window.close();
   await unlink(output);
 }
+

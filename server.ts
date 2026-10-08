@@ -930,20 +930,17 @@ app.put('/api/user/favorites', requireAuth, (req: AuthenticatedRequest, res: Res
   res.json({ favorites: validated });
 });
 
-// Draft carts and each quote own separate reservations; only that ID is consumed.
+// Compatibility endpoints only validate drafts. Inventory is held at payment quote creation.
 function reserveDraft(req: AuthenticatedRequest, res: Response, items: unknown) {
   if (!checkRateLimit(`reserve_cart_${req.user!.uid}`, 15, 60000).allowed) {
     res.status(429).json({ error: 'درخواست رزرو بیش از حد مجاز است.' }); return;
   }
   try {
-    inventoryPolicy.assertOrderLimit(req.user!.uid);
-    const reservationId = `cart_usr_${req.user!.uid}`;
-    const existingUntil = [...stockReservations.values()].flat().filter(r => r.reservationId === reservationId && r.expiresAt > Date.now()).reduce((min, r) => Math.min(min, r.expiresAt), Infinity);
-    const deadline = inventoryPolicy.reserveDeadline(req.user!.uid, Date.now() + 15 * 60000, existingUntil);
-    const reservedUntil = deadline.until;
-    reserveCart(items, `usr_${req.user!.uid}`, reservedUntil, reservationId);
-    inventoryPolicy.touchOwner(req.user!.uid, deadline.window);
-    res.json({ success: true, reservedUntil, reservationId });
+    for (const [id, quantity] of cartQuantities(items)) {
+      const product = productsList.find(p => p.id === id);
+      if (!product || getAvailableStock(product) < quantity) throw new Error('موجودی یکی از محصولات سبد کافی نیست. لطفاً سبد را بررسی کنید.');
+    }
+    res.json({ success: true, reserved: false });
   } catch (error: any) { res.status(error.statusCode || 409).json({ error: error.message }); }
 }
 app.post('/api/cart/reserve-batch', requireAuth, (req: AuthenticatedRequest, res: Response) => reserveDraft(req, res, req.body.items));
@@ -1276,7 +1273,7 @@ function generateUniqueTrackingCode(): string {
 // In-memory idempotency cache for orders (prevents double-billing / duplicate orders)
 const idempotencyOrdersMap: Map<string, Order> = new Map();
 
-// In-memory quotes cache for locking gold & product prices (15-minute TTL)
+// Quotes lock gold/product prices and inventory for five minutes at the payment step.
 interface ServerPriceQuote {
   quoteId: string;
   items: Array<{
@@ -1369,7 +1366,7 @@ app.get('/api/orders/track/:trackingCode', (req: Request, res: Response) => {
   });
 });
 
-// Server-Side Price Quote generation with 15-minute price lock
+// Server-Side Price Quote generation with a five-minute payment reservation.
 app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const { items } = req.body;
   const nowForQuote = Date.now();
@@ -1427,7 +1424,7 @@ app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Resp
   }
 
   const quoteId = `quote_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
-  const quoteTtlMs = 15 * 60 * 1000;
+  const quoteTtlMs = 5 * 60 * 1000;
   const expiresAt = Date.now() + quoteTtlMs;
 
   try {
@@ -1568,7 +1565,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
         }
 
         effectiveReservationId = activeQuote.reservationId || `cart_${uId}`;
-        paymentReviewRequired = Date.now() > activeQuote.expiresAt || !activeQuote.reservationId;
+        paymentReviewRequired = Date.now() >= activeQuote.expiresAt || !activeQuote.reservationId;
 
         // Strict ownership verification: A user cannot submit or steal another user's quote
         if (activeQuote.userId && activeQuote.userId !== orderUserId) {
@@ -2373,3 +2370,4 @@ return { async fetch(request: globalThis.Request, context: { clientIp?: string }
   return response;
 }, authenticate: verifySessionToken };
 }
+
