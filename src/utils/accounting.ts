@@ -9,15 +9,18 @@ export function productGoldSale(product: Product, settings: PricingSettings): Go
     profitPercent: product.customProfitPercent ?? settings.profitPercent, discountPercent: product.discountPercent };
 }
 export function goldSaleRevenue(weight: number, wholesalePercent: number, terms: GoldSaleTerms): number {
-  return roundGrams(weight * (1 + (terms.makingPercent - wholesalePercent) / 100)
-    * (1 + terms.profitPercent / 100) * (1 - terms.discountPercent / 100));
+  // First compute the actual selling markup, then deduct the purchase making charge.
+  // VAT is excluded from these gold terms. Legacy explicit proceeds use the same net basis.
+  return roundGrams(weight * ((1 + terms.makingPercent / 100)
+    * (1 + terms.profitPercent / 100) * (1 - terms.discountPercent / 100) - wholesalePercent / 100));
 }
 export function lineGoldRevenue(line: AccountingLine, skip = 0, count = line.quantity): number | null {
   if (line.weight <= 0) return 0;
   if (!line.goldSale) return line.goldRevenueGrams === undefined ? null : roundGrams(line.goldRevenueGrams * count);
   const layers = returnedGoldLayers(line, skip, count);
-  if (layers.reduce((sum, layer) => sum + layer.quantity, 0) !== count || layers.some(layer => layer.unitGoldMakingPercent === undefined)) return null;
-  return roundGrams(layers.reduce((sum, layer) => sum + layer.quantity * goldSaleRevenue(line.weight, layer.unitGoldMakingPercent!, line.goldSale!), 0));
+  if (layers.reduce((sum, layer) => sum + layer.quantity, 0) !== count || layers.some(layer => layer.unitGoldMakingPercent === undefined || layer.unitGoldWeight === undefined)) return null;
+  return roundGrams(layers.reduce((sum, layer) => sum + layer.quantity *
+    (goldSaleRevenue(line.weight, 0, line.goldSale!) - layer.unitGoldWeight! * layer.unitGoldMakingPercent! / 100), 0));
 }
 export function lineGoldCost(line: AccountingLine): number | null {
   if (line.weight <= 0) return 0;
@@ -26,12 +29,17 @@ export function lineGoldCost(line: AccountingLine): number | null {
   return roundGrams(line.allocations.reduce((sum, layer) => sum + layer.quantity * layer.unitGoldWeight!, 0));
 }
 export function goldReturnMovement(sale: AccountingSale, entry: ReturnEntry, previousReturns: ReturnEntry[] = []) {
-  const value = entry.items.reduce((sum, item) => sum + sale.items.find(line => line.key === item.key)!.unitPrice * item.quantity, 0);
-  const proceeds = entry.items.reduce((sum, item) => { const line = sale.items.find(line => line.key === item.key)!; return sum + (lineGoldRevenue(line, returnedQuantity(previousReturns, sale.id, line.key), item.quantity) || 0); }, 0);
+  const refunds = returnMoneyLines(sale, entry);
+  const proceeds = entry.items.reduce((sum, item, index) => {
+    const line = sale.items.find(line => line.key === item.key)!;
+    const value = (line.unitPrice - (line.tax?.amount || 0)) * item.quantity;
+    return sum + (lineGoldRevenue(line, returnedQuantity(previousReturns, sale.id, line.key), item.quantity) || 0)
+      * Math.min(1, refunds[index].net / Math.max(1, value));
+  }, 0);
   const goldLines = entry.items.filter(item => sale.items.find(line => line.key === item.key)!.weight > 0);
   const known = goldLines.every(item => { const line = sale.items.find(line => line.key === item.key)!; return lineGoldRevenue(line) !== null && lineGoldCost(line) !== null; });
   // Refunds reverse the same fraction of the original sale's gold proceeds.
-  const revenueGrams = roundGrams(proceeds * Math.min(1, (entry.amount - entry.shippingRefund) / Math.max(1, value)));
+  const revenueGrams = roundGrams(proceeds);
   const costGrams = !entry.restock ? 0 : known ? roundGrams(goldLines.reduce((sum, item) => {
     const line = sale.items.find(line => line.key === item.key)!;
     return sum + returnedGoldLayers(line, returnedQuantity(previousReturns, sale.id, line.key), item.quantity).reduce((n, layer) => n + (layer.unitGoldWeight || 0) * layer.quantity, 0);
@@ -98,6 +106,26 @@ export function returnCost(sale: AccountingSale, entry: ReturnEntry): number | n
   }
   return sum;
 }
+export function invoiceTaxAmount(sale: AccountingSale): number {
+  return sale.items.reduce((sum, line) => sum + (line.tax?.amount || 0) * line.quantity, 0);
+}
+export function returnMoneyLines(sale: AccountingSale, entry: ReturnEntry) {
+  const amount = entry.amount - entry.shippingRefund;
+  const value = entry.items.reduce((sum, item) => sum + sale.items.find(line => line.key === item.key)!.unitPrice * item.quantity, 0);
+  let allocated = 0, cumulativeValue = 0;
+  return entry.items.map((item, index) => {
+    const line = sale.items.find(line => line.key === item.key)!;
+    cumulativeValue += line.unitPrice * item.quantity;
+    const gross = index === entry.items.length - 1 ? amount - allocated : Math.round(amount * cumulativeValue / Math.max(1, value)) - allocated;
+    allocated += gross;
+    const lineTax = (line.tax?.amount || 0) * item.quantity;
+    const tax = Math.min(lineTax, gross, Math.round(lineTax * gross / Math.max(1, line.unitPrice * item.quantity)));
+    return { key: item.key, gross, tax, net: gross - tax };
+  });
+}
+export function returnTaxAmount(sale: AccountingSale, entry: ReturnEntry): number {
+  return returnMoneyLines(sale, entry).reduce((sum, line) => sum + line.tax, 0);
+}
 export function saleTotals(sale: AccountingSale, money: MoneyEntry[], returns: ReturnEntry[]) {
   const entries = money.filter(entry => entry.saleId === sale.id && !entry.voidedAt);
   const refunds = returns.filter(entry => entry.saleId === sale.id);
@@ -112,9 +140,10 @@ export function saleTotals(sale: AccountingSale, money: MoneyEntry[], returns: R
   const originalCost = costs.reduce<number>((sum, cost) => sum + (cost || 0), 0);
   const recovered = refunds.map(entry => returnCost(sale, entry));
   const cost = sale.recognizedAt ? (known && recovered.every(value => value !== null) ? originalCost - recovered.reduce<number>((sum, value) => sum + (value || 0), 0) : null) : 0;
-  const revenue = sale.recognizedAt ? sale.totalPrice - merchandiseRefund : 0;
+  const taxAmount = sale.recognizedAt ? invoiceTaxAmount(sale) - refunds.reduce((sum, entry) => sum + returnTaxAmount(sale, entry), 0) : 0;
+  const revenue = sale.recognizedAt ? sale.totalPrice - merchandiseRefund - taxAmount : 0;
   const expenses = (sale.expensesAt ? sale.packaging + sale.shippingPaid + sale.otherCosts - sale.shippingReceived + refunds.reduce((sum, entry) => sum + entry.shippingRefund, 0) : 0) + fees;
-  return { revenue, cost, costKnown: known, refunded, paid,
+  return { revenue, taxAmount, cost, costKnown: known, refunded, paid,
     balance: sale.totalPrice + sale.shippingReceived - paid,
     pendingSettlement: Math.max(0, gateway - settledGross), fees, expenses,
     profit: cost === null ? null : revenue - cost - expenses };
@@ -149,3 +178,4 @@ export function safeCsv(value: unknown): string {
   if (typeof value !== 'number' && /^[\s]*[=+\-@]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
+

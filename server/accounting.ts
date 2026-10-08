@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import type { Store } from './storage';
 import type { Order, Product } from '../src/types';
 import { isApprovedOrderStatus, normalizeOrderStatus } from '../src/utils/orderWorkflow';
-import type { AccountingSale, AccountingLine, AccountingSettings, AccountingData, PurchaseLot, MoneyEntry, ReturnEntry, CostParts, AccountingAudit, GoldPurchase, GoldSaleTerms } from '../src/types/accounting';
-import { emptyCosts, costSum, lineCost, saleTotals, returnedQuantity, returnedCostLayers, accountingDate, accountingDay, normalizeAccountingDay, roundGrams, goldPurchaseCost, lineGoldCost, saleGoldTotals, goldReturnMovement, returnedGoldLayers, productGoldSale } from '../src/utils/accounting';
+import type { AccountingSale, AccountingLine, AccountingSettings, AccountingData, PurchaseLot, MoneyEntry, ReturnEntry, CostParts, AccountingAudit, GoldPurchase, GoldSaleTerms, InvoiceTax } from '../src/types/accounting';
+import { emptyCosts, costSum, lineCost, saleTotals, returnedQuantity, returnedCostLayers, accountingDate, accountingDay, normalizeAccountingDay, roundGrams, goldPurchaseCost, lineGoldCost, saleGoldTotals, goldReturnMovement, returnedGoldLayers, productGoldSale, invoiceTaxAmount, returnTaxAmount, returnMoneyLines } from '../src/utils/accounting';
 
 import { DEFAULT_SETTINGS } from '../src/utils/pricingEngine';
 
@@ -57,6 +57,15 @@ function goldSale(value: any): GoldSaleTerms {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail('درصدهای فروش طلا را وارد کنید.');
   return { makingPercent: gramNumber(value.makingPercent, 'اجرت فروش', 100),
     profitPercent: gramNumber(value.profitPercent, 'سود فروش', 100), discountPercent: gramNumber(value.discountPercent, 'تخفیف فروش', 100) };
+}
+function invoiceTax(value: any, unitPrice: number): InvoiceTax | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('جزئیات مالیات فاکتور نامعتبر است.');
+  const taxableAmount = money(value.taxableAmount, 'اجرت و سود مشمول مالیات');
+  const ratePercent = gramNumber(value.ratePercent, 'نرخ مالیات فاکتور', 100);
+  const amount = Math.round(taxableAmount * ratePercent / 100);
+  if (amount + taxableAmount > unitPrice) fail('مجموع مبلغ مشمول و مالیات از قیمت نهایی هر قطعه بیشتر است.');
+  return { taxableAmount, ratePercent, amount };
 }
 
 export function createAccounting(store: Store) {
@@ -120,6 +129,7 @@ export function createAccounting(store: Store) {
       createdAt: order.createdAt,
       items: order.items.map((item, index) => ({ key: String(index), productId: item.productId, title: item.productTitle,
         quantity: item.quantity, weight: item.weight, unitPrice: item.unitPrice, totalPrice: item.totalPrice, goldRevenueGrams: item.goldRevenueGrams, goldSale: item.goldSale,
+        ...(item.tax ? { tax: invoiceTax(item.tax, item.unitPrice) } : {}),
         allocations: [], extraAssembly: 0 })),
       packaging: settings().packaging, shippingReceived: 0, shippingPaid: 0, otherCosts: 0, revision: 0,
     };
@@ -237,6 +247,7 @@ export function createAccounting(store: Store) {
         requested.set(product.id, (requested.get(product.id) || 0) + count);
         return { productId: product.id, productTitle: product.title, productImage: product.images?.[0] || '', weight: product.weight,
           unitPrice, quantity: count, totalPrice: unitPrice * count, goldPriceAtOrder: 0, makingChargePercent: 0,
+          ...(item.tax !== undefined ? { tax: invoiceTax(item.tax, unitPrice) } : {}),
           ...(product.pricingMode !== 'fixed' && product.weight > 0 && item.goldSale !== undefined ? { goldSale: goldSale(item.goldSale) } : {}),
           ...(product.pricingMode !== 'fixed' && product.weight > 0 && item.goldSale === undefined && item.goldRevenueGrams !== undefined ? { goldRevenueGrams: gramNumber(item.goldRevenueGrams, 'معادل طلای فروش هر قطعه', 100000) } : {}) };
       });
@@ -274,6 +285,7 @@ export function createAccounting(store: Store) {
       for (const update of body.items) {
         const line = sale.items.find(item => item.key === update.key);
         if (!line) fail('ردیف سفارش یافت نشد.');
+        if (update.tax !== undefined) line.tax = invoiceTax(update.tax, line.unitPrice);
         if (update.goldPurchase !== undefined) {
           if (line.weight <= 0 || line.allocations.length || sale.costsLocked) fail('بهای طلای فروش قطعی یا کالای بدون طلا قابل جایگزینی نیست.', 409);
           line.overrideGoldPurchase = goldPurchase(update.goldPurchase); line.overrideCosts = goldCashCosts(line.overrideCosts);
@@ -321,11 +333,11 @@ export function createAccounting(store: Store) {
       const completed = { ...order, status: 'تکمیل شده' as const, reviewedAt: occurredAt, updatedAt: new Date().toISOString() };
       store.set('orders', order.id, completed); result = syncOrder(completed, actor, sale.channel);
     } else if (action === 'money') {
-      if (!['receipt', 'settlement', 'expense', 'capital', 'withdrawal', 'opening'].includes(body.kind)) fail('نوع دریافت یا پرداخت نامعتبر است.');
+      if (!['receipt', 'settlement', 'expense', 'tax_payment', 'capital', 'withdrawal', 'opening'].includes(body.kind)) fail('نوع دریافت یا پرداخت نامعتبر است.');
       if (!['pasargad', 'card_to_card'].includes(body.method)) fail('روش پرداخت نامعتبر است.');
       const amount = money(body.amount, 'مبلغ'); const fee = money(body.fee, 'کارمزد', true);
       if (!amount || fee > amount) fail('مبلغ باید مثبت باشد و کارمزد از مبلغ بیشتر نباشد.');
-      const reference = text(body.reference, 'شماره پیگیری', ['receipt', 'settlement'].includes(body.kind));
+      const reference = text(body.reference, 'شماره پیگیری', ['receipt', 'settlement', 'tax_payment'].includes(body.kind));
       if (reference && list<MoneyEntry>('accountingMoney').some(entry => !entry.voidedAt && entry.kind === body.kind && entry.method === body.method && entry.reference === reference)) fail('این شماره پیگیری قبلاً ثبت شده است.', 409);
       const saleId = body.saleId ? text(body.saleId, 'فروش', true) : undefined;
       if (['receipt', 'settlement'].includes(body.kind)) {
@@ -436,7 +448,7 @@ export function createAccounting(store: Store) {
     const daily = new Map<string, { day: string; revenue: number; profit: number | null }>();
     const byProduct = new Map<string, { productId: string; title: string; revenue: number; quantity: number; profit: number | null }>();
     const channelSummary = ['site', 'instagram'].map(name => ({ channel: name, revenue: 0, profit: 0 as number | null, missingCosts: 0 }));
-    let revenue = 0, cost = 0, expenses = 0, refunds = 0, missingCosts = 0, knownProfit = 0;
+    let revenue = 0, cost = 0, expenses = 0, refunds = 0, missingCosts = 0, knownProfit = 0, taxAmount = 0;
     function add(iso: string, sale: AccountingSale | undefined, r: number, c: number | null, e: number) {
       const day = accountingDay(iso); const row = daily.get(day) || { day, revenue: 0, profit: 0 };
       row.revenue += r; row.profit = row.profit === null || c === null ? null : row.profit + r - c - e; daily.set(day, row);
@@ -452,11 +464,13 @@ export function createAccounting(store: Store) {
       if (sale.recognizedAt && inRange(sale.recognizedAt)) {
         const known = lines.every(value => value !== null);
         if (!known) { missingCosts++; channelSummary.find(summary => summary.channel === sale.channel)!.missingCosts++; }
-        add(sale.recognizedAt, sale, sale.totalPrice, known ? lines.reduce<number>((sum, value) => sum + (value || 0), 0) : null, 0);
+        const saleTax = invoiceTaxAmount(sale); taxAmount += saleTax;
+        add(sale.recognizedAt, sale, sale.totalPrice - saleTax, known ? lines.reduce<number>((sum, value) => sum + (value || 0), 0) : null, 0);
         for (const line of sale.items) {
           const row = byProduct.get(line.productId) || { productId: line.productId, title: line.title, revenue: 0, quantity: 0, profit: 0 };
-          const c = lineCost(line); row.revenue += line.totalPrice; row.quantity += line.quantity;
-          row.profit = row.profit === null || c === null ? null : row.profit + line.totalPrice - c;
+          const c = lineCost(line); const net = line.totalPrice - (line.tax?.amount || 0) * line.quantity;
+          row.revenue += net; row.quantity += line.quantity;
+          row.profit = row.profit === null || c === null ? null : row.profit + net - c;
           byProduct.set(line.productId, row);
         }
       }
@@ -468,14 +482,13 @@ export function createAccounting(store: Store) {
         // An unknown Toman purchase basis stays unknown in a later return period.
         const returnKnown = !sale.recognizedAt || entry.items.every(item => lineCost(sale.items.find(line => line.key === item.key)!) !== null);
         if (!returnKnown) { missingCosts++; channelSummary.find(summary => summary.channel === sale.channel)!.missingCosts++; }
-        add(entry.occurredAt, sale, sale.recognizedAt ? -(entry.amount - entry.shippingRefund) : 0, returnKnown ? -recoveredCost : null, sale.expensesAt ? entry.shippingRefund : 0);
-        let allocatedRefund = 0;
-        const returnedValue = entry.items.reduce((sum, item) => { const line = sale.items.find(line => line.key === item.key)!; return sum + line.unitPrice * item.quantity; }, 0);
+        const refundTax = sale.recognizedAt ? returnTaxAmount(sale, entry) : 0; taxAmount -= refundTax;
+        add(entry.occurredAt, sale, sale.recognizedAt ? -(entry.amount - entry.shippingRefund - refundTax) : 0, returnKnown ? -recoveredCost : null, sale.expensesAt ? entry.shippingRefund : 0);
+        const refundLines = returnMoneyLines(sale, entry);
         for (const [index, item] of entry.items.entries()) {
           const line = sale.items.find(line => line.key === item.key)!;
           const row = byProduct.get(line.productId) || { productId: line.productId, title: line.title, revenue: 0, quantity: 0, profit: 0 };
-          const refund = index === entry.items.length - 1 ? entry.amount - entry.shippingRefund - allocatedRefund : Math.round((entry.amount - entry.shippingRefund) * line.unitPrice * item.quantity / Math.max(1, returnedValue));
-          allocatedRefund += refund;
+          const refund = refundLines[index].net;
           row.revenue -= refund; row.quantity -= item.quantity;
           row.profit = row.profit === null || lineCost(line) === null ? null : row.profit - refund + item.recoveredCost;
           byProduct.set(line.productId, row);
@@ -488,7 +501,7 @@ export function createAccounting(store: Store) {
       for (const entry of entries.filter(entry => inRange(entry.occurredAt))) {
         if (['capital', 'opening', 'settlement'].includes(entry.kind)) cashMovement += entry.amount;
         if (entry.kind === 'receipt' && entry.method === 'card_to_card') cashMovement += entry.amount - entry.fee;
-        if (['expense', 'withdrawal'].includes(entry.kind)) cashMovement -= entry.amount;
+        if (['expense', 'withdrawal', 'tax_payment'].includes(entry.kind)) cashMovement -= entry.amount;
       }
       cashMovement -= purchases.filter(lot => lot.kind === 'purchase' && inRange(lot.occurredAt)).reduce((sum, lot) => sum + costSum(lot.costs) * lot.quantity, 0);
       cashMovement -= returns.filter(entry => inRange(entry.occurredAt)).reduce((sum, entry) => sum + entry.amount, 0);
@@ -508,7 +521,7 @@ export function createAccounting(store: Store) {
     const periodPurchases = purchases.filter(lot => lot.kind === 'purchase' && inRange(lot.occurredAt));
     return { catalog, revision: revision(), settings: settings(), purchases, sales, money: allEntries, returns,
       audit: list<AccountingAudit>('accountingAudit').sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 200), totals, goldTotals,
-      report: { gold, revenue, cost, expenses, profit: missingCosts ? null : revenue - cost - expenses, knownProfit, missingCosts, refunds,
+      report: { gold, revenue, taxAmount, taxPayments: channel ? 0 : entries.filter(entry => entry.kind === 'tax_payment' && inRange(entry.occurredAt)).reduce((sum, entry) => sum + entry.amount, 0), cost, expenses, profit: missingCosts ? null : revenue - cost - expenses, knownProfit, missingCosts, refunds,
         inventoryCost: purchases.reduce((sum, lot) => sum + lot.remaining * costSum(lot.costs), 0), unknownStock,
         pendingSettlement: selected.reduce((sum, sale) => sum + totals[sale.id].pendingSettlement, 0),
         receivables: selected.filter(sale => !['لغو شده', 'رد شده'].includes(sale.status)).reduce((sum, sale) => sum + Math.max(0, totals[sale.id].balance), 0),
@@ -521,3 +534,4 @@ export function createAccounting(store: Store) {
   }
   return { syncOrder, syncSiteOrders, assertStatusChange, mutate, snapshot };
 }
+

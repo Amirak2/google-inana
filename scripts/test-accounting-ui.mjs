@@ -31,6 +31,10 @@ globalThis.fetch = async (url, options = {}) => {
   const body = JSON.parse(options.body); mutations.push({ url, body });
   if (failed) return Response.json({ error: 'خطای ثبت آزمایشی' }, { status: 409 });
   if (url.endsWith('/settings')) data = { ...data, revision: data.revision + 1, settings: { packaging: body.packaging, assembly: body.assembly } };
+  if (url.endsWith('/costs') || url.endsWith('/money')) {
+    try { createAccounting(fixture).mutate(url.split('/').at(-1), body, 'fixture-admin'); data = createAccounting(fixture).snapshot(); }
+    catch (error) { return Response.json({ error: error.message }, { status: 400 }); }
+  }
   return Response.json({ success: true, result: {} });
 };
 const React = await import('react'); const { act } = React; const { createRoot } = await import('react-dom/client'); const { Harness } = await import(output.href);
@@ -83,13 +87,16 @@ try {
   const saleSelect = document.querySelector('[role="dialog"] select');
   await update(() => { saleSelect.value = INITIAL_PRODUCTS[1].id; saleSelect.dispatchEvent(new window.Event('change', { bubbles: true })); });
   await input('نام مشتری', 'آزمایش درصدها');
-  await input('قیمت نهایی فروش هر عدد پس از تخفیف — تومان', '۱۰۰۰۰');
+  await input('قیمت نهایی فروش هر عدد پس از تخفیف، شامل مالیات — تومان', '۱۰۰۰۰');
   await input('اجرت فروش — درصد', '۱۶٫۵');
   await input('سود فروش — درصد', '۷');
   await input('تخفیف بخش طلا — درصد', '۰');
+  await input('جمع اجرت و سود مشمول پس از تخفیف — تومان', '۲۰۰۰');
+  assert.match(document.querySelector('[role="dialog"]').textContent, /مالیات هر عدد: ۲۰۰ تومان/);
   await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   assert.deepEqual(mutations.at(-1).body.items[0].goldSale, { makingPercent: 16.5, profitPercent: 7, discountPercent: 0 });
   assert.equal(mutations.at(-1).body.items[0].goldRevenueGrams, undefined);
+  assert.deepEqual(mutations.at(-1).body.items[0].tax, { taxableAmount: 2000, ratePercent: 10 });
   await update(() => button('فروش اینستاگرام').click());
   await update(() => button('افزودن کالا').click());
   assert.equal(document.querySelectorAll('select').length, 4, 'Two product rows, exchange selector and channel selector');
@@ -104,7 +111,8 @@ try {
   data = createAccounting(fixture).snapshot();
   await update(() => button('تازه‌سازی').click());
   await update(() => button('فروش‌ها').click());
-  await update(() => button('ثبت / مشاهدهٔ هزینه‌ها').click());
+  await update(() => button('ثبت / مشاهدهٔ هزینه‌ها و مالیات').click());
+  await input('مبلغ مشمول مالیات پس از تخفیف — تومان', '۵۰۰۰۰۰');
   await input('ساخت بعد از سفارش — تومان برای هر عدد (اگر قبلاً در خرید منظور نشده)', '۱۰۰۰۰۰');
   const paidCheckbox = [...document.querySelectorAll('label')].find(label => label.textContent.includes('هزینهٔ ساخت پرداخت شده است')).querySelector('input');
   await update(() => paidCheckbox.click());
@@ -113,6 +121,18 @@ try {
   assert.equal(mutations.at(-1).body.items[0].extraAssembly, 100000);
   assert.equal(mutations.at(-1).body.items[0].extraAssemblyPaid, true);
   assert.equal(mutations.at(-1).body.items[0].extraAssemblyDate, '۱۴۰۵/۰۷/۱۳');
+  assert.deepEqual(mutations.at(-1).body.items[0].tax, { taxableAmount: 500000, ratePercent: 10 });
+  assert.equal(data.sales.find(sale => sale.id === assemblyOrder.id).items[0].tax.amount, 50000);
+  await update(() => button('پرداخت مالیات').click());
+  await input('مبلغ — تومان', '۱۰۰۰');
+  await input('شماره پیگیری پرداخت مالیات', 'UI-TAX-PAID');
+  const cashBeforeTaxPayment = data.report.cashMovement;
+  const profitBeforeTaxPayment = data.report.profit;
+  await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(mutations.at(-1).body.kind, 'tax_payment');
+  assert.equal(data.report.cashMovement, cashBeforeTaxPayment - 1000);
+  assert.equal(data.report.profit, profitBeforeTaxPayment, 'Tax payment does not reduce profit twice');
   fixture.map('accountingSales').delete(assemblyOrder.id);
   fixture.map('orders').delete(assemblyOrder.id);
   const refunded = { id: 'ui-refunded', trackingCode: 'UI-REFUND', customerName: 'بازپرداخت آزمایشی', status: 'تأیید شده', createdAt: now,
@@ -136,3 +156,4 @@ try {
   assert.equal(mutations.length, requestsBeforeCustomer);
   console.log('PASS: real accounting React UI, StrictMode fetch completion, Persian numeric inputs, failure draft retention, stable payment keys, purchase form, multi-item Instagram sale and customer access gate.');
 } finally { await update(() => root.unmount()); globalThis.fetch = originalFetch; await unlink(output).catch(() => {}); dom.window.close(); }
+

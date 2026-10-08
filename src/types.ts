@@ -107,6 +107,7 @@ export interface OrderItem {
   goldPriceAtOrder: number;
   goldRevenueGrams?: number; // Explicit legacy proceeds per piece after wholesale charge; excludes fixed components.
   goldSale?: import('./types/accounting').GoldSaleTerms;
+  tax?: import('./types/accounting').InvoiceTax;
   makingChargePercent: number;
 }
 
@@ -217,3 +218,4 @@ export interface SystemLogStats {
   priceCount: number;
   lastErrorAt?: string;
 }
+
