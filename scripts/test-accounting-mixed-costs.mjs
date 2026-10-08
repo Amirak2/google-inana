@@ -41,7 +41,7 @@ hybrid.mutate('costs', { saleId: sold.id, items: [{ key: '0', extraAssembly: 0 }
 hybrid.mutate('complete', { saleId: sold.id, date: month1 });
 let snap = hybrid.accounting.snapshot();
 assert.equal(snap.totals[sold.id].profit, null, 'Cash components never invent a Toman gold basis');
-assert.equal(snap.goldTotals[sold.id].profitGrams, 0.3005, 'Gram profit formula is unchanged');
+assert.equal(snap.goldTotals[sold.id].profitGrams, 0.3131, 'Two grams: full sales making and profit minus wholesale charge and principal');
 hybrid.mutate('return', { saleId: sold.id, items: [{ key: '0', quantity: 1 }], amount: 1_000_000, shippingRefund: 0,
   restock: true, reference: 'HYBRID-RETURN', note: 'Synthetic return', date: month2 });
 snap = hybrid.accounting.snapshot(month2, '1405/07/30');
@@ -54,7 +54,7 @@ assert.equal(snap.report.daily[0].profit, null);
 assert.equal(snap.report.products[0].profit, null);
 assert.equal(snap.report.refunds, 1_000_000);
 assert.equal(snap.report.cashMovement, -1_000_000, 'Cash refund remains exact despite unknown profit');
-assert.equal(snap.report.gold.profitGrams, -0.15025, 'Gold return reverses original profit');
+assert.equal(snap.report.gold.profitGrams, -0.15655, 'Gold return reverses original profit');
 const restored = snap.purchases.find(row => row.id.startsWith('return-'));
 assert.deepEqual(restored.costs, components, 'Return retains pearl, ready assembly and other costs');
 const resale = paidSale(hybrid, 'gold-pearl', 1, month2);
@@ -101,3 +101,4 @@ pending.mutate('costs', { ...pendingBody, items: [{ key: '0', costs: { ...compon
 pending.mutate('costs', { ...pendingBody, items: [{ key: '0', goldPurchase: { weight: 1, makingPercent: 9 } }] });
 assert.deepEqual(pending.accounting.snapshot().sales[0].items[0].overrideCosts, components, 'Entering gram basis keeps only independent cash components');
 console.log('PASS: mixed gram/cash purchases and corrections, FIFO/restock/resale, dated paid assembly and unknown Toman return reports');
+
