@@ -66,14 +66,14 @@ try {
   assert.equal((await request('/api/orders/quote', 'POST', { items }, tokens[1])).status, 429);
   const first = await request('/api/orders/quote', 'POST', { items: items.slice(0, 3) }, tokens[1]);
   assert.equal(first.status, 200);
-  assert.equal(first.body.expiresAt, now + 5 * 60000);
+  assert.equal(first.body.expiresAt, now + 10 * 60000);
   now += 5 * 60000;
   const repeat = await request('/api/cart/reserve-batch', 'POST', { items: items.slice(0, 3) }, tokens[1]);
   assert.equal(repeat.status, 200);
   assert.equal(repeat.body.reserved, false, 'Drafts cannot create or extend payment reservations');
   const quote = await request('/api/orders/quote', 'POST', { items: items.slice(0, 3) }, tokens[1]);
   assert.equal(quote.status, 200);
-  assert.equal(quote.body.expiresAt, now + 5 * 60000, 'Checkout reserves inventory for five minutes');
+  assert.equal(quote.body.expiresAt, now + 10 * 60000, 'Checkout reserves inventory for ten minutes');
   await request('/api/cart/release-reservation', 'POST', {}, tokens[1]);
   assert.equal((await request('/api/orders/quote', 'POST', { items: items.slice(3, 4) }, tokens[1])).status, 429);
   now += 26 * 60000;

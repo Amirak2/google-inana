@@ -61,7 +61,7 @@ globalThis.fetch = async (url, options = {}) => {
   }
   if (url === '/api/auth/logout') {serverUser = null; return json({success: true});}
   if (url === '/api/auth/otp/verify') {serverUser = second; return json({success: true, user: second});}
-  if (url === '/api/orders/quote') return json({quoteId: 'q', expiresAt: Date.now() + 300000,
+  if (url === '/api/orders/quote') return json({quoteId: 'q', expiresAt: Date.now() + 600000,
     totalPrice: 7000000, goldPriceAtQuote: 23932462});
   if (url === '/api/orders') {
     const result = json({order: {id: 'order-first', trackingCode: 'FIRST-ORDER', ...JSON.parse(options.body),
@@ -87,11 +87,11 @@ async function checkout(expectedName = authHarness.userProfile.displayName, test
   await click('ادامه و ثبت مشخصات خریدار');
   assert.equal(document.querySelector('input[placeholder="مثال: سارا محمدی"]').value, expectedName);
   await click('ثبت اطلاعات و رفتن به صفحه کارت به کارت');
-  assert.ok(document.body.textContent.includes('رزرو کالا و تضمین مبلغ پرداخت (۵ دقیقه)'), 'Customer sees five-minute reservation');
+  assert.ok(document.body.textContent.includes('رزرو کالا و تضمین مبلغ پرداخت (۱۰ دقیقه)'), 'Customer sees ten-minute reservation');
   assert.ok(document.body.textContent.includes('پس از پایان مهلت، رزرو خودکار آزاد می‌شود.'), 'Customer knows what happens at expiry');
   assert.ok(document.body.textContent.includes('زمان باقی‌ماندهٔ رزرو:'), 'Countdown is visible at payment');
   if (testExpiry) {
-    const realNow = Date.now, expiredNow = realNow() + 300001;
+    const realNow = Date.now, expiredNow = realNow() + 600001;
     try {
       Date.now = () => expiredNow;
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
@@ -150,7 +150,7 @@ try {
   await act(async () => {pendingMe(); await settle();});
   assert.equal(authHarness.currentUser.uid, second.uid, 'Old restored account must not overwrite a new login');
   assert.equal(authHarness.loading, false);
-  console.log('PASS: no draft reservation, five-minute customer countdown/expiry/renewal, cookie-only profile edit, checkout privacy and stale responses.');
+  console.log('PASS: no draft reservation, ten-minute customer countdown/expiry/renewal, cookie-only profile edit, checkout privacy and stale responses.');
 } finally {
   await act(async () => root.unmount());
   dom.window.close();

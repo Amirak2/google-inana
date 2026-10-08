@@ -80,7 +80,7 @@ const AccountCartDrawer: React.FC = () => {
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Payment quote and inventory reservation (five-minute guarantee)
+  // Payment quote and inventory reservation (ten-minute guarantee)
   const [activeQuote, setActiveQuote] = useState<{
     quoteId: string;
     expiresAt: number;
@@ -100,7 +100,7 @@ const AccountCartDrawer: React.FC = () => {
     setActiveQuote(null);
   }, [cart]);
 
-  // Countdown uses the server's five-minute reservation deadline.
+  // Countdown uses the server's ten-minute reservation deadline.
   useEffect(() => {
     if (!activeQuote) {
       setQuoteSecondsLeft(null);
@@ -333,7 +333,7 @@ const AccountCartDrawer: React.FC = () => {
 
     setCustomerPhone(normalizedPhone);
 
-    // Lock inventory and price for the five-minute payment window.
+    // Lock inventory and price for the ten-minute payment window.
     setIsReserving(true);
     const quoteSuccess = await obtainPriceQuote();
     setIsReserving(false);
@@ -716,7 +716,7 @@ const AccountCartDrawer: React.FC = () => {
             {/* STEP 2: BUYER INFORMATION FORM */}
             {checkoutStep === 'info' && (
               <form onSubmit={handleProceedToPaymentStep} className="space-y-4 text-xs animate-in fade-in">
-                <p className="p-3 rounded-xl border border-[#D4AF37]/30 text-[#F5E8C7] leading-6">پس از ورود به مرحلهٔ پرداخت، کالا و مبلغ نهایی فقط ۵ دقیقه رزرو می‌شوند. در این مهلت واریز و فیش را ارسال کنید؛ سپس رزرو خودکار آزاد می‌شود.</p>
+                <p className="p-3 rounded-xl border border-[#D4AF37]/30 text-[#F5E8C7] leading-6">پس از ورود به مرحلهٔ پرداخت، کالا و مبلغ نهایی فقط ۱۰ دقیقه رزرو می‌شوند. در این مهلت واریز و فیش را ارسال کنید؛ سپس رزرو خودکار آزاد می‌شود.</p>
                 {/* Registration requirement warning banner if unauthenticated */}
                 {!isAuthenticated && (
                   <div className="p-4 bg-gradient-to-br from-[#241705] via-[#1A1208] to-[#0E1A33] border-2 border-amber-500/60 rounded-2xl space-y-3 shadow-xl text-xs">
@@ -911,7 +911,7 @@ const AccountCartDrawer: React.FC = () => {
                   </div>
                 )}
 
-                {/* Five-minute payment reservation and price guarantee */}
+                {/* Ten-minute payment reservation and price guarantee */}
                 {activeQuote && (
                   <div
                     className={`p-3 rounded-2xl border flex items-center justify-between gap-3 text-xs transition-colors ${
@@ -926,14 +926,14 @@ const AccountCartDrawer: React.FC = () => {
                       <Clock className="w-4 h-4 text-[#D4AF37] flex-shrink-0" />
                       <div>
                         <span className="font-bold block text-white text-xs">
-                          رزرو کالا و تضمین مبلغ پرداخت (۵ دقیقه)
+                          رزرو کالا و تضمین مبلغ پرداخت (۱۰ دقیقه)
                         </span>
                         <span className="text-[10px] opacity-80 block mt-0.5">
                           {quoteSecondsLeft !== null && quoteSecondsLeft > 0
                             ? `زمان باقی‌ماندهٔ رزرو: ${toPersianDigits(Math.floor(quoteSecondsLeft / 60))}:${toPersianDigits(String(quoteSecondsLeft % 60).padStart(2, '0'))}`
                             : 'مهلت رزرو تمام شد و کالا برای سایر مشتریان آزاد شد. اگر پرداخت کرده‌اید، فیش را با مبلغ همین پیش‌فاکتور برای بررسی مدیر ارسال کنید؛ اگر پرداخت نکرده‌اید، ابتدا موجودی و مبلغ جدید را دریافت کنید.'}
                         </span>
-                        {quoteSecondsLeft !== null && quoteSecondsLeft > 0 && <p className="text-[10px] leading-5 mt-1">برای واریز و ارسال فیش ۵ دقیقه فرصت دارید؛ پس از پایان مهلت، رزرو خودکار آزاد می‌شود.</p>}
+                        {quoteSecondsLeft !== null && quoteSecondsLeft > 0 && <p className="text-[10px] leading-5 mt-1">برای واریز و ارسال فیش ۱۰ دقیقه فرصت دارید؛ پس از پایان مهلت، رزرو خودکار آزاد می‌شود.</p>}
                       </div>
                     </div>
                     {quoteSecondsLeft === 0 && !paymentReceiptImage && (
@@ -1391,7 +1391,7 @@ const AccountCartDrawer: React.FC = () => {
                     disabled={isReserving}
                     className="flex-[2] flex items-center justify-center gap-2 bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#AA822A] text-slate-950 font-bold py-3 rounded-xl hover:brightness-110 active:scale-98 transition-all text-xs shadow-md cursor-pointer disabled:opacity-75"
                   >
-                    <span>{isReserving ? 'در حال رزرو ۵ دقیقه‌ای...' : 'ثبت اطلاعات و رفتن به صفحه کارت به کارت'}</span>
+                    <span>{isReserving ? 'در حال رزرو ۱۰ دقیقه‌ای...' : 'ثبت اطلاعات و رفتن به صفحه کارت به کارت'}</span>
                     <ArrowLeft className="w-3.5 h-3.5" />
                   </button>
                 </div>

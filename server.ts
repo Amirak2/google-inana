@@ -1273,7 +1273,7 @@ function generateUniqueTrackingCode(): string {
 // In-memory idempotency cache for orders (prevents double-billing / duplicate orders)
 const idempotencyOrdersMap: Map<string, Order> = new Map();
 
-// Quotes lock gold/product prices and inventory for five minutes at the payment step.
+// Quotes lock gold/product prices and inventory for ten minutes at the payment step.
 interface ServerPriceQuote {
   quoteId: string;
   items: Array<{
@@ -1366,7 +1366,7 @@ app.get('/api/orders/track/:trackingCode', (req: Request, res: Response) => {
   });
 });
 
-// Server-Side Price Quote generation with a five-minute payment reservation.
+// Server-Side Price Quote generation with a ten-minute payment reservation.
 app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   const { items } = req.body;
   const nowForQuote = Date.now();
@@ -1424,7 +1424,7 @@ app.post('/api/orders/quote', requireAuth, (req: AuthenticatedRequest, res: Resp
   }
 
   const quoteId = `quote_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
-  const quoteTtlMs = 5 * 60 * 1000;
+  const quoteTtlMs = 10 * 60 * 1000;
   const expiresAt = Date.now() + quoteTtlMs;
 
   try {
