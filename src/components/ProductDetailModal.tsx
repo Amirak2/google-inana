@@ -134,11 +134,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
             {/* Main Stage Image */}
             <button type="button" aria-label={`بزرگ‌نمایی تصویر ${product.title}`} aria-haspopup="dialog"
               onClick={() => setImageViewerOpen(true)}
-              className={`relative w-full h-[min(32dvh,280px)] sm:h-[360px] lg:h-auto lg:aspect-[4/5] rounded-2xl overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#0B152B]'} border border-[#D4AF37]/25 group cursor-zoom-in focus-visible:outline-2 focus-visible:outline-[#D4AF37]`}>
+              className={`relative w-fit max-w-full self-center lg:w-full lg:aspect-[4/5] rounded-2xl overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#0B152B]'} border border-[#D4AF37]/25 group cursor-zoom-in focus-visible:outline-2 focus-visible:outline-[#D4AF37]`}>
               <img
                 src={images[selectedImageIndex] || images[0]}
                 alt={product.title}
-                className="w-full h-full object-contain object-center"
+                className="block w-auto max-w-full h-auto max-h-[min(32dvh,280px)] sm:max-h-[360px] lg:w-full lg:h-full lg:max-h-none object-contain object-center"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src =
