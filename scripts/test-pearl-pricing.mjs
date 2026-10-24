@@ -3,6 +3,7 @@ import { PEARL_PRODUCTS } from '../src/data/seedData.ts';
 import { calculateProductPrice, DEFAULT_SETTINGS } from '../src/utils/pricingEngine.ts';
 
 const products = [
+  ['deforange', 4_000_000, 1],
   ['meshkikhelal', 4_000_000, 1],
   ['Avizheart', 3_000_000, 1],
   ['Avizorange', 3_000_000, 1],
