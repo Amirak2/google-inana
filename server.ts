@@ -325,6 +325,27 @@ for (const product of LETTER_PRODUCTS) seedProductsOnce(`letterCatalogV1-${produ
 for (const product of SEA_PRODUCTS) seedProductsOnce(`seaCatalogV1-${product.id}`, [product]);
 for (const product of UNCOLLECTED_GOLD_PRODUCTS) seedProductsOnce(`uncollectedGoldV1-${product.id}`, [product]);
 seedProductsOnce('pearlProductsV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p3'));
+// Update the existing champagne necklace once; append photos to its current gallery.
+if (!store.get('migrations', 'pearlMedusaDetails20261024V1')) {
+  const current = store.get<Product>('products', 'pearl-p3');
+  const updated = PEARL_PRODUCTS.find(product => product.id === 'pearl-p3')!;
+  if (current) {
+    store.set('products', current.id, {
+      ...current,
+      title: updated.title,
+      sku: updated.sku,
+      pricingMode: updated.pricingMode,
+      fixedPrice: updated.fixedPrice,
+      description: updated.description,
+      features: [...updated.features],
+      dimensions: updated.dimensions,
+      stock: updated.stock,
+      images: [...new Set([...current.images, ...updated.images.filter(image => image.endsWith('.jpeg'))])],
+    });
+  }
+  store.set('migrations', 'pearlMedusaDetails20261024V1', true);
+}
+
 seedProductsOnce('pearlClass10V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-class10'));
 seedProductsOnce('pearlP9V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p9'));
 seedProductsOnce('pearlGooshware1V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-gooshware1'));

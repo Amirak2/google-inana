@@ -91,7 +91,7 @@ app.get(['/products/pearls/:filename', '/products/letters/:filename', '/products
     let data = await getMediaObject(req.path.slice(1));
     // Stage this catalog addition into the existing private bucket on first access.
     // Subsequent requests and deployments keep using the stored object.
-    if (!data && /^(?:(a3blcwh|a4|ashki-20261024|avizorange|meshkikhelal)-[123]|avizheart-[1234])\.jpeg$/.test(req.params.filename)) {
+    if (!data && /^(?:(a3blcwh|a4|ashki-20261024|avizorange|meshkikhelal|medusa-20261024)-[123]|avizheart-[1234])\.jpeg$/.test(req.params.filename)) {
       const staged = await readFile(path.join(currentDir, 'product-media', 'pearls', req.params.filename));
       await putMediaObject(req.path.slice(1), staged, 'image/jpeg');
       data = await getMediaObject(req.path.slice(1));

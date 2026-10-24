@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import { Store } from '../server/storage.ts';
+import { createApp } from '../server.ts';
+import { PEARL_PRODUCTS } from '../src/data/seedData.ts';
+
+const env = { NODE_ENV: 'test', SESSION_SECRET: 'isolated-medusa-catalog-test-secret-longer-than-32' };
+const product = PEARL_PRODUCTS.find(product => product.id === 'pearl-p3');
+const store = new Store(env);
+store.set('migrations', 'initialProducts', true);
+store.set('migrations', 'pearlProductsV1', true);
+const images = ['/products/pearls/p3-white.png', '/media/products/admin-photo'];
+store.set('products', product.id, { ...product, sku: 'p3', features: ['کیفیت: 4A+', 'سایز: ۲۸'],
+  dimensions: 'سایز ۲۸', images, stock: 0, isFeatured: false });
+createApp(store, env);
+const updated = store.get('products', product.id);
+assert.equal(updated.sku, 'medusa');
+assert.equal(updated.fixedPrice, 7_000_000);
+assert.equal(updated.stock, 1);
+assert.ok(updated.features.includes('کیفیت: 2A+'));
+assert.ok(updated.features.every(feature => !feature.includes('سایز')));
+assert.equal(updated.dimensions, 'طول ۴۳ تا ۴۷ سانتی‌متر');
+assert.deepEqual(updated.images, [...images, ...product.images.filter(image => image.endsWith('.jpeg'))]);
+assert.equal(updated.isFeatured, false);
+assert.equal(updated.slug, 'pearl-champagne-p3');
+assert.equal([...store.map('products').values()].filter(p => p.sku === 'medusa').length, 1);
+store.set('products', product.id, { ...updated, stock: 0, fixedPrice: 8_000_000, images: ['/media/new-gallery'] });
+createApp(store, env);
+assert.equal(store.get('products', product.id).stock, 0);
+assert.equal(store.get('products', product.id).fixedPrice, 8_000_000);
+assert.deepEqual(store.get('products', product.id).images, ['/media/new-gallery']);
+store.map('products').delete(product.id);
+createApp(store, env);
+assert.equal(store.get('products', product.id), undefined);
+const fresh = new Store(env);
+createApp(fresh, env);
+assert.equal(fresh.get('products', product.id).images.length, 4);
+assert.equal(new Set(fresh.get('products', product.id).images).size, 4);
+console.log('PASS: champagne product retains identity and prior photos, updates to medusa once, removes unknown size, and preserves later stock/gallery edits and deletion.');
