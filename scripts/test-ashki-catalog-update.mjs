@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import { Store } from '../server/storage.ts';
+import { createApp } from '../server.ts';
+import { PEARL_PRODUCTS } from '../src/data/seedData.ts';
+
+const env = { NODE_ENV: 'test', SESSION_SECRET: 'isolated-ashki-catalog-test-secret-longer-than-32' };
+const product = PEARL_PRODUCTS.find(product => product.id === 'pearl-ashki');
+const store = new Store(env);
+store.set('migrations', 'initialProducts', true);
+store.set('migrations', 'pearlAshkiV1', true);
+const originalImages = ['/products/pearls/ashki-front-white.webp', '/media/products/admin-photo'];
+store.set('products', product.id, { ...product, title: 'مروارید اشکی', sku: 'Ashki', fixedPrice: 9_600_000,
+  features: ['کیفیت: 4A+'], images: originalImages, stock: 0, isFeatured: false });
+createApp(store, env);
+const updated = store.get('products', product.id);
+assert.equal(updated.title, 'مروارید رنگی رنگی');
+assert.equal(updated.sku, 'ashki');
+assert.equal(updated.fixedPrice, 11_600_000);
+assert.equal(updated.stock, 1);
+assert.ok(updated.features.includes('کیفیت: 3A+'));
+assert.deepEqual(updated.images, [...originalImages, ...product.images.filter(image => image.endsWith('.jpeg'))]);
+assert.equal(updated.isFeatured, false);
+assert.equal(updated.slug, 'pearl-ashki');
+store.set('products', product.id, { ...updated, stock: 0, fixedPrice: 12_000_000, images: ['/media/new-gallery'] });
+createApp(store, env);
+assert.equal(store.get('products', product.id).stock, 0);
+assert.equal(store.get('products', product.id).fixedPrice, 12_000_000);
+assert.deepEqual(store.get('products', product.id).images, ['/media/new-gallery']);
+store.map('products').delete(product.id);
+createApp(store, env);
+assert.equal(store.get('products', product.id), undefined);
+const fresh = new Store(env);
+createApp(fresh, env);
+assert.equal(fresh.get('products', product.id).images.length, 5);
+assert.equal(new Set(fresh.get('products', product.id).images).size, 5);
+console.log('PASS: Ashki details update once, retain prior photos and identity, append three photos, and preserve later stock/gallery edits and deletion.');

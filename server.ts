@@ -330,6 +330,27 @@ seedProductsOnce('pearlP9V1', PEARL_PRODUCTS.filter((product) => product.id === 
 seedProductsOnce('pearlGooshware1V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-gooshware1'));
 seedProductsOnce('pearlAphroditeV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-aphrodite'));
 seedProductsOnce('pearlAshkiV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-ashki'));
+// Apply the owner's catalog correction once, retaining all existing gallery images.
+if (!store.get('migrations', 'pearlAshkiDetails20261024V1')) {
+  const current = store.get<Product>('products', 'pearl-ashki');
+  const updated = PEARL_PRODUCTS.find(product => product.id === 'pearl-ashki')!;
+  if (current) {
+    store.set('products', current.id, {
+      ...current,
+      title: updated.title,
+      sku: updated.sku,
+      pricingMode: updated.pricingMode,
+      fixedPrice: updated.fixedPrice,
+      description: updated.description,
+      features: [...updated.features],
+      dimensions: updated.dimensions,
+      stock: updated.stock,
+      images: [...new Set([...current.images, ...updated.images.filter(image => image.endsWith('.jpeg'))])],
+    });
+  }
+  store.set('migrations', 'pearlAshkiDetails20261024V1', true);
+}
+
 seedProductsOnce('pearlShirazA3V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-a3'));
 seedProductsOnce('pearlTak5V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-tak5'));
 seedProductsOnce('pearlP6V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p6'));
