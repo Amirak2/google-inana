@@ -13,7 +13,7 @@ assert.equal(normalizeCatalogText('كیـــفِیت ۸'), normalizeCatalogText
 const pearls = {...filters, selectedCollection: 'INANA PEARLS'};
 const counts = catalogCategoryCounts(products, pearls);
 assert.equal(counts.get('حروف انگلیسی') || 0, 0);
-assert.equal([...counts.values()].reduce((a,b) => a+b, 0), 15);
+assert.equal([...counts.values()].reduce((a,b) => a+b, 0), 16);
 assert.equal(catalogWeightBounds(products, pearls), null, 'Fixed price pearls must not set the gold weight range');
 const gold = {...filters, selectedCategory: 'حروف انگلیسی'};
 const range = catalogWeightBounds(products, gold);

@@ -402,6 +402,7 @@ seedProductsOnce('pearlAvizorangeV1', PEARL_PRODUCTS.filter((product) => product
 seedProductsOnce('pearlAvizheartV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-avizheart'));
 seedProductsOnce('pearlMeshkikhelalV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-meshkikhelal'));
 seedProductsOnce('pearlDeforangeV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-deforange'));
+seedProductsOnce('pearlDefmeshkiV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-defmeshki'));
 seedProductsOnce('pearlGoldA7V1', PEARL_GOLD_PRODUCTS.filter((product) => product.id === 'pearl-gold-a7'));
 seedProductsOnce('pearlGoldA7BraceletsV1', PEARL_GOLD_PRODUCTS.filter((product) => product.category === 'دستبند مروارید و طلا'));
 // Replace only the original G photo; preserve stock, prices and administrator galleries.
