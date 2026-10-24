@@ -350,7 +350,7 @@ export const PEARL_PRODUCTS: Product[] = [
     additionalCost: 0,
     stoneCost: 0,
     discountPercent: 0,
-    images: ['/products/pearls/p9-white.png'],
+    images: ['/products/pearls/p9-white.png', '/products/pearls/p9-20261024-1.jpeg', '/products/pearls/p9-20261024-2.jpeg', '/products/pearls/p9-20261024-3.jpeg'],
     description: 'گردنبند مروارید استانبول با کیفیت 3A+ و قفل نقره‌ای.',
     features: ['کیفیت: 3A+', 'قفل: نقره‌ای', 'طول گردنبند: ۴۳ تا ۴۷ سانتی‌متر', 'سایز: ۵'],
     dimensions: 'طول ۴۳ تا ۴۷ سانتی‌متر؛ سایز ۵',

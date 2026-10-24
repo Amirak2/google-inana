@@ -358,6 +358,17 @@ if (!store.get('migrations', 'pearlMedusaDetails20261024V1')) {
 
 seedProductsOnce('pearlClass10V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-class10'));
 seedProductsOnce('pearlP9V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p9'));
+// Append the owner's Istanbul photos once without changing product details or stock.
+if (!store.get('migrations', 'pearlP9Gallery20261024V1')) {
+  const current = store.get<Product>('products', 'pearl-p9');
+  const additions = PEARL_PRODUCTS.find(product => product.id === 'pearl-p9')!.images
+    .filter(image => image.startsWith('/products/pearls/p9-20261024-'));
+  if (current) {
+    store.set('products', current.id, { ...current, images: [...new Set([...current.images, ...additions])] });
+  }
+  store.set('migrations', 'pearlP9Gallery20261024V1', true);
+}
+
 seedProductsOnce('pearlGooshware1V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-gooshware1'));
 seedProductsOnce('pearlAphroditeV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-aphrodite'));
 seedProductsOnce('pearlAshkiV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-ashki'));
