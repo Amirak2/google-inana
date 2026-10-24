@@ -288,7 +288,7 @@ export const AdminDashboard: React.FC = () => {
         titleEn: productForm.titleEn || '',
         slug: productForm.title?.toLowerCase().replace(/\s+/g, '-') || `prod-${Date.now()}`,
         category: productForm.category || 'پلاک و مدال',
-        collection: productForm.collection || 'INANA SIGNATURE',
+        collection: productForm.collection || '',
         pricingMode: isFixedPrice ? 'fixed' : 'gold',
         fixedPrice: isFixedPrice ? Number(productForm.fixedPrice) : undefined,
         pearlPrice: isFixedPrice ? 0 : numberOrDefault(productForm.pearlPrice, 0),
@@ -1250,7 +1250,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                         ...productForm,
                         pricingMode: mode,
                         category: mode === 'fixed' ? 'گردنبند مروارید' : 'پلاک طلا',
-                        collection: mode === 'fixed' ? 'INANA PEARLS' : 'INANA SIGNATURE',
+                        collection: mode === 'fixed' ? 'INANA PEARLS' : '',
                         weight: mode === 'fixed' ? 0 : 1,
                         customMakingChargePercent: mode === 'fixed' ? 0 : 20,
                         customProfitPercent: mode === 'fixed' ? 0 : 7,
@@ -1303,7 +1303,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                         setProductForm({ ...productForm, collection: e.target.value })
                       }
                       className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-white outline-none"
-                      placeholder="INANA LETTERS, INANA SIGNATURE, ..."
+                      placeholder="INANA LETTERS, INANA PEARLS, INANA SEA, ..."
                     />
                   </div>
                 </div>

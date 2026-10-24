@@ -13,7 +13,7 @@ import { createAccounting } from './server/accounting';
 
 import crypto from 'crypto';
 
-import { INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS, UNCOLLECTED_GOLD_PRODUCTS } from './src/data/seedData';
+import { RETIRED_COLLECTION_NAMES, INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS, UNCOLLECTED_GOLD_PRODUCTS } from './src/data/seedData';
 import { GoldHistoryPoint, GoldPriceData, Order, OtherMarketsData, PricingSettings, Product, SystemLogModule } from './src/types';
 import { calculateProductPrice, DEFAULT_SETTINGS } from './src/utils/pricingEngine';
 import { productGoldSale } from './src/utils/accounting';
@@ -321,6 +321,16 @@ const DEFAULT_SEED_ORDERS: Order[] = [
 // --- Settings Persistence ---
 function saveSettingsToDb(settings: PricingSettings): void { store.set('settings', 'pricing', settings); }
 seedDatabaseIfEmpty(INITIAL_PRODUCTS, []);
+// Retire the requested collections while retaining every product and its inventory.
+if (!store.get('migrations', 'retireUnusedCollections20261024V1')) {
+  for (const product of getAllProductsFromDb()) {
+    if (RETIRED_COLLECTION_NAMES.includes(product.collection)) {
+      store.set('products', product.id, { ...product, collection: '' });
+    }
+  }
+  store.set('migrations', 'retireUnusedCollections20261024V1', true);
+}
+
 for (const product of LETTER_PRODUCTS) seedProductsOnce(`letterCatalogV1-${product.id}`, [product]);
 for (const product of SEA_PRODUCTS) seedProductsOnce(`seaCatalogV1-${product.id}`, [product]);
 for (const product of UNCOLLECTED_GOLD_PRODUCTS) seedProductsOnce(`uncollectedGoldV1-${product.id}`, [product]);
