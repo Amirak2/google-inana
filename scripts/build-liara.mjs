@@ -2,6 +2,7 @@ import { build as viteBuild } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
+import { cp } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -34,4 +35,5 @@ await build({
   },
   minify: true,
 });
+await cp(path.join(projectDir, 'product-media'), path.join(projectDir, 'dist/product-media'), { recursive: true });
 console.log('Liara: client and Node server builds completed.');

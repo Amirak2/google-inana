@@ -1,10 +1,11 @@
 import express from 'express';
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './server';
 import type { Store } from './server/storage';
 import { PostgresStore, PostgresConflictError } from './server/postgresStorage';
-import { getMediaObject } from './server/objectStorage';
+import { getMediaObject, putMediaObject } from './server/objectStorage';
 import { configureTrustedProxy, normalizeClientIp } from './server/clientIp';
 import { runPostgresRequest } from './server/postgresRequest';
 import { securityHeaders } from './server/securityHeaders';
@@ -87,9 +88,17 @@ app.get(['/products/pearls/:filename', '/products/letters/:filename', '/products
     res.sendStatus(404); return;
   }
   try {
-    const data = await getMediaObject(req.path.slice(1));
+    let data = await getMediaObject(req.path.slice(1));
+    // Stage this catalog addition into the existing private bucket on first access.
+    // Subsequent requests and deployments keep using the stored object.
+    if (!data && /^a3blcwh-[123]\.jpeg$/.test(req.params.filename)) {
+      const staged = await readFile(path.join(currentDir, 'product-media', 'pearls', req.params.filename));
+      await putMediaObject(req.path.slice(1), staged, 'image/jpeg');
+      data = await getMediaObject(req.path.slice(1));
+      if (!data?.equals(staged)) throw new Error('Product photo upload verification failed');
+    }
     if (!data) { res.sendStatus(404); return; }
-    res.set('Content-Type', req.params.filename.endsWith('.webp') ? 'image/webp' : 'image/png');
+    res.set('Content-Type', req.params.filename.endsWith('.webp') ? 'image/webp' : req.params.filename.endsWith('.jpeg') ? 'image/jpeg' : 'image/png');
     res.set('Cache-Control', 'public, max-age=86400');
     res.set('X-Content-Type-Options', 'nosniff');
     res.send(data);
