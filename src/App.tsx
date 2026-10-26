@@ -55,7 +55,7 @@ const MainLayout: React.FC = () => {
         {activeTab === 'home' && (
           <>
             <HeroSection />
-            <CollectionsShowcase limit={3} showViewAll />
+            <CollectionsShowcase />
             <ShopCatalog />
             <LiveGoldTicker compact />
             <TestimonialsFAQ compact />
