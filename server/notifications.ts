@@ -2,8 +2,9 @@ import type { Store } from './storage';
 import type { NotificationFeed, Order, UserNotification } from '../src/types';
 import { normalizeOrderStatus } from '../src/utils/orderWorkflow';
 import { orderNotificationContent } from '../src/utils/orderNotifications';
+import { queueOrderSms } from './smsOutbox';
 
-export function createNotifications(store: Store) {
+export function createNotifications(store: Store, env: Record<string, any> = {}) {
   const recordOrder = (order: Order) => {
     if (!order.userId) return;
     const notification: UserNotification = {
@@ -12,6 +13,7 @@ export function createNotifications(store: Store) {
       orderId: order.id, trackingCode: order.trackingCode, status: normalizeOrderStatus(order.status),
     };
     store.set('notifications', notification.id, notification);
+    queueOrderSms(store, env, order, notification);
   };
 
   const allForUser = (uid: string): UserNotification[] => {

@@ -52,7 +52,7 @@ const { runDbTransaction,
   seedDatabaseIfEmpty, seedProductsOnce, } = createDb(store);
 const app = express();
 const accounting = createAccounting(store);
-const notifications = createNotifications(store);
+const notifications = createNotifications(store, env);
 function saveOrderToDb(order: Order): void {
   persistOrderToDb(order);
   accounting.syncOrder(order);
@@ -1331,6 +1331,21 @@ app.put('/api/admin/settings', requireAdminAuth, (req: AuthenticatedRequest, res
 
 app.get('/api/notifications', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   res.json(notifications.feed(req.user!.uid));
+});
+
+app.get('/api/admin/sms/status', requireAdminAuth, (_req: AuthenticatedRequest, res: Response) => {
+  const jobs = [...store.map<import('./server/smsOutbox').OrderSms>('smsOutbox').values()];
+  const counts: Record<string, number> = {};
+  for (const job of jobs) counts[job.state] = (counts[job.state] || 0) + 1;
+  res.json({
+    provider: env.SMS_PROVIDER || 'legacy',
+    otpConfigured: Boolean(env.SMS_IR_API_KEY && Number(env.SMS_IR_OTP_TEMPLATE_ID) > 0),
+    notificationsEnabled: env.SMS_IR_NOTIFICATIONS_ENABLED === 'true', counts,
+    recent: jobs.sort((a, b) => b.createdAt - a.createdAt).slice(0, 20).map(j => ({
+      id: j.id, state: j.state, attempts: j.attempts, error: j.error,
+      createdAt: j.createdAt, messageId: j.messageId, mobile: '*******' + j.mobile.slice(-4),
+    })),
+  });
 });
 
 app.post('/api/notifications/read', requireAuth, (req: AuthenticatedRequest, res: Response) => {
