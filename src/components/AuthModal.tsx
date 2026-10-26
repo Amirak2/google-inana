@@ -15,11 +15,13 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationsContext';
 import { Order } from '../types';
 import { formatToman, toPersianDigits } from '../utils/persianFormatter';
 import { getAuthHeaders } from '../utils/authHelper';
 
 export const AuthModal: React.FC = () => {
+  const { feed: notificationFeed, openNotifications } = useNotifications();
   const {
     currentUser,
     userProfile,
@@ -593,7 +595,7 @@ export const AuthModal: React.FC = () => {
 
               {!isAdmin && <div className="rounded-2xl border border-[#D4AF37]/25 bg-[#0A1120] p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">سفارش‌های من</span>
+                  <button type="button" onClick={() => { closeAuthModal(); openNotifications(); }} className="text-xs font-bold text-[#E6CA65] underline underline-offset-4">اعلان‌ها و سفارش‌های من{notificationFeed.unreadCount > 0 ? ` (${toPersianDigits(notificationFeed.unreadCount)} جدید)` : ''}</button>
                   <span className="text-[10px] text-slate-400">
                     {loadingUserOrders ? 'در حال دریافت...' : `${toPersianDigits(userOrders.length)} سفارش`}
                   </span>

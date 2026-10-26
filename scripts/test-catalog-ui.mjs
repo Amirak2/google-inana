@@ -16,7 +16,8 @@ const bundle = await build({
     import { ShopCatalog } from './src/components/ShopCatalog';
     import { Navbar } from './src/components/Navbar';
     import { CollectionsShowcase } from './src/components/CollectionsShowcase';
-    function Probe() { globalThis.catalogHarness = useGoldStore(); return <><Navbar/><ShopCatalog/><CollectionsShowcase/></>; }
+    import { NotificationsProvider } from './src/context/NotificationsContext';
+    function Probe() { globalThis.catalogHarness = useGoldStore(); return <NotificationsProvider><Navbar/><ShopCatalog/><CollectionsShowcase/></NotificationsProvider>; }
     export function Harness() { return <GoldStoreProvider><Probe/></GoldStoreProvider>; }
   `, resolveDir: process.cwd(), loader: 'tsx'},
   bundle: true, platform: 'node', format: 'esm', packages: 'external', write: false,

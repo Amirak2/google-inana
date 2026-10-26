@@ -15,10 +15,12 @@ import {
   Info,
   User,
   LogOut,
+  Bell,
 } from 'lucide-react';
 import { InanaLogo } from './InanaLogo';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationsContext';
 import { formatToman, formatPercent } from '../utils/persianFormatter';
 import { PAGE_PATHS } from '../utils/siteRoutes';
 
@@ -36,6 +38,7 @@ export const Navbar: React.FC = () => {
   } = useGoldStore();
 
   const { currentUser, userProfile, isAdmin, openAuthModal, logout } = useAuth();
+  const { feed, openNotifications } = useNotifications();
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -223,7 +226,13 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Left Section: Search, Favorites, Cart */}
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-0.5 sm:gap-4">
+            {currentUser && <button type="button" onClick={openNotifications}
+              aria-label={`اعلان‌ها${feed.unreadCount ? `؛ ${feed.unreadCount} خوانده‌نشده` : ''}`} title="اعلان‌ها و سفارش‌های من"
+              className="relative rounded-full p-2.5 text-slate-300 hover:bg-slate-800/50 hover:text-[#D4AF37]">
+              <Bell className="h-5 w-5"/>
+              {feed.unreadCount > 0 && <span aria-hidden="true" className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#D4AF37] px-0.5 text-[10px] font-bold text-slate-950">{feed.unreadCount > 9 ? '۹+' : String(feed.unreadCount).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])}</span>}
+            </button>}
             {/* Search Button */}
             <div className="relative">
               <button
@@ -293,7 +302,7 @@ export const Navbar: React.FC = () => {
             <button
               id="favorites-nav-btn"
               onClick={() => handleNavClick('favorites')}
-              className="relative p-2.5 rounded-full text-slate-300 hover:text-rose-400 hover:bg-slate-800/50 transition-colors"
+              className="relative hidden sm:inline-flex p-2.5 rounded-full text-slate-300 hover:text-rose-400 hover:bg-slate-800/50 transition-colors"
               title="علاقه‌مندی‌ها"
             >
               <Heart
