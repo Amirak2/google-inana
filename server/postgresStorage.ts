@@ -88,7 +88,7 @@ export class PostgresStore {
   private selectQuery(): string {
     const clauses: string[] = [];
     if (this.scopeBuckets) clauses.push('bucket = ANY($1::text[])');
-    if (this.publicRead) clauses.push("bucket NOT IN ('orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits','phoneClaims','quoteOwners','trackingCodes')");
+    if (this.publicRead) clauses.push("bucket NOT IN ('orders','idempotency','media','logs','quotes','users','favorites','sessions','otp','phoneOtp','revoked','rateLimits','phoneClaims','quoteOwners','trackingCodes','notifications','notificationReads')");
     if (this.publicRead) clauses.push(`bucket NOT IN (${ACCOUNTING_BUCKETS.map(bucket => `'${bucket}'`).join(',')})`);
     return 'SELECT bucket, record_key, value_json FROM site_records' + (clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '');
   }

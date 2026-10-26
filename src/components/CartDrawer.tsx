@@ -409,6 +409,7 @@ const AccountCartDrawer: React.FC = () => {
         if (!stillMounted.current) return;
         const createdOrder: Order = data.order;
         setConfirmedOrder(createdOrder);
+        window.dispatchEvent(new window.Event('inana:notifications-refresh'));
         setCheckoutStep('success');
         clearCart();
         refreshProducts();

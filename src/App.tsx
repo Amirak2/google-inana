@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationsProvider } from './context/NotificationsContext';
+import { NotificationCenter } from './components/NotificationCenter';
 import { GoldStoreProvider, useGoldStore } from './context/GoldStoreContext';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
@@ -136,6 +138,7 @@ const MainLayout: React.FC = () => {
         onClose={() => setQuickViewProduct(null)}
       />
       <AuthModal />
+      <NotificationCenter />
 
       {/* Footer */}
       <Footer />
@@ -149,9 +152,11 @@ const MainLayout: React.FC = () => {
 export default function App() {
   return (
     <AuthProvider>
+      <NotificationsProvider>
       <GoldStoreProvider>
         <MainLayout />
       </GoldStoreProvider>
+      </NotificationsProvider>
     </AuthProvider>
   );
 }

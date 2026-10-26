@@ -154,6 +154,27 @@ export interface CollectionInfo {
   tag: string;
 }
 
+export interface UserNotification {
+  id: string;
+  userId: string;
+  type: 'order' | 'announcement';
+  title: string;
+  message: string;
+  createdAt: string;
+  readAt?: string;
+  orderId?: string;
+  trackingCode?: string;
+  status?: string;
+}
+
+export type UserOrderSummary = Pick<Order, 'id' | 'trackingCode' | 'status' | 'totalPrice' | 'createdAt'> & { updatedAt?: string };
+export interface NotificationFeed {
+  notifications: UserNotification[];
+  unreadCount: number;
+  total: number;
+  orders: UserOrderSummary[];
+}
+
 export interface GoldHistoryPoint {
   time: string;
   price: number;

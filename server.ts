@@ -9,6 +9,7 @@ import express from './server/router';
 import type { Request, Response, NextFunction } from 'express';
 import type { Store } from './server/storage';
 import { createAccounting } from './server/accounting';
+import { createNotifications } from './server/notifications';
 
 
 import crypto from 'crypto';
@@ -51,6 +52,7 @@ const { runDbTransaction,
   seedDatabaseIfEmpty, seedProductsOnce, } = createDb(store);
 const app = express();
 const accounting = createAccounting(store);
+const notifications = createNotifications(store);
 function saveOrderToDb(order: Order): void {
   persistOrderToDb(order);
   accounting.syncOrder(order);
@@ -1327,6 +1329,24 @@ app.put('/api/admin/settings', requireAdminAuth, (req: AuthenticatedRequest, res
 
 // 6. Orders (Server-Side Recalculation & Persistent DB Storage)
 
+app.get('/api/notifications', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  res.json(notifications.feed(req.user!.uid));
+});
+
+app.post('/api/notifications/read', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  const { ids, all } = req.body || {};
+  if (!(all === true && ids === undefined) && !(all === undefined && Array.isArray(ids) && ids.length > 0 && ids.length <= 100
+    && ids.every((id: unknown) => typeof id === 'string' && id.length > 0 && id.length <= 500))) {
+    res.status(400).json({ error: 'درخواست خواندن اعلان‌ها نامعتبر است.' });
+    return;
+  }
+  if (!notifications.markRead(req.user!.uid, all === true ? 'all' : ids)) {
+    res.status(404).json({ error: 'اعلان یافت نشد؛ فهرست را تازه کنید.' });
+    return;
+  }
+  res.json(notifications.feed(req.user!.uid));
+});
+
 // Tracking code generator with high cryptographic entropy and collision prevention
 function generateUniqueTrackingCode(): string {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -1807,6 +1827,7 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
 
       ordersList.unshift(newOrder);
       saveOrderToDb(newOrder); // Atomic write to SQLite orders table
+      notifications.recordOrder(newOrder);
       inventoryPolicy.touchOwner(orderUserId);
 
       // G. Store idempotency key with unique constraint in SQLite (Issue #4 Fix)
@@ -1903,6 +1924,7 @@ async function handleOrderStatusUpdate(
         throw err;
       }
       if (status !== undefined) accounting.assertStatusChange(order, status);
+      const previousStatus = normalizeOrderStatus(order.status);
       const wasRejected = order.status === 'رد شده' || order.status === 'لغو شده';
       const quantities = new Map<string, number>();
       for (const item of order.items) quantities.set(item.productId, (quantities.get(item.productId) || 0) + item.quantity);
@@ -1956,6 +1978,7 @@ async function handleOrderStatusUpdate(
       order.updatedAt = new Date().toISOString();
 
       saveOrderToDb(order); // Persisted to SQLite inside transaction
+      if (status !== undefined && status !== previousStatus) notifications.recordOrder(order);
       return order;
     });
 
