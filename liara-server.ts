@@ -10,6 +10,7 @@ import { configureTrustedProxy, normalizeClientIp } from './server/clientIp';
 import { runPostgresRequest } from './server/postgresRequest';
 import { securityHeaders } from './server/securityHeaders';
 import { startGoldScheduler } from './server/goldScheduler';
+import { startSmsScheduler } from './server/smsOutbox';
 import { PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS, UNCOLLECTED_GOLD_PRODUCTS } from './src/data/seedData';
 
 const app = express();
@@ -115,3 +116,4 @@ app.get('*', (_req, res) => res.sendFile(path.join(clientDir, 'index.html')));
 const port = Number(process.env.PORT || 3000);
 app.listen(port, '0.0.0.0', () => console.log(`INANA GOLD listening on port ${port}`));
 startGoldScheduler(process.env);
+startSmsScheduler(process.env);

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import type { Store } from './storage';
 import { UserProfile, UserRole } from '../src/types';
+import { sendSmsIr, smsIrEnabled } from './smsIr';
 
 export interface StoredUser {
   uid: string;
@@ -491,8 +492,14 @@ async function sendSmsOtpCode(mobile: string, clientIp?: string): Promise<{
   const otpCode = otpNumber.toString();
 
   // If SMS_OTP_API_KEY is configured, dispatch SMS to provider
-  const hasApiKey = Boolean(SMS_OTP_API_KEY && SMS_OTP_API_KEY.trim());
-  if (hasApiKey) {
+  const useSmsIr = smsIrEnabled(env);
+  const hasApiKey = useSmsIr ? Boolean(env.SMS_IR_API_KEY?.trim()) : Boolean(SMS_OTP_API_KEY && SMS_OTP_API_KEY.trim());
+  if (useSmsIr) {
+    if (!hasApiKey) throw new Error('سرویس پیامک در سرور پیکربندی نشده است.');
+    const send = async () => { await sendSmsIr(env, cleanMobile, Number(env.SMS_IR_OTP_TEMPLATE_ID), [{ name: env.SMS_IR_OTP_PARAMETER || 'CODE', value: otpCode }]); };
+    if (env.deferSms) env.deferSms(send, { mobile: cleanMobile, code: otpCode });
+    else await send();
+  } else if (hasApiKey) {
     const bearerHeader = SMS_OTP_API_KEY.startsWith('Bearer ')
       ? SMS_OTP_API_KEY
       : `Bearer ${SMS_OTP_API_KEY}`;

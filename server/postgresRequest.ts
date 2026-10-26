@@ -43,6 +43,7 @@ export function requestBuckets(pathname: string): string[] {
   if (pathname.startsWith('/api/auth/')) buckets.push('otp', 'phoneOtp');
   if (pathname.includes('/favorites')) buckets.push('favorites');
   if (/^\/api\/(notifications|orders|admin)(\/|$)/.test(pathname)) buckets.push('notifications', 'notificationReads');
+  if (/^\/api\/(orders|admin)(\/|$)/.test(pathname)) buckets.push('smsOutbox');
   if (pathname.startsWith('/api/notifications')) buckets.push('orders');
   if (/^\/api\/(orders|cart|products|admin)/.test(pathname)) buckets.push('orders', 'idempotency', 'quotes', 'quoteOwners', 'reservations', 'trackingCodes', 'inventoryHolds');
   if (/^\/api\/(orders|admin)/.test(pathname)) buckets.push(...ACCOUNTING_BUCKETS);
