@@ -360,6 +360,18 @@ if (!store.get('migrations', 'pearlMedusaDetails20261024V1')) {
 
 seedProductsOnce('pearlClass10V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-class10'));
 seedProductsOnce('pearlP9V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-p9'));
+// Add the Istanbul model photo once, preserving all existing gallery and product fields.
+if (!store.get('migrations', 'pearlP9ModelPhoto20261027V1')) {
+  const current = store.get<Product>('products', 'pearl-p9');
+  if (current) {
+    store.set('products', current.id, {
+      ...current,
+      images: [...new Set([...current.images, '/products/pearls/p9-model-20261027.jpeg'])],
+    });
+  }
+  store.set('migrations', 'pearlP9ModelPhoto20261027V1', true);
+}
+
 // Append the owner's Istanbul photos once without changing product details or stock.
 if (!store.get('migrations', 'pearlP9Gallery20261024V1')) {
   const current = store.get<Product>('products', 'pearl-p9');
