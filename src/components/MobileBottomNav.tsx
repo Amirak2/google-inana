@@ -25,6 +25,9 @@ export const MobileBottomNav: React.FC = () => {
     }
   };
 
+  // The admin workspace provides its own task navigation on small screens.
+  if (activeTab === 'admin') return null;
+
   return (
     <nav aria-label="ناوبری موبایل" id="mobile-bottom-nav" className="md:hidden h-[var(--mobile-nav-offset)] fixed bottom-0 left-0 right-0 z-40 bg-[#0E1A33]/95 backdrop-blur-2xl border-t border-[#D4AF37]/30 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-[0_-10px_30px_rgba(0,0,0,0.6)] w-full max-w-full overflow-hidden">
       <div className="flex items-center justify-around w-full max-w-full">

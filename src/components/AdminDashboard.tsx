@@ -47,11 +47,13 @@ import {
   FileText,
   Database,
   Terminal,
+  ChevronDown,
 } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { useAuth } from '../context/AuthContext';
 import { CATEGORIES_LIST } from '../data/seedData';
 import { Product, Order } from '../types';
+import { latinDigits } from '../utils/accounting';
 import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
 import { calculateProductPrice, calculateCustomGoldQuotation } from '../utils/pricingEngine';
 import { SystemLogsViewer } from './SystemLogsViewer';
@@ -166,6 +168,26 @@ export const AdminDashboard: React.FC = () => {
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+
+  const orderModalOpen = viewingReceiptOrder ? 'receipt' : rejectingOrder ? 'reject' : deletingOrder ? 'delete' : null;
+  useEffect(() => {
+    if (!orderModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = 'hidden';
+    const modal = document.querySelector<HTMLElement>('[data-admin-order-modal]');
+    const controls = () => Array.from(modal?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href]') || []);
+    controls()[0]?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setViewingReceiptOrder(null); setRejectingOrder(null); setDeletingOrder(null); }
+      if (event.key !== 'Tab') return;
+      const targets = controls(); const first = targets[0]; const last = targets.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', handleKey); if (previousFocus?.isConnected) previousFocus.focus(); };
+  }, [orderModalOpen]);
 
   // New/Edit product form state
   const [isEditingProduct, setIsEditingProduct] = useState(false);
@@ -584,11 +606,22 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
     );
   }
 
+  const adminTabs = [
+    { id: 'orders', label: 'سفارش‌ها', icon: ShoppingBag },
+    { id: 'accounting', label: 'حسابداری و سود', icon: CreditCard },
+    { id: 'products', label: 'مدیریت کل محصولات', icon: Package },
+    { id: 'direct-pricing', label: 'تنظیم مستقیم اجرت و سود طلا', icon: Percent },
+    { id: 'gold-rate', label: 'نرخ پایه و فرمول', icon: TrendingUp },
+    { id: 'calculator', label: 'ماشین‌حساب ادمین', icon: Calculator },
+    { id: 'logs', label: 'لاگ‌ها و مانیتورینگ', icon: Terminal },
+  ];
+  const activeAdminTitle = adminTabs.find(tab => tab.id === activeAdminTab)?.label || 'پنل مدیریت';
+
   return (
-    <section id="admin-dashboard-section" className="py-8 sm:py-10 px-3 sm:px-6 lg:px-8 bg-[#050A14] min-h-screen w-full max-w-full overflow-hidden">
+    <section id="admin-dashboard-section" className="admin-workspace py-4 sm:py-10 px-3 sm:px-6 lg:px-8 bg-[#050A14] min-h-screen w-full max-w-full overflow-hidden">
       <div className="max-w-7xl mx-auto w-full min-w-0">
         {/* Admin Verified Status Banner */}
-        <div className="mb-6 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-950/50 via-[#0E1A33] to-[#0A1120] border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="admin-verification mb-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-950/50 via-[#0E1A33] to-[#0A1120] border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 flex-shrink-0">
               <ShieldCheck className="w-5 h-5" />
@@ -613,49 +646,39 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
         </div>
 
         {/* Header */}
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-6 border-b border-slate-800 mb-8 w-full min-w-0">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 pb-4 border-b border-slate-800 mb-4 sm:mb-8 w-full min-w-0">
           <div>
             <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#D4AF37] uppercase tracking-widest mb-1">
               <Sliders className="w-4 h-4 text-[#D4AF37]" />
               <span>پنل مدیریت اختصاصی گالری طلای اینانا</span>
             </div>
             <h1 className="text-xl sm:text-3xl font-extrabold text-white">
-              تنظیم مستقیم اجرت و سود طلاها
+              {activeAdminTitle}
             </h1>
-            <p className="text-slate-400 text-xs sm:text-sm mt-1">
+            <p className="hidden sm:block text-slate-400 text-xs sm:text-sm mt-1">
               هر قطعه طلا را انتخاب کنید و درصد اجرت و سود را منحصراً برای همان طلا تنظیم و اعمال نمایید.
             </p>
           </div>
 
-          {/* Tab Selector */}
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar bg-[#0A1120] p-1.5 rounded-2xl border border-slate-800 w-full lg:w-auto max-w-full min-w-0">
-            {[
-              { id: 'direct-pricing', label: 'تنظیم مستقیم اجرت و سود طلا', icon: Percent },
-              { id: 'products', label: 'مدیریت کل محصولات', icon: Package },
-              { id: 'gold-rate', label: 'نرخ پایه و فرمول', icon: TrendingUp },
-              { id: 'calculator', label: 'ماشین‌حساب ادمین', icon: Calculator },
-              { id: 'orders', label: 'سفارش‌ها', icon: ShoppingBag },
-              { id: 'accounting', label: 'حسابداری و سود', icon: CreditCard },
-              { id: 'logs', label: 'لاگ‌ها و مانیتورینگ', icon: Terminal },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeAdminTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveAdminTab(tab.id as any)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
-                    isActive
-                      ? 'bg-[#D4AF37] text-slate-950 font-bold shadow-md'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          <nav aria-label="بخش‌های مدیریت" className="w-full lg:w-auto min-w-0">
+            <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-2">
+              {adminTabs.map((tab, index) => {
+                const Icon = tab.icon;
+                return <button type="button" key={tab.id} aria-current={activeAdminTab === tab.id ? 'page' : undefined}
+                  onClick={() => setActiveAdminTab(tab.id as AdminTab)}
+                  className={'admin-section-button items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-bold border ' + (index > 2 ? 'hidden sm:flex ' : 'flex ') + (activeAdminTab === tab.id ? 'bg-[#D4AF37] text-slate-950 border-[#D4AF37]' : 'bg-[#0A1120] border-slate-800 text-slate-300')}>
+                  <Icon className="w-4 h-4 shrink-0" /><span>{tab.label}</span>
+                </button>;
+              })}
+            </div>
+            <label className="sm:hidden block mt-2 text-xs text-slate-400">
+              <span className="sr-only">سایر بخش‌های مدیریت</span>
+              <select aria-label="سایر بخش‌های مدیریت" value={activeAdminTab} onChange={event => setActiveAdminTab(event.target.value as AdminTab)} className="w-full min-w-0 rounded-xl bg-[#0A1120] border border-slate-700 px-3 py-3 text-white">
+                <option value={activeAdminTab} disabled>{activeAdminTitle} — تغییر بخش</option>
+                {adminTabs.filter(tab => tab.id !== activeAdminTab).map(tab => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
+              </select>
+            </label>
+          </nav>
         </div>
 
         {/* ========================================================================= */}
@@ -814,7 +837,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   <div className="luxury-glass-card rounded-3xl p-6 sm:p-8 border-[#D4AF37]/30 shadow-[0_10px_35px_rgba(212,175,55,0.1)]">
                     {/* Header with Product Quick Identity */}
                     <div className="flex items-start justify-between gap-4 pb-5 border-b border-slate-800">
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-3">
                         <img
                           src={selectedProduct.images[0]}
                           alt={selectedProduct.title}
@@ -2058,13 +2081,13 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
             </div>
 
             {/* Main Order Management Card */}
-            <div className="luxury-glass-card rounded-3xl p-6 sm:p-8 space-y-6">
+            <div className="luxury-glass-card rounded-2xl sm:rounded-3xl p-3 sm:p-8 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
                 <div>
                   <h2 className="text-lg font-bold text-white flex flex-wrap items-center gap-2">
                     <CreditCard className="w-5 h-5 text-[#D4AF37]" />
-                    <span>مدیریت و تایید سفارش‌های کارت به کارت</span>
-                    <span className="text-[11px] font-normal px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+                    <span>بررسی و مدیریت سفارش‌ها</span>
+                    <span className="hidden sm:flex text-[11px] font-normal px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
                       <Database className="w-3.5 h-3.5 text-emerald-400" />
                       <span>پایگاه داده و حافظه پایدار ({toPersianDigits(orders.length)} سفارش)</span>
                     </span>
@@ -2179,12 +2202,12 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 </div>
 
                 {/* Search Input */}
-                <div className="relative min-w-[240px]">
+                <div className="relative w-full md:w-72 min-w-0 order-first md:order-last">
                   <input
                     type="text"
                     value={orderSearchQuery}
                     onChange={(e) => setOrderSearchQuery(e.target.value)}
-                    placeholder="جستجو با کد رهگیری، نام یا تلفن..."
+                    aria-label="جست‌وجوی سفارش‌ها" placeholder="کد سفارش، نام یا شماره تلفن…"
                     className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl pr-9 pl-4 py-2 text-xs text-white outline-none"
                   />
                   <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -2233,11 +2256,12 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
 
                     // Search query filter
                     if (orderSearchQuery.trim()) {
-                      const q = orderSearchQuery.toLowerCase().trim();
-                      const matchTracking = ord.trackingCode?.toLowerCase().includes(q);
-                      const matchName = ord.customerName?.toLowerCase().includes(q);
-                      const matchPhone = ord.customerPhone?.toLowerCase().includes(q);
-                      const matchPaymentTrack = ord.paymentTrackingNumber?.toLowerCase().includes(q);
+                      const normalizeSearch = (value = '') => latinDigits(value).toLowerCase().replace(/ي/g, 'ی').replace(/ك/g, 'ک').trim();
+                      const q = normalizeSearch(orderSearchQuery);
+                      const matchTracking = normalizeSearch(ord.trackingCode).includes(q);
+                      const matchName = normalizeSearch(ord.customerName).includes(q);
+                      const matchPhone = normalizeSearch(ord.customerPhone).includes(q);
+                      const matchPaymentTrack = normalizeSearch(ord.paymentTrackingNumber).includes(q);
                       return matchTracking || matchName || matchPhone || matchPaymentTrack;
                     }
 
@@ -2262,10 +2286,10 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                         const isLoadingThis = actionLoadingOrderId === ord.id;
 
                         return (
-                          <div
+                          <details
                             key={ord.id}
                             data-order-id={ord.id}
-                            className={`bg-[#0A1120] border rounded-2xl p-5 text-xs text-slate-300 space-y-4 transition-all shadow-md ${
+                            className={`bg-[#0A1120] border admin-order-card group rounded-2xl p-3 sm:p-5 text-sm text-slate-300 transition-all shadow-md ${
                               isPending
                                 ? 'border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.05)]'
                                 : isApproved
@@ -2275,59 +2299,17 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 : 'border-slate-800'
                             }`}
                           >
+                            <summary className="admin-card-summary cursor-pointer list-none space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0"><strong className="block text-white text-base break-words">{ord.customerName}</strong><span className="block text-xs text-slate-400 mt-1 break-all">{ord.trackingCode}</span></div>
+                                <span className={'shrink-0 rounded-lg px-2 py-1 text-xs ' + (isPending ? 'bg-amber-500/15 text-amber-300' : isApproved ? 'bg-emerald-500/15 text-emerald-300' : isRejected ? 'bg-rose-500/15 text-rose-300' : 'bg-slate-800 text-slate-300')}>{ord.status}</span>
+                              </div>
+                              <div className="flex flex-wrap justify-between gap-2 text-xs"><span className="text-slate-400">{new Date(ord.createdAt).toLocaleDateString('fa-IR')} · {toPersianDigits(ord.items.reduce((sum, item) => sum + item.quantity, 0))} کالا</span><strong className="text-[#F5E8C7] text-sm">{formatToman(ord.totalPrice)}</strong></div>
+                              {ord.paymentReviewRequired && <p className="text-xs text-amber-300">نیازمند بررسی پرداخت و تخصیص موجودی</p>}
+                              <div className="flex items-center justify-between border-t border-slate-800 pt-3 text-xs text-[#D4AF37]"><span>{ord.paymentReceiptImage ? 'فیش پیوست شده' : 'بدون تصویر فیش'}</span><span className="flex items-center gap-2"><span className="group-open:hidden">جزئیات و بررسی سفارش</span><span className="hidden group-open:inline">بستن جزئیات</span><ChevronDown className="w-4 h-4 group-open:rotate-180 transition-transform" /></span></div>
+                            </summary>
+                            <div className="space-y-4 mt-4 border-t border-slate-800 pt-4">
                             {orderErrors[ord.id] && <p role="alert" className="rounded-xl border border-rose-500/40 bg-rose-950/40 p-3 text-rose-300">{orderErrors[ord.id]}</p>}
-                            {/* Card Header */}
-                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                              <div className="flex items-center gap-3">
-                                <div>
-                                  <span className="text-[10px] text-slate-400 block">کد رهگیری:</span>
-                                  <span className="font-serif-brand font-bold text-[#F5E8C7] text-base">
-                                    {ord.trackingCode}
-                                  </span>
-                                </div>
-                                <div className="h-6 w-px bg-slate-800"></div>
-                                <div>
-                                  <span className="text-[10px] text-slate-400 block">تاریخ ثبت:</span>
-                                  <span className="text-[11px] text-slate-300">
-                                    {new Date(ord.createdAt).toLocaleDateString('fa-IR', {
-                                      year: 'numeric',
-                                      month: 'long',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Status Badge */}
-                              <div className="flex items-center gap-2">
-                                {isPending && (
-                                  <span className="flex items-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold">
-                                    <Clock className="w-3.5 h-3.5 animate-spin" />
-                                    <span>در انتظار بررسی و تایید فیش</span>
-                                  </span>
-                                )}
-                                {isApproved && (
-                                  <span className="flex items-center gap-1.5 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold">
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>تأیید شده توسط مدیریت</span>
-                                  </span>
-                                )}
-                                {isRejected && (
-                                  <span className="flex items-center gap-1.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 px-3 py-1 rounded-full text-xs font-bold">
-                                    <XCircle className="w-3.5 h-3.5" />
-                                    <span>رد شده توسط مدیریت</span>
-                                  </span>
-                                )}
-                                {!isPending && !isApproved && !isRejected && (
-                                  <span className="bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1 rounded-full text-xs font-medium">
-                                    {ord.status}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
                             {/* Customer Info Grid */}
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#060B14]/60 p-3 rounded-xl border border-slate-800/60">
                               <div>
@@ -2407,7 +2389,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 </div>
 
                                 {/* Receipt Image Button / Thumbnail */}
-                                <div className="bg-[#060B14] p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
+                                <div className="bg-[#060B14] p-3 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-3">
                                   <div className="flex items-center gap-2.5 overflow-hidden">
                                     {ord.paymentReviewRequired && <p className="text-xs text-amber-300 p-2" role="status">{ord.inventoryHoldExpiredAt ? 'مهلت نگه‌داشتن موجودی پایان یافته؛ سفارش و فیش برای بررسی پرداخت حفظ شده‌اند.' : 'پرداخت دیرهنگام؛ مبلغ پیش‌فاکتور اصلی حفظ شده است.'} {ord.inventoryReleased ? 'موجودی تخصیص نیافته؛ پیش از تایید تامین کالا یا بازگشت وجه را بررسی کنید.' : 'فیش و مبلغ واریز را بررسی کنید.'}</p>}
                                     {ord.paymentReceiptImage ? (
@@ -2474,7 +2456,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                               {ord.items.map((it, idx) => (
                                 <div
                                   key={idx}
-                                  className="flex justify-between items-center text-[11px] py-1 border-b border-slate-800/40 last:border-0"
+                                  className="flex flex-wrap justify-between items-start gap-2 text-xs py-2 border-b border-slate-800/40 last:border-0"
                                 >
                                   <span>
                                     {it.productTitle} ({toPersianDigits(it.quantity)} عدد)
@@ -2492,7 +2474,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                   مجموع وزن: <strong className="text-white">{formatWeight(ord.totalWeight)}</strong>
                                 </span>}
                                 <div className="h-4 w-px bg-slate-800"></div>
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
                                   <span className="text-slate-400">مبلغ کل فاکتور:</span>
                                   <span className="font-bold text-base text-white gold-gradient-text">
                                     {formatToman(ord.totalPrice)}
@@ -2501,7 +2483,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                               </div>
 
                               {/* ADMIN ACTION BUTTONS */}
-                              <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+                              <div className="admin-order-actions grid grid-cols-2 sm:flex sm:flex-wrap items-stretch gap-2 w-full sm:w-auto">
                                 {/* One-Click Approve Button */}
                                 <button
                                   type="button"
@@ -2571,7 +2553,8 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 )}
                               </div>
                             </div>
-                          </div>
+                            </div>
+                          </details>
                         );
                       })}
                     </div>
@@ -2585,11 +2568,11 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
             {/* ========================================================================= */}
             {viewingReceiptOrder && (
               <div
-                className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+                data-admin-order-modal role="dialog" aria-modal="true" aria-label="بررسی فیش سفارش" className="admin-receipt-overlay fixed inset-0 z-[80] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
                 onClick={() => setViewingReceiptOrder(null)}
               >
                 <div
-                  className="relative max-w-2xl w-full bg-[#0E1A33] border border-[#D4AF37]/50 rounded-2xl overflow-hidden shadow-2xl space-y-4"
+                  className="admin-receipt-dialog relative max-w-2xl w-full max-h-[95dvh] overflow-y-auto bg-[#0E1A33] border border-[#D4AF37]/50 rounded-2xl shadow-2xl"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Modal Header */}
@@ -2607,6 +2590,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <button
                       type="button"
                       onClick={() => setViewingReceiptOrder(null)}
+                      aria-label="بستن نمایش فیش"
                       className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                     >
                       <X className="w-5 h-5" />
@@ -2634,7 +2618,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                   </div>
 
                   {/* Modal Actions */}
-                  <div className="p-4 border-t border-slate-700/80 bg-[#081124] flex items-center justify-between gap-3">
+                  <div className="admin-receipt-actions sticky bottom-0 p-3 sm:p-4 border-t border-slate-700/80 bg-[#081124] flex items-center justify-between gap-3">
                     <button
                       type="button"
                       onClick={() => setViewingReceiptOrder(null)}
@@ -2683,7 +2667,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 onClick={() => setRejectingOrder(null)}
               >
                 <div
-                  className="relative max-w-lg w-full bg-[#0E1A33] border border-rose-500/50 rounded-2xl overflow-hidden shadow-2xl p-6 space-y-4"
+                  data-admin-order-modal role="dialog" aria-modal="true" aria-label="رد سفارش و عدم تأیید فیش" className="relative max-w-lg w-full max-h-[95dvh] overflow-y-auto bg-[#0E1A33] border border-rose-500/50 rounded-2xl shadow-2xl p-4 sm:p-6 space-y-4"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-between pb-3 border-b border-slate-700">
@@ -2694,6 +2678,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     <button
                       type="button"
                       onClick={() => setRejectingOrder(null)}
+                      aria-label="بستن فرم رد سفارش"
                       className="p-1 rounded-full text-slate-400 hover:text-white"
                     >
                       <X className="w-5 h-5" />
@@ -2783,7 +2768,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
             {/* ========================================================================= */}
             {deletingOrder && (
               <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-                <div className="bg-[#0A1120] border border-rose-500/30 rounded-2xl max-w-md w-full p-6 text-slate-200 shadow-2xl space-y-4">
+                <div data-admin-order-modal role="dialog" aria-modal="true" aria-label="تأیید حذف سفارش" className="bg-[#0A1120] border border-rose-500/30 rounded-2xl max-w-md w-full max-h-[95dvh] overflow-y-auto p-4 sm:p-6 text-slate-200 shadow-2xl space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                     <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
                       <Trash2 className="w-5 h-5 text-rose-500" />
@@ -2853,6 +2838,12 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
         {/* ========================================================================= */}
         {activeAdminTab === 'logs' && <SystemLogsViewer />}
       </div>
+      <nav id="admin-mobile-nav" aria-label="دسترسی سریع ادمین" className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#0A1120]/95 backdrop-blur-xl border-t border-[#D4AF37]/30 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]">
+        <div className="grid grid-cols-4 gap-1">
+          {adminTabs.slice(0, 3).map(tab => <button type="button" key={tab.id} aria-label={'رفتن به ' + tab.label} aria-current={activeAdminTab === tab.id ? 'page' : undefined} onClick={() => { setActiveAdminTab(tab.id as AdminTab); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className={'flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] ' + (activeAdminTab === tab.id ? 'bg-[#D4AF37]/15 text-[#D4AF37]' : 'text-slate-400')}><tab.icon className="w-5 h-5" /><span>{tab.id === 'products' ? 'محصولات' : tab.id === 'accounting' ? 'حسابداری' : tab.label}</span></button>)}
+          <button type="button" onClick={() => { setActiveTab('shop'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] text-slate-400"><ArrowRight className="w-5 h-5" /><span>فروشگاه</span></button>
+        </div>
+      </nav>
     </section>
   );
 };
