@@ -53,10 +53,14 @@ try {
   await update(() => root.render(React.createElement(Harness)));
   assert.match(document.body.textContent, /حسابداری و سود اینانا/);
   assert.ok(syncs >= 1, 'Mount automatically synchronizes existing site orders');
+  assert.equal(document.querySelector('nav[aria-label="بخش‌های حسابداری"] button[aria-current="page"]').textContent, 'فروش‌ها');
+  const previousOverflow = document.body.style.overflow;
   await update(() => button('محصولات سایت').click());
   assert.match(document.body.textContent, new RegExp(INITIAL_PRODUCTS[0].title));
   assert.equal(buttons().filter(element => element.textContent.trim() === 'ثبت خرید / قیمت موجودی').length, 2, 'Existing site products appear without registering purchases');
   await update(() => button('هزینه‌های پیش‌فرض').click());
+  assert.equal(document.body.style.overflow, 'hidden', 'Background stays still while the accounting form is open');
+  assert.ok(document.querySelector('[role="dialog"] .accounting-form-actions'), 'Form actions have a persistent footer');
   const field = await input('هزینهٔ بسته‌بندی هر سفارش — تومان', '۱۲۳۴');
   await input('هزینهٔ ساخت هر گردنبند مروارید — تومان', '۵۰۰');
   await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
@@ -64,6 +68,7 @@ try {
   failed = false;
   await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   assert.equal(document.querySelector('[role="dialog"]'), null); assert.equal(data.settings.packaging, 1234);
+  assert.equal(document.body.style.overflow, previousOverflow, 'Closing the form restores page scrolling');
   assert.equal(mutations[0].body.actionId, mutations[1].body.actionId, 'Same draft retry keeps its idempotency key');
   await update(() => button('خرید / موجودی اولیه').click());
   const quantityInput = await input('تعداد قطعه', '2');

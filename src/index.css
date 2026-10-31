@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./components/admin-mobile.css";
 
 @theme {
   --font-sans: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

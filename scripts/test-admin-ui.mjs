@@ -141,6 +141,17 @@ try {
   await click(button('سفارش‌ها'));
   const row=()=>document.querySelector('[data-order-id="review"]');
   assert.ok(row());
+  assert.equal(row().tagName, 'DETAILS', 'Order review starts from a compact summary');
+  assert.equal(row().open, false);
+  await click(row().querySelector('summary'));
+  assert.equal(row().open, true, 'An order expands without changing its status');
+  const orderSearch = document.querySelector('[aria-label="جست‌وجوی سفارش‌ها"]');
+  await input(orderSearch, '۰۹۱۲۰۰۰۰۱۲۳');
+  assert.ok(row(), 'Persian digits find the Latin phone stored on an order');
+  await input(orderSearch, 'سفارش ناموجود');
+  assert.equal(row(), null);
+  await input(orderSearch, '');
+  assert.ok(document.querySelector('#admin-mobile-nav [aria-label="رفتن به حسابداری و سود"]'), 'Daily admin tasks remain available from the mobile navigation');
   await click([...row().querySelectorAll('button')].find(b=>b.textContent.includes('تأیید فیش')));
   assert.ok(row().textContent.includes('موجودی برای فعال‌سازی سفارش کافی نیست.'));
   assert.equal([...row().querySelectorAll('button')].find(b=>b.textContent.includes('تأیید فیش')).disabled,false);

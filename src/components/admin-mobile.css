@@ -1,0 +1,58 @@
+.admin-card-summary::-webkit-details-marker { display: none; }
+.admin-card-summary { list-style: none; }
+.admin-card-summary:focus-visible,
+.admin-workspace button:focus-visible,
+.accounting-workspace button:focus-visible {
+  outline: 2px solid #d4af37;
+  outline-offset: 3px;
+}
+.admin-workspace details[open] > .admin-card-summary { margin-bottom: 0; }
+.admin-workspace .admin-order-actions > div { grid-column: 1 / -1; }
+.admin-workspace .admin-order-actions button { justify-content: center; }
+.admin-workspace .admin-order-actions select { flex: 1; min-width: 0; }
+.accounting-workspace article,
+.accounting-workspace details,
+.admin-order-card { min-width: 0; overflow-wrap: anywhere; }
+.accounting-form-actions { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+.admin-workspace { padding-bottom: calc(var(--mobile-nav-offset) + 1.5rem); }
+.admin-receipt-actions { z-index: 1; }
+
+@media (max-width: 767px) {
+  .admin-workspace { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 639px) {
+  .admin-workspace button,
+  .admin-workspace select,
+  .admin-workspace summary,
+  .admin-workspace a[href^="tel:"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .admin-workspace input:not([type="checkbox"]):not([type="radio"]),
+  .admin-workspace select,
+  .admin-workspace textarea {
+    font-size: 16px;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .admin-workspace input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; }
+  .admin-workspace .admin-verification { padding: 10px 12px; }
+  .admin-workspace .admin-verification p,
+  .admin-workspace .admin-verification > div:last-child,
+  .admin-workspace .admin-verification .font-mono { display: none; }
+  .admin-workspace .admin-verification span.font-bold { font-size: 12px; }
+  .admin-workspace .admin-order-card > summary { font-size: 14px; }
+  .admin-workspace .admin-order-card .admin-order-actions { align-items: stretch; }
+  .admin-workspace .admin-order-actions select { width: 100%; padding: 8px 0; }
+  .admin-workspace .admin-order-actions > div { flex-wrap: wrap; }
+  .admin-workspace .accounting-workspace > details { padding: 10px 12px; }
+  .admin-workspace .accounting-workspace nav button { padding: 8px 6px; }
+  .admin-accounting-dialog input,
+  .admin-accounting-dialog select { scroll-margin-block: 90px; }
+  .admin-receipt-overlay { padding: 0; }
+  .admin-receipt-dialog { border-radius: 0; max-height: 100dvh; }
+  .admin-receipt-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .admin-receipt-actions > div { flex: 1; display: flex; flex-wrap: wrap; }
+  .admin-receipt-actions button { flex: 1; justify-content: center; }
+}
