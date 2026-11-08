@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -16,7 +16,8 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { CartDrawer } from './components/CartDrawer';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { AuthModal } from './components/AuthModal';
-import { AdminDashboard } from './components/AdminDashboard';
+// Admin and accounting code is large and only needed by administrators.
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
 import { FavoritesView } from './components/FavoritesView';
 import { DynamicBackgroundMotion } from './components/DynamicBackgroundMotion';
 import { PAGE_PATHS, productPath } from './utils/siteRoutes';
@@ -28,7 +29,13 @@ const MainLayout: React.FC = () => {
   useEffect(() => {
     const titles: Record<string, string> = { home: 'اینانا گلد', shop: 'ویترین زیورآلات', 'gold-price': 'نرخ طلا', collections: 'کالکشن‌ها', favorites: 'علاقه‌مندی‌ها', about: 'درباره اینانا', contact: 'تماس با اینانا', admin: 'مدیریت' };
     const title = `${quickViewProduct?.title || titles[activeTab] || 'اینانا گلد'} | INANA GOLD`;
-    const description = quickViewProduct?.description || `گالری اینانا گلد؛ ${titles[activeTab] || 'زیورآلات طلا و مروارید'}`;
+    const descriptions: Record<string, string> = {
+      home: 'خرید آنلاین زیورآلات و طلای ۱۸ عیار از INANA GOLD با محاسبه لحظه‌ای قیمت طلا و طراحی مدرن و اصیل ایرانی.',
+      shop: 'ویترین زیورآلات طلای ۱۸ عیار و مروارید اینانا گلد با قیمت روز طلا و امکان خرید آنلاین.',
+      'gold-price': 'نرخ لحظه‌ای طلای ۱۸ عیار و محاسبه قیمت زیورآلات اینانا گلد بر اساس قیمت روز.',
+      collections: 'کالکشن‌های اینانا گلد: مروارید، ترکیب مروارید و طلا، دریا و حروف اختصاصی طلای ۱۸ عیار.',
+    };
+    const description = quickViewProduct?.description || descriptions[activeTab] || `${titles[activeTab] || 'زیورآلات طلا و مروارید'} در گالری اینانا گلد، زیورآلات طلای ۱۸ عیار و مروارید.`;
     document.title = title;
     const setMeta = (selector: string, content: string) => document.querySelector(selector)?.setAttribute('content', content);
     setMeta('meta[name="description"]', description);
@@ -124,7 +131,9 @@ const MainLayout: React.FC = () => {
           <div className="relative pt-24 min-h-[90vh]">
             <DynamicBackgroundMotion variant="admin-cyber" />
             <div className="relative z-10">
-              <AdminDashboard />
+              <Suspense fallback={<div className="py-24 text-center text-sm text-slate-400">در حال بارگذاری پنل مدیریت...</div>}>
+                <AdminDashboard />
+              </Suspense>
             </div>
           </div>
         )}

@@ -414,6 +414,14 @@ seedProductsOnce('pearlA3blcwhV1', PEARL_PRODUCTS.filter((product) => product.id
 seedProductsOnce('pearlA4V1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-a4'));
 seedProductsOnce('pearlAvizorangeV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-avizorange'));
 seedProductsOnce('pearlAvizheartV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-avizheart'));
+// Drop the first Avizheart photo (the file is corrupt); keep the rest of the gallery and product details.
+if (!store.get('migrations', 'pearlAvizheartDropPhoto1V1')) {
+  const current = store.get<Product>('products', 'pearl-avizheart');
+  if (current?.images?.includes('/products/pearls/avizheart-1.jpeg')) {
+    store.set('products', current.id, { ...current, images: current.images.filter(image => image !== '/products/pearls/avizheart-1.jpeg') });
+  }
+  store.set('migrations', 'pearlAvizheartDropPhoto1V1', true);
+}
 seedProductsOnce('pearlMeshkikhelalV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-meshkikhelal'));
 seedProductsOnce('pearlDeforangeV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-deforange'));
 seedProductsOnce('pearlDefmeshkiV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-defmeshki'));

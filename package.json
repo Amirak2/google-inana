@@ -23,6 +23,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260911.1",
+    "@fontsource-variable/cinzel": "^5.3.0",
+    "@fontsource-variable/vazirmatn": "^5.3.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/canvas-confetti": "^1.9.0",
     "@types/express": "^4.17.21",

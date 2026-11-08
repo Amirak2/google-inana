@@ -35,6 +35,7 @@ import { formatToman, formatWeight, toPersianDigits } from '../utils/persianForm
 import { calculateProductPrice } from '../utils/pricingEngine';
 import { Order } from '../types';
 import { getAuthHeaders } from '../utils/authHelper';
+import { sizedImage } from '../utils/productImages';
 
 const generateIdempotencyKey = () =>
   `idemp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -642,7 +643,7 @@ const AccountCartDrawer: React.FC = () => {
                       >
                         {/* Image */}
                         <img
-                          src={item.product.images?.[0] || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80'}
+                          src={sizedImage(item.product.images?.[0] || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80', 480)}
                           alt={item.product.title}
                           className="w-16 h-20 rounded-xl object-cover border border-slate-600/70"
                           referrerPolicy="no-referrer"
