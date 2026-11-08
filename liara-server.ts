@@ -6,6 +6,7 @@ import { createApp } from './server';
 import type { Store } from './server/storage';
 import { PostgresStore, PostgresConflictError } from './server/postgresStorage';
 import { getMediaObject, putMediaObject } from './server/objectStorage';
+import { imageWidth, optimizeImage } from './server/imageOptimizer';
 import { configureTrustedProxy, normalizeClientIp } from './server/clientIp';
 import { runPostgresRequest } from './server/postgresRequest';
 import { securityHeaders } from './server/securityHeaders';
@@ -45,10 +46,14 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
         ? await getMediaObject(media.objectKey)
         : Buffer.from(media.data, 'base64');
       if (!data) { res.sendStatus(404); return; }
-      res.set('Content-Type', media.contentType);
+      const image = media.public
+        ? await optimizeImage(id, data, media.contentType, req.get('accept'), imageWidth(req.query.w))
+        : { data, contentType: media.contentType };
+      res.set('Content-Type', image.contentType);
       res.set('Cache-Control', media.public ? 'public, max-age=86400' : 'private, no-store');
+      if (media.public) res.set('Vary', 'Accept');
       res.set('X-Content-Type-Options', 'nosniff');
-      res.send(data);
+      res.send(image.data);
       return;
     }
 
@@ -92,17 +97,20 @@ app.get(['/products/pearls/:filename', '/products/letters/:filename', '/products
     let data = await getMediaObject(req.path.slice(1));
     // Stage this catalog addition into the existing private bucket on first access.
     // Subsequent requests and deployments keep using the stored object.
-    if (!data && /^(?:(a3blcwh|a4|ashki-20261024|avizorange|meshkikhelal|medusa-20261024|deforange|p9-20261024|defmeshki)-[123]|avizheart-[1234]|p9-model-20261027)\.jpeg$/.test(req.params.filename)) {
+    if (!data && /^(?:(a3blcwh|a4|ashki-20261024|avizorange|meshkikhelal|medusa-20261024|deforange|p9-20261024|defmeshki)-[123]|avizheart-[234]|p9-model-20261027)\.jpeg$/.test(req.params.filename)) {
       const staged = await readFile(path.join(currentDir, 'product-media', 'pearls', req.params.filename));
       await putMediaObject(req.path.slice(1), staged, 'image/jpeg');
       data = await getMediaObject(req.path.slice(1));
       if (!data?.equals(staged)) throw new Error('Product photo upload verification failed');
     }
     if (!data) { res.sendStatus(404); return; }
-    res.set('Content-Type', req.params.filename.endsWith('.webp') ? 'image/webp' : req.params.filename.endsWith('.jpeg') ? 'image/jpeg' : 'image/png');
+    const contentType = req.params.filename.endsWith('.webp') ? 'image/webp' : req.params.filename.endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
+    const image = await optimizeImage(req.path, data, contentType, req.get('accept'), imageWidth(req.query.w));
+    res.set('Content-Type', image.contentType);
     res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Vary', 'Accept');
     res.set('X-Content-Type-Options', 'nosniff');
-    res.send(data);
+    res.send(image.data);
   } catch {
     res.sendStatus(503);
   }

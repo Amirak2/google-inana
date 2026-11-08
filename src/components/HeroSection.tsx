@@ -11,19 +11,19 @@ export const HeroSection: React.FC = () => {
   // Entrance transition helpers respecting prefers-reduced-motion
   const auraTransition = shouldReduceMotion
     ? { duration: 0 }
-    : { duration: 0.6, ease: [0.16, 1, 0.3, 1] as const };
+    : { duration: 0.5, ease: [0.16, 1, 0.3, 1] as const };
 
   const logoTransition = shouldReduceMotion
     ? { duration: 0 }
-    : { duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] as const };
+    : { duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] as const };
 
   const titleTransition = shouldReduceMotion
     ? { duration: 0 }
-    : { duration: 0.5, delay: 0.7, ease: [0.16, 1, 0.3, 1] as const };
+    : { duration: 0.45, delay: 0.25, ease: [0.16, 1, 0.3, 1] as const };
 
   const buttonTransition = shouldReduceMotion
     ? { duration: 0 }
-    : { duration: 0.45, delay: 1.05, ease: [0.16, 1, 0.3, 1] as const };
+    : { duration: 0.4, delay: 0.4, ease: [0.16, 1, 0.3, 1] as const };
 
   return (
     <section

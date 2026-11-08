@@ -16,6 +16,7 @@ import { calculateProductPrice } from '../utils/pricingEngine';
 import { productPath } from '../utils/siteRoutes';
 import { productWeightOptions, productAvailability } from '../utils/productVariants';
 import { ProductImageViewer } from './ProductImageViewer';
+import { sizedImage } from '../utils/productImages';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -169,7 +170,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                     }`}
                   >
                     <img
-                      src={img}
+                      src={sizedImage(img, 480)}
                       alt={`تصویر ${toPersianDigits(idx + 1)} از ${product.title}`}
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"

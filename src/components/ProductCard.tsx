@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Heart, Eye, ShoppingBag } from 'lucide-react';
 import { Product } from '../types';
@@ -7,6 +7,7 @@ import { formatToman, formatWeight } from '../utils/persianFormatter';
 import { calculateProductPrice } from '../utils/pricingEngine';
 import { productPath } from '../utils/siteRoutes';
 import { productWeightOptions, productAvailability } from '../utils/productVariants';
+import { sizedImage } from '../utils/productImages';
 
 interface ProductCardProps {
   product: Product;
@@ -17,6 +18,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
   const { products, goldPrice, settings, addToCart, toggleFavorite, isFavorite, setQuickViewProduct } =
     useGoldStore();
 
+  const [imageLoaded, setImageLoaded] = useState(false);
   const favorite = isFavorite(product.id);
   const weightOptions = productWeightOptions(product, products);
   const hasWeightOptions = weightOptions.length > 1;
@@ -59,14 +61,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent opacity-0 group-hover:opacity-100 transition-all duration-700 transform scale-x-0 group-hover:scale-x-100 z-30 pointer-events-none" />
 
       {/* Image Container with Luxury Shimmer & Cinematic Zoom */}
-      <div className={`relative aspect-square sm:aspect-[4/5] w-full overflow-hidden ${showFullPhoto ? 'bg-white' : 'bg-[#070E1C]'}`}>
+      <div className={`relative aspect-square sm:aspect-[4/5] w-full overflow-hidden ${showFullPhoto && imageLoaded ? 'bg-white' : 'bg-[#070E1C]'}`}>
+        {/* Dark shimmer while the photo loads, instead of an empty white card */}
+        {!imageLoaded && (
+          <div aria-hidden="true" className="absolute inset-0 overflow-hidden bg-[#0B152B]">
+            <div className="h-full w-1/2 bg-gradient-to-r from-transparent via-[#D4AF37]/10 to-transparent animate-[pulse_1.6s_ease-in-out_infinite]" />
+          </div>
+        )}
         <img
-          src={product.images?.[0] || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80'}
+          ref={(img) => { if (img?.complete && img.naturalWidth > 0) setImageLoaded(true); }}
+          src={sizedImage(product.images?.[0] || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80', 480)}
           alt={product.title}
           loading="lazy"
-          className={`w-full h-full ${showFullPhoto ? 'object-contain' : 'object-cover group-hover:scale-108'} object-center transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] group-hover:brightness-105`}
+          decoding="async"
+          onLoad={() => setImageLoaded(true)}
+          className={`w-full h-full ${showFullPhoto ? 'object-contain' : 'object-cover group-hover:scale-108'} object-center transition-[transform,opacity] duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] group-hover:brightness-105 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
           referrerPolicy="no-referrer"
           onError={(e) => {
+            setImageLoaded(true);
             (e.target as HTMLImageElement).src =
               'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80';
           }}

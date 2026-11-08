@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles, ArrowLeft } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
+import { sizedImage } from '../utils/productImages';
 
 interface CollectionsShowcaseProps {
   limit?: number;
@@ -62,7 +63,9 @@ export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit,
             >
               {/* Cover Image */}
               {coverImage ? <img
-                src={coverImage}
+                src={sizedImage(coverImage, 960)}
+                loading="lazy"
+                decoding="async"
                 alt={col.titleFa}
                 className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-1000 ease-out"
                 referrerPolicy="no-referrer"

@@ -454,7 +454,7 @@ export const PEARL_PRODUCTS: Product[] = [
     additionalCost: 0,
     stoneCost: 0,
     discountPercent: 0,
-    images: ['/products/pearls/avizheart-1.jpeg', '/products/pearls/avizheart-2.jpeg', '/products/pearls/avizheart-3.jpeg', '/products/pearls/avizheart-4.jpeg'],
+    images: ['/products/pearls/avizheart-2.jpeg', '/products/pearls/avizheart-3.jpeg', '/products/pearls/avizheart-4.jpeg'],
     description: 'گردنبند مروارید آویزدار لاکتی با کیفیت A، قفل نقره‌ای، طول ۴۳ تا ۴۷ سانتی‌متر. قیمت ثابت ۳٬۰۰۰٬۰۰۰ تومان؛ بدون اجرت، سود طلافروش و مالیات.',
     features: ['کد: Avizheart', 'کیفیت: A', 'قفل: نقره‌ای', 'طول گردنبند: ۴۳ تا ۴۷ سانتی‌متر', 'قیمت ثابت؛ بدون اجرت و سود طلافروش'],
     dimensions: 'طول ۴۳ تا ۴۷ سانتی‌متر',

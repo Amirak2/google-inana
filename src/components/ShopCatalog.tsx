@@ -33,7 +33,10 @@ export const ShopCatalog: React.FC = () => {
     maxWeight, setMaxWeight,
     onlyInStock, setOnlyInStock,
     sortBy, setSortBy, resetCatalogFilters,
+    activeTab,
   } = useGoldStore();
+  // Only the dedicated shop page uses this as its main heading; elsewhere the page already has one.
+  const Heading = activeTab === 'shop' ? 'h1' : 'h2';
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filters = useMemo(() => ({ selectedCategory, selectedCollection, searchQuery, selectedLetter, maxWeight, onlyInStock, sortBy }),
@@ -71,9 +74,9 @@ export const ShopCatalog: React.FC = () => {
 
           <div className="flex items-center justify-center gap-3 mb-2">
             <span className="hidden sm:inline-block h-[1px] w-8 sm:w-12 bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
-            <h1 className="text-xl sm:text-4xl font-extrabold gold-gradient-text tracking-wide">
+            <Heading className="text-xl sm:text-4xl font-extrabold gold-gradient-text tracking-wide">
               ویترین زیورآلات اینانا
-            </h1>
+            </Heading>
             <span className="hidden sm:inline-block h-[1px] w-8 sm:w-12 bg-gradient-to-r from-transparent via-[#D4AF37]/50 to-transparent" />
           </div>
 
