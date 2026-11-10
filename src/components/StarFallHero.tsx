@@ -220,11 +220,18 @@ export const StarFallHero: React.FC = () => {
             const end = window.scrollY + section.getBoundingClientRect().top + section.offsetHeight - stage.clientHeight;
             if (reduced) window.scrollTo(0, end); else glideTo(end);
           }}
-          className="absolute inset-x-0 mx-auto w-fit bottom-[calc(var(--mobile-nav-offset)+1rem)] md:bottom-6 flex flex-col items-center gap-1 text-xs text-[#9AA3B5] cursor-pointer"
-          aria-label="ورود به گالری"
+          className="absolute inset-x-0 mx-auto w-fit bottom-[calc(var(--mobile-nav-offset)+1.25rem)] md:bottom-8 flex flex-col items-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#D4AF37] focus-visible:outline-offset-4 rounded-2xl"
+          aria-label="پایین بکشید"
         >
-          <span>ورود به گالری</span>
-          <span className="w-1.5 h-1.5 border-b border-r border-[#D4AF37] rotate-45 animate-pulse" />
+          <span className="rounded-full border border-[#D4AF37]/45 bg-[#0B152B]/80 px-5 py-2 text-sm font-bold text-[#E8C766] shadow-[0_0_24px_rgba(212,175,55,0.18)]">
+            پایین بکشید
+          </span>
+          {/* Three chevrons light up top to bottom, pointing the way down. */}
+          <span aria-hidden="true" className="flex flex-col items-center -space-y-1.5">
+            {[0, 1, 2].map(i => (
+              <span key={i} className="star-scroll-chevron block w-3 h-3 border-b-2 border-r-2 border-[#D4AF37]" style={{ animationDelay: `${i * 0.18}s` }} />
+            ))}
+          </span>
         </button>
       </div>
     </section>
