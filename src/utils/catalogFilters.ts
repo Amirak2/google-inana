@@ -1,6 +1,6 @@
 import type { Product, PricingSettings } from '../types';
 import { calculateProductPrice } from './pricingEngine';
-import { groupCatalogVariants } from './productVariants';
+import { groupCatalogVariants, productAvailability } from './productVariants';
 
 export const CATALOG_SORTS = ['newest', 'bestseller', 'price-asc', 'price-desc', 'weight-asc', 'weight-desc'] as const;
 export type CatalogSort = typeof CATALOG_SORTS[number];
@@ -53,8 +53,11 @@ export function filterCatalogProducts(products: Product[], filters: CatalogFilte
   }));
 }
 
+// Whatever the chosen order, sold-out pieces go to the end so the showcase opens on what can be bought.
 export function sortCatalogProducts(products: Product[], sort: CatalogSort, goldPrice: number, settings: PricingSettings): Product[] {
   return [...products].sort((a, b) => {
+    const soldOut = Number(productAvailability(a) <= 0) - Number(productAvailability(b) <= 0);
+    if (soldOut) return soldOut;
     switch (sort) {
       case 'newest': return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       case 'bestseller': return Number(b.isBestSeller) - Number(a.isBestSeller);
