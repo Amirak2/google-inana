@@ -117,6 +117,28 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
   }
 }
 
+// The browser pins the stage natively (no jitter on phones) wherever overflow: clip lets
+// position: sticky work; older browsers fall back to moving the stage each frame.
+const NATIVE_STICKY = typeof CSS !== 'undefined' && CSS.supports('overflow-x', 'clip');
+
+// Plays the whole fall from the current position to the lit scene in one smooth glide.
+function glideTo(targetY: number, duration = 2600) {
+  const startY = window.scrollY, distance = targetY - startY, startTime = performance.now();
+  let stopped = false;
+  const stop = () => { stopped = true; };
+  window.addEventListener('wheel', stop, { once: true, passive: true });
+  window.addEventListener('touchstart', stop, { once: true, passive: true });
+  const step = (now: number) => {
+    if (stopped) return;
+    const t = clamp((now - startTime) / duration);
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    window.scrollTo(0, startY + distance * eased);
+    if (t < 1) requestAnimationFrame(step);
+    else { window.removeEventListener('wheel', stop); window.removeEventListener('touchstart', stop); }
+  };
+  requestAnimationFrame(step);
+}
+
 export const StarFallHero: React.FC = () => {
   const { setActiveTab } = useGoldStore();
   const reduced = useReducedMotion();
@@ -142,11 +164,9 @@ export const StarFallHero: React.FC = () => {
     window.addEventListener('resize', resize);
     const tick = (time: number) => {
       const rect = section.getBoundingClientRect();
-      // The stage follows the viewport by transform, which works under the site's
-      // overflow-hidden wrappers where position: sticky would not.
       const travel = Math.max(1, rect.height - stage.clientHeight);
       const offset = clamp(-rect.top, 0, travel);
-      stage.style.transform = `translate3d(0, ${offset}px, 0)`;
+      if (!NATIVE_STICKY) stage.style.transform = `translate3d(0, ${offset}px, 0)`;
       if (rect.bottom > 0 && rect.top < window.innerHeight) {
         if (canvas.clientWidth !== width || canvas.clientHeight !== height) resize();
         const p = reduced ? 1 : offset / travel;
@@ -166,9 +186,16 @@ export const StarFallHero: React.FC = () => {
 
   return (
     <section id="inana-luxury-hero" ref={sectionRef} className="relative w-full bg-[#050A14] select-none" style={{ height: reduced ? '100svh' : '340svh' }}>
-      <div ref={stageRef} className="absolute inset-x-0 top-0 h-[100svh] overflow-hidden will-change-transform">
+      <div ref={stageRef} className={`${NATIVE_STICKY ? 'sticky' : 'absolute inset-x-0 will-change-transform'} top-0 h-[100svh] overflow-hidden`}>
         <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 w-full h-full block" />
         <div ref={brandRef} className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-4 text-center" style={{ opacity: 0, pointerEvents: 'none' }}>
+          {/* The gold line logo is drawn in the title's dark tone, which reads on the lit gold scene. */}
+          <div
+            role="img"
+            aria-label="لوگوی اینانا گلد"
+            className="w-24 h-24 sm:w-28 sm:h-28 mb-1 bg-[#2A1E06]"
+            style={{ WebkitMaskImage: 'url(/inana-logo-gold.png)', maskImage: 'url(/inana-logo-gold.png)', WebkitMaskSize: 'contain', maskSize: 'contain', WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskPosition: 'center' }}
+          />
           <h1 dir="ltr" className="font-serif-brand w-full text-center text-[clamp(22px,6vw,46px)] font-bold uppercase tracking-[0.28em] indent-[0.28em] text-[#2A1E06] leading-none">
             INANA GOLD
           </h1>
@@ -186,7 +213,13 @@ export const StarFallHero: React.FC = () => {
         <button
           ref={hintRef}
           type="button"
-          onClick={() => window.scrollBy({ top: window.innerHeight * 0.9, behavior: 'smooth' })}
+          onClick={() => {
+            const section = sectionRef.current, stage = stageRef.current;
+            if (!section || !stage) return;
+            // To the end of the hero, where the scene is fully lit and the brand is shown.
+            const end = window.scrollY + section.getBoundingClientRect().top + section.offsetHeight - stage.clientHeight;
+            if (reduced) window.scrollTo(0, end); else glideTo(end);
+          }}
           className="absolute inset-x-0 mx-auto w-fit bottom-[calc(var(--mobile-nav-offset)+1rem)] md:bottom-6 flex flex-col items-center gap-1 text-xs text-[#9AA3B5] cursor-pointer"
           aria-label="ورود به گالری"
         >
