@@ -6,6 +6,7 @@ import { readApiResponse } from '../utils/apiResponse';
 import { formatToman, toPersianDigits } from '../utils/persianFormatter';
 import { accountingDay, costSum, emptyCosts, lineCost, returnedQuantity, safeCsv, latinDigits, goldPurchaseCost, lineGoldCost, invoiceTaxAmount } from '../utils/accounting';
 import type { AccountingData, AccountingSale, CostParts } from '../types/accounting';
+import { accountingTodos, saleStep, type SaleStep, type SaleStepKey } from '../utils/accountingSteps';
 
 const panel = 'bg-[#0A1120] border border-slate-800 rounded-2xl p-4 sm:p-5';
 const inputClass = 'min-w-0 min-h-11 w-full bg-[#060B14] border border-slate-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white focus:outline-none focus:border-[#D4AF37]';
@@ -17,6 +18,8 @@ const costLabels: Record<keyof CostParts, string> = { gold: 'اصل طلای خ�
 const dateText = (iso: string) => toPersianDigits(accountingDay(iso));
 const numberValue = (value: string) => latinDigits(value).replace(/٫/g, '.').replace(/[,٬\s]/g, '');
 const gramsText = (value: number) => `${toPersianDigits(Number(value.toFixed(6)))} گرم`;
+const toneClass: Record<SaleStep['tone'], string> = { warning: 'bg-amber-500/15 text-amber-300', accent: 'bg-sky-500/15 text-sky-300', success: 'bg-emerald-500/15 text-emerald-300', muted: 'bg-slate-700/40 text-slate-400' };
+const stepFilters: Partial<Record<SaleStepKey, string>> = { payment: 'منتظر پول', complete: 'آمادهٔ تکمیل', cost: 'بدون قیمت خرید' };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block space-y-1.5 text-xs text-slate-400"><span>{label}</span>{children}</label>;
@@ -62,7 +65,7 @@ export function AccountingDashboard() {
   const [to, setTo] = useState(today);
   const [channel, setChannel] = useState('');
   const [filterDraft, setFilterDraft] = useState({ from: `${today.slice(0, 7)}/01`, to: today, channel: '' });
-  const [section, setSection] = useState('sales');
+  const [section, setSection] = useState('summary');
   const [saleFilter, setSaleFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -203,7 +206,7 @@ export function AccountingDashboard() {
   const productSelect = (value: string, change: (value: string) => void) => <Field label="محصول و گزینهٔ وزن"><select className={inputClass} value={value} onChange={event => change(event.target.value)} required>{products.map(product => <option key={product.id} value={product.id}>{product.title} — {toPersianDigits(product.weight)} گرم — موجودی {toPersianDigits(product.stock ?? 0)}</option>)}</select></Field>;
   const updateLine = (index: number, field: string, value: any) => edit('items', draft.items.map((item: any, i: number) => i === index ? { ...item, [field]: value } : item));
 
-  const visibleSales = data ? data.sales.filter(sale => (!channel || sale.channel === channel) && (saleFilter !== 'balance' || data.totals[sale.id].balance > 0) && (saleFilter !== 'incomplete' || (!sale.recognizedAt && !['لغو شده', 'رد شده'].includes(sale.status))) && latinDigits(`${sale.customerName} ${sale.trackingCode}`).toLowerCase().includes(latinDigits(search).toLowerCase().trim())) : [];
+  const visibleSales = data ? data.sales.filter(sale => (!channel || sale.channel === channel) && (saleFilter !== 'balance' || data.totals[sale.id].balance > 0) && (saleFilter !== 'incomplete' || (!sale.recognizedAt && !['لغو شده', 'رد شده'].includes(sale.status))) && (!(saleFilter in stepFilters) || saleStep(sale, data.totals[sale.id]).key === saleFilter) && latinDigits(`${sale.customerName} ${sale.trackingCode}`).toLowerCase().includes(latinDigits(search).toLowerCase().trim())) : [];
   return <div dir="rtl" className="accounting-workspace min-w-0 space-y-4 text-slate-200" aria-label="حسابداری خصوصی ادمین">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="font-bold text-[#D4AF37]">حسابداری و سود اینانا</h2>
@@ -229,17 +232,50 @@ export function AccountingDashboard() {
     </details>
     {loading && <p role="status" className="text-xs text-slate-400">در حال دریافت حسابداری…</p>}
     {data && <>
-      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-        <button className={primary} disabled={busy} onClick={() => open('purchase')}><Plus size={16} />خرید / موجودی اولیه</button>
-        <button className={buttonClass} disabled={busy} onClick={() => open('sale')}><Plus size={16} />فروش اینستاگرام</button>
-        <button className={buttonClass} disabled={busy} onClick={() => open('expense')}>هزینهٔ عمومی</button>
-        <details className="relative"><summary className={buttonClass + ' admin-card-summary cursor-pointer list-none w-full'}>ثبت‌های دیگر <ChevronDown size={16} /></summary><div className="absolute z-20 top-full mt-2 left-0 right-0 sm:w-64 bg-[#0A1120] border border-slate-700 rounded-xl p-2 grid gap-2 shadow-xl">        <button className={buttonClass} disabled={busy} onClick={() => open('tax_payment')}>پرداخت مالیات</button>
-        <button className={buttonClass} disabled={busy} onClick={() => open('capital')}>ورود سرمایه</button>
-        <button className={buttonClass} disabled={busy} onClick={() => open('withdrawal')}>برداشت شخصی</button>
-        <button className={buttonClass} disabled={busy} onClick={() => open('opening')}>ماندهٔ اولیهٔ بانک</button>
-</div></details>
-      </div>
-      <nav aria-label="بخش‌های حسابداری" className="grid grid-cols-3 sm:flex sm:flex-wrap gap-2">{[['sales', 'فروش‌ها'], ['catalog', 'محصولات سایت'], ['purchases', 'خرید و موجودی'], ['money', 'دریافت و پرداخت'], ['reports', 'گزارش‌ها'], ['audit', 'تاریخچهٔ ثبت‌ها']].map(([key, label]) => <button key={key} aria-current={section === key ? 'page' : undefined} className={section === key ? primary : buttonClass} onClick={() => setSection(key)}>{label}</button>)}</nav>
+      <nav aria-label="بخش‌های حسابداری" className="grid grid-cols-4 gap-2">
+        {[['summary', 'خلاصه'], ['sales', 'فروش‌ها'], ['purchases', 'خرید و موجودی']].map(([key, label]) => <button key={key} aria-current={section === key ? 'page' : undefined} className={section === key ? primary : buttonClass} onClick={() => setSection(key)}>{label}</button>)}
+        <details className="relative"><summary className={`${['catalog', 'money', 'reports', 'audit'].includes(section) ? primary : buttonClass} admin-card-summary cursor-pointer list-none w-full`}>بیشتر <ChevronDown size={14} /></summary>
+          <div className="absolute z-20 top-full mt-2 left-0 w-56 max-w-[80vw] bg-[#0A1120] border border-slate-700 rounded-xl p-2 grid gap-2 shadow-xl">
+            {[['reports', 'گزارش کامل'], ['money', 'دریافت‌ها و پرداخت‌ها'], ['catalog', 'محصولات و قیمت خرید'], ['audit', 'تاریخچهٔ ثبت‌ها']].map(([key, label]) => <button key={key} aria-current={section === key ? 'page' : undefined} className={buttonClass} onClick={event => { setSection(key); (event.currentTarget.closest('details') as HTMLDetailsElement).open = false; }}>{label}</button>)}
+          </div></details>
+      </nav>
+      <details className="relative"><summary className={`${primary} admin-card-summary cursor-pointer list-none w-full`}><Plus size={16} />ثبت جدید <ChevronDown size={16} /></summary>
+        <div className="absolute z-20 top-full mt-2 left-0 right-0 sm:w-72 bg-[#0A1120] border border-slate-700 rounded-xl p-2 grid gap-2 shadow-xl" onClick={event => { if ((event.target as HTMLElement).closest('button')) (event.currentTarget.closest('details') as HTMLDetailsElement).open = false; }}>
+          <button className={buttonClass} disabled={busy} onClick={() => open('purchase')}>خرید طلا یا مروارید</button>
+          <button className={buttonClass} disabled={busy} onClick={() => open('sale')}>فروش اینستاگرام</button>
+          <button className={buttonClass} disabled={busy} onClick={() => open('expense')}>هزینه (تبلیغات، اجاره، …)</button>
+          <p className="text-[11px] text-slate-500 px-1 pt-1">کمتر لازم می‌شوند</p>
+          <button className={buttonClass} disabled={busy} onClick={() => open('tax_payment')}>پرداخت مالیات</button>
+          <button className={buttonClass} disabled={busy} onClick={() => open('capital')}>ورود سرمایه</button>
+          <button className={buttonClass} disabled={busy} onClick={() => open('withdrawal')}>برداشت شخصی</button>
+          <button className={buttonClass} disabled={busy} onClick={() => open('opening')}>ماندهٔ اولیهٔ بانک</button>
+        </div></details>
+      {section === 'summary' && (() => {
+        const todos = accountingTodos(data);
+        const day = (iso: string) => latinDigits(accountingDay(iso));
+        const inRange = (iso: string) => day(iso) >= latinDigits(from) && day(iso) <= latinDigits(to);
+        const sold = data.sales.filter(sale => (!channel || sale.channel === channel) && sale.recognizedAt && inRange(sale.recognizedAt)).length;
+        const owing = data.sales.filter(sale => saleStep(sale, data.totals[sale.id]).key === 'payment').length;
+        const report = data.report;
+        const goToSales = (filter: string) => { setSaleFilter(filter); setSearch(''); setSection('sales'); };
+        const todoRows: [SaleStepKey, number, string][] = [['cost', todos.cost, 'فروش قیمت خرید ندارد'], ['complete', todos.complete, 'سفارش آمادهٔ تکمیل (پول رسیده)'], ['payment', todos.payment, 'سفارش منتظر دریافت پول']];
+        return <div className="space-y-3">
+          <p className="text-xs text-slate-400">بازه: {toPersianDigits(from)} تا {toPersianDigits(to)} — برای تغییر، «بازهٔ گزارش» بالا را باز کنید.</p>
+          <div className={`${panel} border-emerald-700/60`}>
+            <p className="text-xs text-slate-400">سود این بازه</p>
+            <p className="text-2xl font-bold text-emerald-300 mt-1">{report.gold.profitGrams === null ? 'نامشخص' : gramsText(report.gold.profitGrams)} <span className="text-xs font-normal text-slate-400">سود طلا</span></p>
+            <p className="text-sm text-slate-200 mt-1">{report.profit === null ? (report.knownProfit ? `به تومان (فروش‌های دارای قیمت خرید): ${formatToman(report.knownProfit)}` : 'سود تومانی پس از ثبت قیمت خرید نمایش داده می‌شود') : `به تومان: ${formatToman(report.profit)}`}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className={panel}><p className="text-xs text-slate-400">فروش این بازه</p><p className="text-lg font-bold text-white mt-1">{formatToman(report.revenue)}</p><p className="text-xs text-slate-400">{toPersianDigits(sold)} فروش تکمیل‌شده</p></div>
+            <button type="button" className={`${panel} text-right`} onClick={() => goToSales('payment')}><p className="text-xs text-slate-400">طلب از مشتری‌ها</p><p className={`text-lg font-bold mt-1 ${report.receivables ? 'text-amber-300' : 'text-white'}`}>{formatToman(report.receivables)}</p><p className="text-xs text-slate-400">{toPersianDigits(owing)} سفارش</p></button>
+          </div>
+          <h3 className="font-bold text-sm pt-1">کارهای مونده {todos.cost + todos.complete + todos.payment > 0 && <span className="mr-1 rounded-lg px-2 py-0.5 text-xs bg-amber-500/15 text-amber-300">{toPersianDigits(todos.cost + todos.complete + todos.payment)}</span>}</h3>
+          {todos.cost + todos.complete + todos.payment === 0
+            ? <p className={`${panel} text-sm text-emerald-300`}>کاری نمونده؛ همهٔ فروش‌ها ثبت کامل دارند.</p>
+            : todoRows.filter(([, count]) => count > 0).map(([key, count, label]) => <button type="button" key={key} className={`${panel} w-full flex items-center justify-between text-sm`} onClick={() => goToSales(key)}><span>{toPersianDigits(count)} {label}</span><ChevronDown size={16} className="rotate-90" /></button>)}
+        </div>;
+      })()}
       {section === 'catalog' && <div className="space-y-3">
         <p className="text-xs text-slate-400 leading-7">{toPersianDigits(products.length)} محصول از فهرست فعلی سایت. افزودن و ویرایش محصول در مدیریت سایت، این فهرست را هم به‌روز می‌کند. خرید جدید در حسابداری موجودی سایت را افزایش می‌دهد و فروش سایت و اینستاگرام از همان موجودی کم می‌شود.</p>
         <input aria-label="جست‌وجوی محصولات حسابداری" placeholder="نام یا شناسهٔ محصول" className={inputClass} value={catalogSearch} onChange={event => setCatalogSearch(event.target.value)} />
@@ -252,18 +288,29 @@ export function AccountingDashboard() {
       </div>}
       {section === 'sales' && <div className="space-y-3">
         <div className="grid grid-cols-3 gap-2" aria-label="فیلتر فروش‌ها">{[['all', 'همه'], ['balance', 'مانده‌دار'], ['incomplete', 'تکمیل‌نشده']].map(([key, label]) => <button type="button" key={key} aria-pressed={saleFilter === key} className={saleFilter === key ? primary : buttonClass} onClick={() => setSaleFilter(key)}>{label}</button>)}</div>
+        {saleFilter in stepFilters && <button type="button" className={`${buttonClass} w-full !border-[#D4AF37] text-[#D4AF37]`} onClick={() => setSaleFilter('all')}>فقط «{stepFilters[saleFilter as SaleStepKey]}» <X size={14} /> نمایش همه</button>}
         <input aria-label="جست‌وجوی فروش" placeholder="نام مشتری یا کد سفارش" className={inputClass} value={search} onChange={event => setSearch(event.target.value)} />
         <p className="text-xs text-slate-400">سود هر کارت مربوط به کل سفارش است؛ بخش گزارش‌ها بر اساس بازهٔ انتخاب‌شده محاسبه می‌شود.</p>
         {!data.sales.length && <div className={panel}>هنوز سفارشی ثبت نشده است. سفارش‌های سایت خودکار در این فهرست قرار می‌گیرند.</div>}
         {!!data.sales.length && !visibleSales.length && <p role="status" className={panel}>فروشی با این جست‌وجو و فیلتر پیدا نشد.<button type="button" className={buttonClass + ' mt-3 w-full'} onClick={() => { setSearch(''); setSaleFilter('all'); }}>پاک‌کردن جست‌وجو و فیلتر فروش</button></p>}
         {visibleSales.map(sale => {
           const totals = data.totals[sale.id];
+          const step = saleStep(sale, totals);
+          const runStep = (event: React.MouseEvent) => {
+            event.preventDefault(); event.stopPropagation();
+            if (step.action?.kind === 'complete') void perform('complete', { saleId: sale.id, date: today });
+            else if (step.action) open(step.action.kind, sale);
+          };
           return <details key={sale.id} className={panel + ' group'} data-sale-id={sale.id}>
             <summary className="admin-card-summary cursor-pointer list-none space-y-3">
-              <div className="flex flex-wrap justify-between gap-2"><strong className="text-white">{sale.customerName}</strong><span className="text-xs text-[#D4AF37] break-all">{sale.trackingCode}</span></div>
+              <div className="flex flex-wrap justify-between items-center gap-2"><strong className="text-white">{sale.customerName}</strong><span className={`rounded-lg px-2 py-0.5 text-xs ${toneClass[step.tone]}`}>{step.label}</span></div>
+              {step.key === 'done' && totals.profit !== null && <p className="text-xs text-emerald-300">سود: {formatToman(totals.profit)}</p>}
+              {step.key === 'done' && totals.profit === null && data.goldTotals[sale.id].profitGrams !== null && <p className="text-xs text-emerald-300">سود طلا: {gramsText(data.goldTotals[sale.id].profitGrams!)}</p>}
+              {step.action && <button type="button" className={`${buttonClass} w-full !border-[#D4AF37] text-[#D4AF37]`} disabled={busy} onClick={runStep}>{step.action.label}</button>}
+              <p className="text-xs text-[#D4AF37] break-all">{sale.trackingCode}</p>
               <p className="text-xs text-slate-400">{sale.channel === 'site' ? 'سایت' : 'اینستاگرام'} · {dateText(sale.createdAt)} · {sale.status}</p>
               <div className="grid grid-cols-2 gap-3 text-xs"><div><span className="text-slate-400 block mb-1">مبلغ فاکتور</span><strong>{formatToman(sale.totalPrice)}</strong></div><div><span className="text-slate-400 block mb-1">ماندهٔ مشتری</span><strong className={totals.balance > 0 ? 'text-amber-300' : 'text-emerald-300'}>{formatToman(totals.balance)}</strong></div></div>
-              <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-xs text-[#D4AF37]"><span className="group-open:hidden">جزئیات، هزینه‌ها و دریافت وجه</span><span className="hidden group-open:inline">بستن جزئیات</span><ChevronDown size={16} className="group-open:rotate-180" /></div>
+              <div className="flex justify-between items-center pt-2 border-t border-slate-800 text-xs text-[#D4AF37]"><span className="group-open:hidden">بیشتر: جزئیات، مرجوعی، ویرایش هزینه‌ها</span><span className="hidden group-open:inline">بستن جزئیات</span><ChevronDown size={16} className="group-open:rotate-180" /></div>
             </summary>
             <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
               {sale.exchangeForSaleId && <p className="text-xs text-slate-400">تعویض مرتبط با {data.sales.find(previous => previous.id === sale.exchangeForSaleId)?.trackingCode || sale.exchangeForSaleId}</p>}
