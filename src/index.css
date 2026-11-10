@@ -24,8 +24,11 @@
     font-family: 'Vazirmatn Variable', 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
+  /* clip (not hidden) stops sideways scrolling without turning these into scroll
+     containers, so position: sticky keeps working; hidden stays as the fallback. */
   html, body {
     overflow-x: hidden !important;
+    overflow-x: clip !important;
     max-width: 100vw !important;
     width: 100% !important;
     position: relative;
@@ -35,6 +38,7 @@
 
   #root {
     overflow-x: hidden !important;
+    overflow-x: clip !important;
     max-width: 100vw !important;
     width: 100% !important;
     position: relative;

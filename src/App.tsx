@@ -55,11 +55,11 @@ const MainLayout: React.FC = () => {
   }, [activeTab, isAdmin, authLoading, setActiveTab]);
 
   return (
-    <div className="min-h-screen bg-[#060B15] text-slate-100 flex flex-col font-sans selection:bg-[#D4AF37] selection:text-slate-950 w-full max-w-full overflow-x-hidden relative">
+    <div className="min-h-screen bg-[#060B15] text-slate-100 flex flex-col font-sans selection:bg-[#D4AF37] selection:text-slate-950 w-full max-w-full overflow-x-clip relative">
       {/* Top Navbar */}
       <Navbar />
       {/* Main Content Router based on activeTab */}
-      <main className="flex-1 relative w-full max-w-full overflow-x-hidden">
+      <main className="flex-1 relative w-full max-w-full overflow-x-clip">
         {activeTab === 'home' && (
           <>
             <StarFallHero />
