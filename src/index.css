@@ -134,6 +134,14 @@
 /* Luxury Hero Micro-Animations */
 
 /* 1. Thin Golden Light Sheen sweeping across the logo every 7s (between 6-8s) */
+/* Homepage star: "scroll down" cue */
+@keyframes starScrollChevron {
+  0%, 100% { opacity: 0.15; transform: translateY(-3px) rotate(45deg); }
+  50% { opacity: 1; transform: translateY(3px) rotate(45deg); }
+}
+.star-scroll-chevron { transform: rotate(45deg); animation: starScrollChevron 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .star-scroll-chevron { animation: none; opacity: 0.8; } }
+
 @keyframes goldenSheenSweep {
   0% {
     transform: translateX(-160%) rotate(25deg);
