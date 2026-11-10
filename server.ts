@@ -191,7 +191,16 @@ app.get('/api/admin/accounting', requireAdminAuth, (req: AuthenticatedRequest, r
 });
 app.post('/api/admin/accounting/:action', requireAdminAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const result = await runDbTransaction(() => accounting.mutate(req.params.action, req.body, req.user!.uid));
+    const result = await runDbTransaction(() => {
+      const orderId = req.params.action === 'complete' ? store.get<any>('accountingSales', String(req.body?.saleId || ''))?.orderId : undefined;
+      const before = orderId ? store.get<Order>('orders', orderId)?.status : undefined;
+      const outcome = accounting.mutate(req.params.action, req.body, req.user!.uid);
+      // Completing from accounting tells the customer, like completing from the orders panel.
+      // A replayed request finds the order already completed and sends nothing again.
+      const completed = orderId ? store.get<Order>('orders', orderId) : undefined;
+      if (completed && before !== completed.status) notifications.recordOrder(completed);
+      return outcome;
+    });
     productsList = getAllProductsFromDb(); ordersList = getAllOrdersFromDb();
     res.json({ success: true, result });
   } catch (error: any) {
@@ -1958,7 +1967,10 @@ async function handleOrderStatusUpdate(
         err.statusCode = 409;
         throw err;
       }
-      if (status !== undefined) accounting.assertStatusChange(order, status);
+      if (status !== undefined) {
+        accounting.assertStatusChange(order, status);
+        accounting.settleStatusChange(order, status, adminUser?.uid || 'admin');
+      }
       const previousStatus = normalizeOrderStatus(order.status);
       const wasRejected = order.status === 'رد شده' || order.status === 'لغو شده';
       const quantities = new Map<string, number>();

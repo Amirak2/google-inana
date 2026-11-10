@@ -41,7 +41,7 @@ for(const target of ORDER_STATUSES) {
 }
 store.set('orders','finished',{id:'finished',trackingCode:'finished',status:'تکمیل شده',items:[],createdAt:new Date().toISOString()});
 assert.equal((await request('/api/orders/finished/status','PATCH',{status:'تأیید شده'})).status,409);
-assert.deepEqual(orderStatusOptions('تکمیل شده'),['تکمیل شده','لغو شده']);
+assert.deepEqual(orderStatusOptions('تکمیل شده'),['تکمیل شده']);
 store.set('orders','rejected',{id:'rejected',trackingCode:'rejected',status:'رد شده',items:[],createdAt:new Date().toISOString()});
 store.set('orders','changed',{id:'changed',trackingCode:'changed',status:'تأیید شده',items:[],createdAt:new Date().toISOString()});
 assert.equal((await request('/api/orders','DELETE',{ids:['rejected','changed'],expectedStatus:'رد شده'})).status,409);

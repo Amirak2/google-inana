@@ -8,6 +8,7 @@ import { emptyCosts, costSum, lineCost, saleTotals, returnedQuantity, returnedCo
 import { DEFAULT_SETTINGS } from '../src/utils/pricingEngine';
 
 export const ACCOUNTING_BUCKETS = ['accountingMeta', 'accountingPurchases', 'accountingSales', 'accountingMoney', 'accountingReturns', 'accountingAudit', 'accountingActions'];
+const ORDER_REJECTION_VOID = 'رد سفارش در مدیریت سایت؛ پرداخت تأییدشده نامعتبر اعلام شد.';
 function fail(message: string, statusCode = 400): never { throw Object.assign(new Error(message), { statusCode }); }
 function money(value: unknown, label: string, optional = false): number {
   if (optional && value === undefined) return 0;
@@ -104,11 +105,13 @@ export function createAccounting(store: Store) {
     if (sale.channel !== 'site' || order.id.startsWith('instagram-') || order.paymentReviewRequired
       || (!isApprovedOrderStatus(order.status) && normalizeOrderStatus(order.status) !== 'تکمیل شده')
       || !['card_to_card', 'online'].includes(order.paymentMethod || '')) return;
-    const id = `site-payment:${order.id}`;
-    // A voided automatic receipt stays voided. Synchronization never reverses an admin correction.
-    if (store.get('accountingMoney', id)) return;
     const receipts = list<MoneyEntry>('accountingMoney').filter(entry => entry.saleId === sale.id && entry.kind === 'receipt');
-    if (receipts.some(entry => entry.voidedAt)) return;
+    // An admin-voided receipt stays voided; synchronization never reverses that correction.
+    // A receipt voided only by an earlier rejection is recorded again when the order is re-approved.
+    if (receipts.some(entry => entry.voidedAt && entry.voidReason !== ORDER_REJECTION_VOID)) return;
+    const automatic = receipts.filter(entry => entry.source === 'site');
+    if (automatic.some(entry => !entry.voidedAt)) return;
+    const id = automatic.length ? `site-payment:${order.id}:${automatic.length + 1}` : `site-payment:${order.id}`;
     const received = receipts.filter(entry => !entry.voidedAt)
       .reduce((sum, entry) => sum + entry.amount, 0);
     const amount = Math.max(0, sale.totalPrice - received);
@@ -164,6 +167,27 @@ export function createAccounting(store: Store) {
     }
     if (sale?.recognizedAt && next !== order.status && list<ReturnEntry>('accountingReturns').some(entry => entry.saleId === sale.id)) fail('فروش مرجوع‌شده قابل فعال‌سازی مجدد نیست؛ برای تعویض یک فروش جدید ثبت کنید.', 409);
     if (sale?.recognizedAt && ['لغو شده', 'رد شده'].includes(next)) fail('برای فروش تکمیل‌شده، مرجوعی و بازپرداخت را از بخش حسابداری ثبت کنید.', 409);
+  }
+  // Rejection means the payment was never valid: its automatic receipt is voided
+  // (kept in history). Money still held with no refund recorded at all must be
+  // refunded before the order leaves the books; a partial refund (for example a
+  // retained cancellation fee) is the admin's explicit decision.
+  function settleStatusChange(order: Order, next: string, actor: string) {
+    if (!['لغو شده', 'رد شده'].includes(next) || next === order.status) return;
+    const sale = store.get<AccountingSale>('accountingSales', order.id);
+    if (!sale || sale.recognizedAt) return;
+    const entries = list<MoneyEntry>('accountingMoney').filter(entry => entry.saleId === sale.id && !entry.voidedAt);
+    const settled = entries.some(entry => entry.kind === 'settlement');
+    const voidable = next === 'رد شده' && !settled ? entries.filter(entry => entry.kind === 'receipt' && entry.source === 'site') : [];
+    const remaining = list<MoneyEntry>('accountingMoney').filter(entry => !voidable.includes(entry));
+    const totals = saleTotals(sale, remaining, list('accountingReturns'));
+    if (totals.paid > 0 && totals.refunded === 0) fail(`برای این سفارش ${totals.paid.toLocaleString('fa-IR')} تومان دریافت ثبت شده است. ابتدا در حسابداری «مرجوعی / بازپرداخت» را ثبت کنید یا دریافت اشتباه را باطل کنید، سپس سفارش را ${next === 'رد شده' ? 'رد' : 'لغو'} کنید.`, 409);
+    for (const entry of voidable) {
+      const voided: MoneyEntry = { ...entry, voidedAt: new Date().toISOString(), voidReason: ORDER_REJECTION_VOID };
+      store.set('accountingMoney', entry.id, voided);
+      audit('ابطال خودکار دریافت با رد سفارش', actor, sale.id, { before: entry, after: voided });
+    }
+    if (voidable.length) touch();
   }
   function mutate(action: string, body: any, actor: string) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('درخواست نامعتبر است.');
@@ -532,6 +556,6 @@ export function createAccounting(store: Store) {
           - returns.filter(entry => entry.items.length && inRange(entry.occurredAt) && sales.find(sale => sale.id === entry.saleId)?.channel === 'site').reduce((sum, entry) => sum + entry.items.reduce((n, item) => n + item.quantity, 0), 0),
         cashMovement, channels: channelSummary, daily: [...daily.values()].sort((a, b) => b.day.localeCompare(a.day)), products: [...byProduct.values()] } };
   }
-  return { syncOrder, syncSiteOrders, assertStatusChange, mutate, snapshot };
+  return { syncOrder, syncSiteOrders, assertStatusChange, settleStatusChange, mutate, snapshot };
 }
 
