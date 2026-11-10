@@ -20,7 +20,10 @@ export function canTransitionOrderStatus(from: string, to: string): boolean {
     && (current !== 'تکمیل شده' || next === current || next === 'لغو شده');
 }
 
+// A completed sale is reversed through an accounting return, so the admin menu
+// offers no cancel option that the server would refuse.
 export function orderStatusOptions(current: string): readonly string[] {
+  if (normalizeOrderStatus(current) === 'تکمیل شده') return ['تکمیل شده'];
   return ORDER_STATUSES.filter(next => canTransitionOrderStatus(current, next));
 }
 

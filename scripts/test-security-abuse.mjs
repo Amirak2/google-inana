@@ -113,6 +113,11 @@ try {
   db.set('products', productId, { ...db.get('products', productId), stock: 1 });
   assert.equal((await request(`/api/orders/${id}/status`, 'PATCH', { status: 'تایید شده' }, adminToken)).status, 200);
   assert.equal(db.get('products', productId).stock, 0);
+  // Approval recorded the payment, so the refund comes first; cancelling then restores stock once.
+  assert.equal((await request(`/api/orders/${id}/status`, 'PATCH', { status: 'لغو شده' }, adminToken)).status, 409);
+  const books = await request('/api/admin/accounting', 'GET', undefined, adminToken);
+  assert.equal((await request('/api/admin/accounting/return', 'POST', { actionId: 'abuse-refund-before-cancel', expectedRevision: books.body.revision, saleId: id,
+    amount: expired.totalPrice, shippingRefund: 0, restock: false, items: [], reference: 'ABUSE-REFUND', note: 'بازپرداخت پیش از لغو' }, adminToken)).status, 200);
   await request(`/api/orders/${id}/status`, 'PATCH', { status: 'لغو شده' }, adminToken);
   await request(`/api/orders/${id}/status`, 'PATCH', { status: 'لغو شده' }, adminToken);
   assert.equal(db.get('products', productId).stock, 1);

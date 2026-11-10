@@ -2529,6 +2529,9 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                     {orderStatusOptions(ord.status).map(status => <option key={status} value={status} className="bg-[#060B14] text-white">{status}</option>)}
                                   </select>
                                 </div>
+                                {normalizeOrderStatus(ord.status) === 'تکمیل شده' && !ord.archivedAt && (
+                                  <p className="col-span-2 text-[11px] text-slate-400 leading-5">برای برگشت این فروش، «مرجوعی / بازپرداخت» را در بخش حسابداری ثبت کنید.</p>
+                                )}
 
                                 {(ord.archivedAt || canArchiveOrder(ord.status)) && (
                                   <button type="button" disabled={isLoadingThis || archivingRejected}
