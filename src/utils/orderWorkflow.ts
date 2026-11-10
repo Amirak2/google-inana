@@ -27,6 +27,17 @@ export function orderStatusOptions(current: string): readonly string[] {
   return ORDER_STATUSES.filter(next => canTransitionOrderStatus(current, next));
 }
 
+// The usual next stage after approval, with the button text the admin sees.
+const NEXT_STATUS: Record<string, { status: CanonicalOrderStatus; label: string }> = {
+  'تأیید شده': { status: 'در حال آماده‌سازی', label: 'شروع آماده‌سازی' },
+  'در حال آماده‌سازی': { status: 'آماده تحویل', label: 'آماده تحویل شد' },
+  'آماده تحویل': { status: 'ارسال شد', label: 'ارسال شد' },
+  'ارسال شد': { status: 'تکمیل شده', label: 'تحویل گرفت — تکمیل سفارش' },
+};
+export function nextOrderStatus(status: string): { status: CanonicalOrderStatus; label: string } | undefined {
+  return NEXT_STATUS[normalizeOrderStatus(status)];
+}
+
 export function isApprovedOrderStatus(status: string): boolean {
   return ['تأیید شده', 'در حال آماده‌سازی', 'آماده تحویل', 'ارسال شد'].includes(normalizeOrderStatus(status));
 }

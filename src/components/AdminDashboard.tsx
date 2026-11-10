@@ -3,7 +3,7 @@ import { AccountingDashboard } from './AccountingDashboard';
 import { useAdminDraft } from '../hooks/useAdminDraft';
 import { changedProductFields, numberOrDefault } from '../utils/adminProductForm';
 import { readApiResponse } from '../utils/apiResponse';
-import { normalizeOrderStatus, orderStatusOptions, isApprovedOrderStatus, canTransitionOrderStatus, canArchiveOrder } from '../utils/orderWorkflow';
+import { normalizeOrderStatus, orderStatusOptions, isApprovedOrderStatus, canTransitionOrderStatus, canArchiveOrder, nextOrderStatus } from '../utils/orderWorkflow';
 import React, { useState, useEffect, useRef } from 'react';
 import { readAdminTab, saveSessionValue, type AdminTab } from '../utils/navigationState';
 import {
@@ -400,8 +400,12 @@ export const AdminDashboard: React.FC = () => {
     } finally { setActionLoadingOrderId(null); }
   };
   const handleUpdateOrderStatus = (orderId: string, status: string) => applyOrderStatus(orderId, status);
+  // Receipt review moves straight on to the next waiting receipt, so a batch is a few taps.
+  const pendingReceipts = (excludeId = '') => orders.filter(order => order.id !== excludeId && !order.archivedAt && order.status === 'در انتظار بررسی' && order.paymentReceiptImage);
+  const continueReviewAfterReject = useRef(false);
+  useEffect(() => { if (!rejectingOrder) continueReviewAfterReject.current = false; }, [rejectingOrder]);
   const handleApproveOrder = async (order: Order) => {
-    if (await applyOrderStatus(order.id, 'تأیید شده') && viewingReceiptOrder?.id === order.id) setViewingReceiptOrder(null);
+    if (await applyOrderStatus(order.id, 'تأیید شده') && viewingReceiptOrder?.id === order.id) setViewingReceiptOrder(pendingReceipts(order.id)[0] || null);
   };
   const handleRejectOrder = async () => {
     if (!rejectingOrder) return;
@@ -410,7 +414,9 @@ export const AdminDashboard: React.FC = () => {
       setRejectingOrder(null);
       setRejectionReasonInput('');
       if (viewingReceiptOrder?.id === orderId) setViewingReceiptOrder(null);
+      if (continueReviewAfterReject.current) setViewingReceiptOrder(pendingReceipts(orderId)[0] || null);
     }
+    continueReviewAfterReject.current = false;
   };
 
   const handleDeleteOrder = async () => {
@@ -2127,6 +2133,21 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 </div>
               </div>
 
+              {(() => {
+                const waiting = workingOrders.filter(order => order.status === 'در انتظار بررسی');
+                if (!waiting.length) return null;
+                const withReceipt = pendingReceipts();
+                return (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-950/30 p-3 sm:p-4">
+                    <p className="text-sm text-amber-200"><strong>{toPersianDigits(waiting.length)} سفارش</strong> منتظر بررسی فیش است.</p>
+                    <button type="button" onClick={() => { setOrderFilterStatus('در انتظار بررسی'); if (withReceipt[0]) setViewingReceiptOrder(withReceipt[0]); }}
+                      className="min-h-11 px-4 py-2 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold">
+                      {withReceipt.length ? 'شروع بررسی فیش‌ها' : 'نمایش این سفارش‌ها'}
+                    </button>
+                  </div>
+                );
+              })()}
+
               {/* Filters & Search Toolbar */}
               <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
                 {/* Status Tabs */}
@@ -2305,7 +2326,27 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                 <span className={'shrink-0 rounded-lg px-2 py-1 text-xs ' + (isPending ? 'bg-amber-500/15 text-amber-300' : isApproved ? 'bg-emerald-500/15 text-emerald-300' : isRejected ? 'bg-rose-500/15 text-rose-300' : 'bg-slate-800 text-slate-300')}>{ord.status}</span>
                               </div>
                               <div className="flex flex-wrap justify-between gap-2 text-xs"><span className="text-slate-400">{new Date(ord.createdAt).toLocaleDateString('fa-IR')} · {toPersianDigits(ord.items.reduce((sum, item) => sum + item.quantity, 0))} کالا</span><strong className="text-[#F5E8C7] text-sm">{formatToman(ord.totalPrice)}</strong></div>
-                              {ord.paymentReviewRequired && <p className="text-xs text-amber-300">نیازمند بررسی پرداخت و تخصیص موجودی</p>}
+                              {ord.paymentReviewRequired && (
+                                <div role="status" className="rounded-xl border border-amber-500/50 bg-amber-950/40 p-2.5 text-xs leading-6 text-amber-200">
+                                  <strong className="block text-amber-300">{ord.inventoryReleased ? 'کالا برای این سفارش کنار گذاشته نشده' : 'فیش بعد از پایان مهلت قیمت ارسال شده'}</strong>
+                                  {ord.inventoryReleased ? 'قبل از تأیید مطمئن شوید کالا هنوز موجود است؛ اگر نیست، مبلغ را به مشتری برگردانید.' : 'مبلغ فیش را با مبلغ همین سفارش مقایسه کنید.'}
+                                </div>
+                              )}
+                              {(() => {
+                                const next = nextOrderStatus(ord.status);
+                                const primaryAction = isPending && ord.paymentReceiptImage
+                                  ? { label: 'بررسی فیش', run: () => setViewingReceiptOrder(ord) }
+                                  : next && !ord.archivedAt && canTransitionOrderStatus(ord.status, next.status)
+                                    ? { label: next.label, run: () => void handleUpdateOrderStatus(ord.id, next.status) }
+                                    : null;
+                                return primaryAction && (
+                                  <button type="button" disabled={isLoadingThis}
+                                    onClick={event => { event.preventDefault(); event.stopPropagation(); primaryAction.run(); }}
+                                    className="w-full min-h-11 rounded-xl border border-[#D4AF37] text-[#D4AF37] text-xs font-bold disabled:opacity-50">
+                                    {isLoadingThis ? 'در حال ثبت…' : primaryAction.label}
+                                  </button>
+                                );
+                              })()}
                               <div className="flex items-center justify-between border-t border-slate-800 pt-3 text-xs text-[#D4AF37]"><span>{ord.paymentReceiptImage ? 'فیش پیوست شده' : 'بدون تصویر فیش'}</span><span className="flex items-center gap-2"><span className="group-open:hidden">جزئیات و بررسی سفارش</span><span className="hidden group-open:inline">بستن جزئیات</span><ChevronDown className="w-4 h-4 group-open:rotate-180 transition-transform" /></span></div>
                             </summary>
                             <div className="space-y-4 mt-4 border-t border-slate-800 pt-4">
@@ -2600,6 +2641,20 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                     </button>
                   </div>
 
+                  <div className="px-4 pt-4 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#D4AF37]/40 bg-[#060B14] p-3">
+                      <span className="text-xs text-slate-300">مبلغی که باید در فیش ببینید:</span>
+                      <strong className="text-lg text-[#F5E8C7]">{formatToman(viewingReceiptOrder.totalPrice)}</strong>
+                    </div>
+                    {viewingReceiptOrder.paymentReviewRequired && (
+                      <p role="status" className="rounded-xl border border-amber-500/50 bg-amber-950/40 p-2.5 text-xs leading-6 text-amber-200">
+                        {viewingReceiptOrder.inventoryReleased ? 'کالا برای این سفارش کنار گذاشته نشده؛ قبل از تأیید مطمئن شوید هنوز موجود است.' : 'فیش بعد از پایان مهلت قیمت ارسال شده؛ مبلغ را با دقت مقایسه کنید.'}
+                      </p>
+                    )}
+                    {viewingReceiptOrder.status === 'در انتظار بررسی' && pendingReceipts(viewingReceiptOrder.id).length > 0 && (
+                      <p className="text-[11px] text-slate-400">بعد از تأیید یا رد، فیش بعدی باز می‌شود ({toPersianDigits(pendingReceipts(viewingReceiptOrder.id).length)} فیش دیگر).</p>
+                    )}
+                  </div>
                   {/* Receipt Image Display */}
                   <div className="p-4 flex flex-col items-center">
                     <div className="max-h-[60vh] overflow-auto bg-black/60 rounded-xl p-2 border border-slate-800 w-full flex items-center justify-center">
@@ -2636,6 +2691,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                         disabled={!!viewingReceiptOrder.archivedAt || !canTransitionOrderStatus(viewingReceiptOrder.status, 'رد شده') || actionLoadingOrderId === viewingReceiptOrder.id}
                         onClick={() => {
                           const ord = viewingReceiptOrder;
+                          continueReviewAfterReject.current = true;
                           setViewingReceiptOrder(null);
                           setRejectingOrder(ord);
                           setRejectionReasonInput(ord.rejectionReason || '');

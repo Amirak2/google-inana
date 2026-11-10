@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { Store } from '../server/storage.ts';
 import { createApp } from '../server.ts';
 import { createAuthStore } from '../server/authStore.ts';
-import { ORDER_STATUSES, orderStatusOptions } from '../src/utils/orderWorkflow.ts';
+import { ORDER_STATUSES, orderStatusOptions, nextOrderStatus } from '../src/utils/orderWorkflow.ts';
 import { changedProductFields } from '../src/utils/adminProductForm.ts';
 
 const env = { SESSION_SECRET:'isolated-admin-test-secret-longer-than-32', NODE_ENV:'test' };
@@ -42,6 +42,9 @@ for(const target of ORDER_STATUSES) {
 store.set('orders','finished',{id:'finished',trackingCode:'finished',status:'تکمیل شده',items:[],createdAt:new Date().toISOString()});
 assert.equal((await request('/api/orders/finished/status','PATCH',{status:'تأیید شده'})).status,409);
 assert.deepEqual(orderStatusOptions('تکمیل شده'),['تکمیل شده']);
+// One-tap next stage: approved → preparing → ready → shipped → completed, nothing after.
+assert.deepEqual(['تأیید شده','تایید شده','در حال آماده‌سازی','آماده تحویل','ارسال شد'].map(status => nextOrderStatus(status)?.status),['در حال آماده‌سازی','در حال آماده‌سازی','آماده تحویل','ارسال شد','تکمیل شده']);
+for (const status of ['در انتظار بررسی','تکمیل شده','رد شده','لغو شده']) assert.equal(nextOrderStatus(status), undefined);
 store.set('orders','rejected',{id:'rejected',trackingCode:'rejected',status:'رد شده',items:[],createdAt:new Date().toISOString()});
 store.set('orders','changed',{id:'changed',trackingCode:'changed',status:'تأیید شده',items:[],createdAt:new Date().toISOString()});
 assert.equal((await request('/api/orders','DELETE',{ids:['rejected','changed'],expectedStatus:'رد شده'})).status,409);
