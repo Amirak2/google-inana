@@ -9,6 +9,7 @@ import { StarFallHero } from './components/StarFallHero';
 import { LiveGoldTicker } from './components/LiveGoldTicker';
 import { ShopCatalog } from './components/ShopCatalog';
 import { CollectionsShowcase } from './components/CollectionsShowcase';
+import { HomeShowcase } from './components/HomeShowcase';
 import { InanaStory } from './components/InanaStory';
 import { TestimonialsFAQ } from './components/TestimonialsFAQ';
 import { ContactSection } from './components/ContactSection';
@@ -63,8 +64,7 @@ const MainLayout: React.FC = () => {
         {activeTab === 'home' && (
           <>
             <StarFallHero />
-            <CollectionsShowcase />
-            <ShopCatalog />
+            <HomeShowcase />
             <LiveGoldTicker compact />
             <TestimonialsFAQ compact />
           </>

@@ -35,4 +35,10 @@ assert.deepEqual(parseSiteRoute(url.pathname, url.search), state, 'Every filter 
 const sorted = sortCatalogProducts(products, 'weight-asc', 23932462, DEFAULT_SETTINGS);
 assert.notEqual(sorted, products);
 assert.ok(sorted.every((product, index) => !index || sorted[index-1].weight <= product.weight));
+// Sold-out pieces go last under every order, without disturbing the order among the rest.
+const soldOut = {...products[0], id: 'sold-out-fixture', weight: 0.01, stock: 0, availableStock: 0, createdAt: '2099-01-01T00:00:00Z'};
+for (const sort of ['newest', 'weight-asc', 'price-asc']) {
+  const ordered = sortCatalogProducts([soldOut, ...products.filter(product => (product.availableStock ?? product.stock ?? 0) > 0)], sort, 23932462, DEFAULT_SETTINGS);
+  assert.equal(ordered.at(-1).id, 'sold-out-fixture', `${sort}: sold-out piece is last`);
+}
 console.log('PASS: visible letter invariants, scoped category counts, sub-0.5g filtering, unlimited 12g stock, Persian/Arabic search and complete shared URLs.');
