@@ -53,9 +53,11 @@ try {
   await update(() => root.render(React.createElement(Harness)));
   assert.match(document.body.textContent, /حسابداری و سود اینانا/);
   assert.ok(syncs >= 1, 'Mount automatically synchronizes existing site orders');
-  assert.equal(document.querySelector('nav[aria-label="بخش‌های حسابداری"] button[aria-current="page"]').textContent, 'فروش‌ها');
+  assert.equal(document.querySelector('nav[aria-label="بخش‌های حسابداری"] button[aria-current="page"]').textContent, 'خلاصه');
+  assert.match(document.body.textContent, /سود این بازه/, 'Accounting opens on the plain-language summary');
+  assert.match(document.body.textContent, /کارهای مونده/);
   const previousOverflow = document.body.style.overflow;
-  await update(() => button('محصولات سایت').click());
+  await update(() => button('محصولات و قیمت خرید').click());
   assert.match(document.body.textContent, new RegExp(INITIAL_PRODUCTS[0].title));
   assert.equal(buttons().filter(element => element.textContent.trim() === 'ثبت خرید / قیمت موجودی').length, 2, 'Existing site products appear without registering purchases');
   await update(() => button('هزینه‌های پیش‌فرض').click());
@@ -70,12 +72,12 @@ try {
   assert.equal(document.querySelector('[role="dialog"]'), null); assert.equal(data.settings.packaging, 1234);
   assert.equal(document.body.style.overflow, previousOverflow, 'Closing the form restores page scrolling');
   assert.equal(mutations[0].body.actionId, mutations[1].body.actionId, 'Same draft retry keeps its idempotency key');
-  await update(() => button('خرید / موجودی اولیه').click());
+  await update(() => button('خرید طلا یا مروارید').click());
   const quantityInput = await input('تعداد قطعه', '2');
   await input('خرید مروارید — تومان برای هر عدد', '۹۰۰۰');
   await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   const purchase = mutations.at(-1); assert.ok(purchase.url.endsWith('/purchase')); assert.equal(purchase.body.costs.pearl, 9000); assert.equal(purchase.body.kind, 'opening');
-  await update(() => button('خرید / موجودی اولیه').click());
+  await update(() => button('خرید طلا یا مروارید').click());
   const goldSelect = document.querySelector('[role="dialog"] select');
   await update(() => { goldSelect.value = INITIAL_PRODUCTS[1].id; goldSelect.dispatchEvent(new window.Event('change', { bubbles: true })); });
   const weight = await input('وزن طلای هر قطعه — گرم', '۰٫۸۴۰');
@@ -116,6 +118,7 @@ try {
   data = createAccounting(fixture).snapshot();
   await update(() => button('تازه‌سازی').click());
   await update(() => button('فروش‌ها').click());
+  assert.ok(button('ثبت دریافت پول'), 'An approved unpaid sale offers recording the payment as its one next step');
   await update(() => button('ثبت / مشاهدهٔ هزینه‌ها و مالیات').click());
   await input('مبلغ مشمول مالیات پس از تخفیف — تومان', '۵۰۰۰۰۰');
   await input('ساخت بعد از سفارش — تومان برای هر عدد (اگر قبلاً در خرید منظور نشده)', '۱۰۰۰۰۰');
@@ -150,6 +153,7 @@ try {
   data = createAccounting(fixture).snapshot();
   await update(() => button('تازه‌سازی').click());
   await update(() => button('فروش‌ها').click());
+  assert.equal(button('تکمیل فروش (تحویل شد)'), undefined, 'A refunded sale shows no completion step');
   assert.equal(button('تکمیل فروش پس از تحویل').disabled, true, 'Refunded undelivered order cannot be completed from the UI');
   const afterRefundRefresh = mutations.length;
   await update(() => button('تکمیل فروش پس از تحویل').click());
