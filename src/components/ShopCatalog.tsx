@@ -62,8 +62,7 @@ export const ShopCatalog: React.FC = () => {
 
   return (
     <section id="shop-catalog-section"
-      className="py-5 sm:py-14 px-3 sm:px-6 lg:px-8 bg-[#060B15] min-h-screen w-full min-w-0 relative"
-      style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(18, 48, 98, 0.25) 0%, rgba(8, 15, 30, 0.6) 45%, #060B15 85%)' }}>
+      className="py-5 sm:py-14 px-3 sm:px-6 lg:px-8 inana-glass-backdrop min-h-screen w-full min-w-0 relative">
       <div className="max-w-7xl mx-auto w-full min-w-0 relative z-10">
         {/* Catalog Banner / Header */}
         <div className="text-center max-w-2xl mx-auto mb-4 sm:mb-10">

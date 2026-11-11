@@ -20,7 +20,8 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
   const s = Math.min(W, H) / 700 + 0.55;
   const gy = H * 0.8;
   const fallPoint = (t: number) => {
-    const sx = W * 0.64, sy = H * 0.14, cx = W * 0.12, cy = H * 0.34, ex = W * 0.5, ey = gy, u = 1 - t;
+    // Starts low enough to clear the header, which is taller on phones with a status-bar inset.
+    const sx = W * 0.64, sy = H * 0.24, cx = W * 0.12, cy = H * 0.34, ex = W * 0.5, ey = gy, u = 1 - t;
     return { x: u * u * sx + 2 * u * t * cx + t * t * ex, y: u * u * sy + 2 * u * t * cy + t * t * ey };
   };
 
@@ -43,9 +44,9 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
 
-  // Horizon line that ignites outward from the impact point.
+  // Horizon line that ignites outward from the impact point, then melts away as the scene lights up.
   const half = Math.max(W * 0.5 * clamp(impact * 1.3 + light), W * 0.12);
-  ctx.strokeStyle = `rgba(212,175,55,${0.12 + 0.55 * clamp(impact + light)})`;
+  ctx.strokeStyle = `rgba(212,175,55,${(0.12 + 0.55 * clamp(impact + light)) * (1 - light)})`;
   ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.moveTo(W / 2 - half, gy); ctx.lineTo(W / 2 + half, gy); ctx.stroke();
 
