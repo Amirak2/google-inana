@@ -82,12 +82,12 @@ export const Navbar: React.FC = () => {
       id="main-navbar-header"
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
         isScrolled
-          ? 'bg-[#060B15]/95 backdrop-blur-xl border-b border-[#D4AF37]/25 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)]'
-          : 'bg-gradient-to-b from-[#060B15]/95 via-[#060B15]/80 to-transparent'
+          ? 'inana-glass-bar border-b'
+          : 'inana-glass-bar border-b'
       }`}
     >
       {/* Top Gold Ticker Strip */}
-      <div className="w-full bg-[#040810] border-b border-[#D4AF37]/20 py-1.5 px-3 sm:px-4 text-xs overflow-hidden">
+      <div className="w-full bg-black/15 border-b border-white/10 py-1.5 px-3 sm:px-4 text-xs overflow-hidden">
         <div className="max-w-7xl mx-auto flex items-center justify-center lg:justify-between gap-2">
           <div className="flex min-w-0 max-w-full items-center justify-center gap-2 xl:gap-4 overflow-hidden">
             <button

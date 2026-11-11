@@ -126,7 +126,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       </div>
 
       {/* Product Information */}
-      <div className="p-2.5 sm:p-5 flex flex-col flex-1 justify-between bg-gradient-to-b from-[#0A1325] to-[#060B15] transition-colors duration-500 group-hover:from-[#0D1830] group-hover:to-[#070D1B]">
+      <div className="p-2.5 sm:p-5 flex flex-col flex-1 justify-between">
         <div>
           <h3 className="text-xs sm:text-base leading-5 font-bold text-white line-clamp-2 min-h-10 sm:min-h-0 group-hover:text-[#F5E8C7] transition-colors duration-300">
             <a href={productPath(product.id)} onClick={event => {

@@ -28,7 +28,7 @@ export const HomeShowcase: React.FC = () => {
   ].filter(row => row.items.length > 0);
 
   return (
-    <section id="home-showcase" className="bg-[#060B15] w-full max-w-full py-10 sm:py-14">
+    <section id="home-showcase" className="inana-glass-backdrop w-full max-w-full py-10 sm:py-14">
       <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 space-y-10 sm:space-y-12">
         <nav aria-label="کالکشن‌ها" className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
           {collections.map(collection => (
