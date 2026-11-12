@@ -136,14 +136,17 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 14px 34px -14px rgba(0, 0, 0, 0.75);
 }
 
-/* Soft colour behind sections so the glass has something to catch. */
+/* Soft colour behind sections so the glass has something to catch. The section opens
+   in the hero's own night-sky colour and the light only fades in further down, so
+   there is no visible seam where the star scene ends. */
 .inana-glass-backdrop {
   background:
-    radial-gradient(70% 34% at 88% 6%, rgba(212, 175, 55, 0.34) 0%, transparent 70%),
-    radial-gradient(65% 30% at 8% 30%, rgba(64, 120, 220, 0.38) 0%, transparent 70%),
-    radial-gradient(70% 30% at 85% 58%, rgba(212, 175, 55, 0.26) 0%, transparent 70%),
-    radial-gradient(65% 28% at 10% 86%, rgba(64, 120, 220, 0.30) 0%, transparent 70%),
-    #060B15;
+    linear-gradient(180deg, #050A14 0, #050A14 40px, rgba(5, 10, 20, 0) 420px),
+    radial-gradient(70% 30% at 88% 16%, rgba(212, 175, 55, 0.34) 0%, transparent 70%),
+    radial-gradient(65% 30% at 8% 36%, rgba(64, 120, 220, 0.38) 0%, transparent 70%),
+    radial-gradient(70% 30% at 85% 62%, rgba(212, 175, 55, 0.26) 0%, transparent 70%),
+    radial-gradient(65% 28% at 10% 88%, rgba(64, 120, 220, 0.30) 0%, transparent 70%),
+    #050A14;
 }
 
 .luxury-glass-card:hover {
