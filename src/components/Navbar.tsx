@@ -87,7 +87,7 @@ export const Navbar: React.FC = () => {
       }`}
     >
       {/* Top Gold Ticker Strip */}
-      <div className="w-full bg-black/15 border-b border-white/10 py-1.5 px-3 sm:px-4 text-xs overflow-hidden">
+      <div className="w-full border-b border-white/[0.05] py-1.5 px-3 sm:px-4 text-xs overflow-hidden">
         <div className="max-w-7xl mx-auto flex items-center justify-center lg:justify-between gap-2">
           <div className="flex min-w-0 max-w-full items-center justify-center gap-2 xl:gap-4 overflow-hidden">
             <button
