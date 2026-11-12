@@ -116,13 +116,15 @@
 /* Clear glass: a light translucent pane that blurs whatever is behind it, with a
    bright top edge. Used by the header, the bottom bar and every card. */
 .inana-glass-bar {
-  /* Dark enough that the light icons stay readable over the bright gold scene. */
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(6, 11, 21, 0.58);
-  --inana-backdrop: blur(18px) saturate(160%);
+  /* Lightly tinted so the page shows through. Whatever passes behind is dimmed as
+     well as blurred, so white product photos cannot wash out the light icons. */
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%), rgba(6, 11, 21, 0.34);
+  --inana-backdrop: blur(18px) saturate(160%) brightness(0.55);
   -webkit-backdrop-filter: var(--inana-backdrop);
   backdrop-filter: var(--inana-backdrop);
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 8px 30px -12px rgba(0, 0, 0, 0.6);
+  /* Edges are only hinted at, so the bars do not read as ruled-off strips. */
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.5);
 }
 
 .luxury-glass-card {
