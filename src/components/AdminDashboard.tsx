@@ -1,5 +1,6 @@
 import { AdminProductGallery } from './AdminProductGallery';
 import { AccountingDashboard } from './AccountingDashboard';
+import { AdminUsers } from './AdminUsers';
 import { useAdminDraft } from '../hooks/useAdminDraft';
 import { changedProductFields, numberOrDefault } from '../utils/adminProductForm';
 import { readApiResponse } from '../utils/apiResponse';
@@ -47,6 +48,7 @@ import {
   FileText,
   Database,
   Terminal,
+  Users,
   ChevronDown,
 } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
@@ -616,6 +618,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
     { id: 'orders', label: 'سفارش‌ها', icon: ShoppingBag },
     { id: 'accounting', label: 'حسابداری و سود', icon: CreditCard },
     { id: 'products', label: 'مدیریت کل محصولات', icon: Package },
+    { id: 'users', label: 'کاربران', icon: Users },
     { id: 'direct-pricing', label: 'تنظیم مستقیم اجرت و سود طلا', icon: Percent },
     { id: 'gold-rate', label: 'نرخ پایه و فرمول', icon: TrendingUp },
     { id: 'calculator', label: 'ماشین‌حساب ادمین', icon: Calculator },
@@ -2895,6 +2898,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
         {/* ========================================================================= */}
         {/* TAB 6: SYSTEM AUDIT LOGGING & MONITORING */}
         {/* ========================================================================= */}
+        {activeAdminTab === 'users' && <AdminUsers />}
         {activeAdminTab === 'logs' && <SystemLogsViewer />}
       </div>
       <nav id="admin-mobile-nav" aria-label="دسترسی سریع ادمین" className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#0A1120]/95 backdrop-blur-xl border-t border-[#D4AF37]/30 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))]">
