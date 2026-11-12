@@ -4,13 +4,12 @@ import { ArrowLeft } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
 
 // Homepage opener: Inanna's eight-pointed star rests in the night sky, falls like a
-// comet as the visitor scrolls, strikes the ground and lights the scene in gold.
+// comet as the visitor scrolls and strikes the ground; the brand then appears on the same night sky.
 // The previous opener remains in HeroSection.tsx; swapping the import in App.tsx restores it.
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const easeIn = (t: number) => t * t * t;
 const rand = (n: number) => { const s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); };
-const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 const FIELD = Array.from({ length: 160 }, (_, i) => ({ x: rand(i * 3 + 1), y: rand(i * 3 + 2) * 0.78, r: rand(i * 3 + 3) * 1.2 + 0.3, ph: rand(i * 7) * 6.28 }));
 
 function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: number, time: number) {
@@ -25,30 +24,22 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
     return { x: u * u * sx + 2 * u * t * cx + t * t * ex, y: u * u * sy + 2 * u * t * cy + t * t * ey };
   };
 
-  // Night sky that warms into gold light after the impact.
-  const warm = light * light;
-  ctx.fillStyle = `rgb(${mix(5, 246, warm) | 0},${mix(10, 236, warm) | 0},${mix(20, 214, warm) | 0})`;
+  // The night sky stays as it is throughout; the impact only throws a brief glow
+  // from the ground, which is gone again by the time the brand appears.
+  ctx.fillStyle = '#050A14';
   ctx.fillRect(0, 0, W, H);
   for (const f of FIELD) {
-    const a = (0.25 + 0.3 * Math.sin(time / 800 + f.ph)) * (1 - light);
-    if (a <= 0) continue;
-    ctx.fillStyle = `rgba(245,236,215,${a})`;
+    ctx.fillStyle = `rgba(245,236,215,${0.25 + 0.3 * Math.sin(time / 800 + f.ph)})`;
     ctx.beginPath(); ctx.arc(f.x * W, f.y * H, f.r, 0, Math.PI * 2); ctx.fill();
   }
-  const glowStrength = Math.max(light, impact * 0.3);
-  if (glowStrength > 0) {
-    const g = ctx.createRadialGradient(W / 2, gy, 0, W / 2, gy, Math.max(W, H) * (0.15 + 1.2 * glowStrength));
-    g.addColorStop(0, `rgba(255,228,150,${0.9 * Math.max(light, impact)})`);
-    g.addColorStop(0.4, `rgba(212,175,55,${0.4 * Math.max(light, impact)})`);
+  const afterglow = Math.max(impact, light) * (1 - light);
+  if (afterglow > 0) {
+    const g = ctx.createRadialGradient(W / 2, gy, 0, W / 2, gy, Math.min(W, H) * 0.6);
+    g.addColorStop(0, `rgba(255,228,150,${0.5 * afterglow})`);
+    g.addColorStop(0.4, `rgba(212,175,55,${0.2 * afterglow})`);
     g.addColorStop(1, 'rgba(212,175,55,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
-
-  // Horizon line that ignites outward from the impact point, then melts away as the scene lights up.
-  const half = Math.max(W * 0.5 * clamp(impact * 1.3 + light), W * 0.12);
-  ctx.strokeStyle = `rgba(212,175,55,${(0.12 + 0.55 * clamp(impact + light)) * (1 - light)})`;
-  ctx.lineWidth = 1.2;
-  ctx.beginPath(); ctx.moveTo(W / 2 - half, gy); ctx.lineTo(W / 2 + half, gy); ctx.stroke();
 
   // Comet tail: a smooth tapered stroke along the path just behind the star.
   const tailFade = 1 - clamp((p - 0.6) / 0.05);
@@ -97,9 +88,9 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
   // Impact: a warm burst of light from the ground and a widening ring.
   if (impact > 0 && impact < 1) {
     const flash = Math.sin(impact * Math.PI);
-    const burstLight = ctx.createRadialGradient(W / 2, gy, 0, W / 2, gy, Math.max(W, H) * 0.7);
-    burstLight.addColorStop(0, `rgba(255,240,190,${0.95 * flash})`);
-    burstLight.addColorStop(0.3, `rgba(240,196,90,${0.5 * flash})`);
+    const burstLight = ctx.createRadialGradient(W / 2, gy, 0, W / 2, gy, Math.min(W, H) * 0.75);
+    burstLight.addColorStop(0, `rgba(255,240,190,${0.8 * flash})`);
+    burstLight.addColorStop(0.3, `rgba(240,196,90,${0.3 * flash})`);
     burstLight.addColorStop(1, 'rgba(240,196,90,0)');
     ctx.fillStyle = burstLight; ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = `rgba(255,232,170,${1 - impact})`; ctx.lineWidth = 3 * (1 - impact) + 0.5;
@@ -190,22 +181,18 @@ export const StarFallHero: React.FC = () => {
       <div ref={stageRef} className={`${NATIVE_STICKY ? 'sticky' : 'absolute inset-x-0 will-change-transform'} top-0 h-[100svh] overflow-hidden`}>
         <canvas ref={canvasRef} aria-hidden="true" className="absolute inset-0 w-full h-full block" />
         <div ref={brandRef} className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-4 text-center" style={{ opacity: 0, pointerEvents: 'none' }}>
-          {/* The gold line logo is drawn in the title's dark tone, which reads on the lit gold scene. */}
-          <div
-            role="img"
-            aria-label="لوگوی اینانا گلد"
-            className="w-24 h-24 sm:w-28 sm:h-28 mb-1 bg-[#2A1E06]"
-            style={{ WebkitMaskImage: 'url(/inana-logo-gold.png)', maskImage: 'url(/inana-logo-gold.png)', WebkitMaskSize: 'contain', maskSize: 'contain', WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskPosition: 'center' }}
-          />
-          <h1 dir="ltr" className="font-serif-brand w-full text-center text-[clamp(22px,6vw,46px)] font-bold uppercase tracking-[0.28em] indent-[0.28em] text-[#2A1E06] leading-none">
+          {/* The brand appears in its own gold on the unchanged night sky. */}
+          <img src="/inana-logo-gold.png" alt="لوگوی اینانا گلد" width={112} height={112} draggable={false}
+            className="w-24 h-24 sm:w-28 sm:h-28 mb-1 object-contain drop-shadow-[0_0_18px_rgba(212,175,55,0.35)]" />
+          <h1 dir="ltr" className="font-serif-brand w-full text-center text-[clamp(22px,6vw,46px)] font-bold uppercase tracking-[0.28em] indent-[0.28em] gold-gradient-text leading-none">
             INANA GOLD
           </h1>
-          <p className="text-sm sm:text-base text-[#3B2C0C] font-medium">گالری اینانا برای زنان توانا</p>
+          <p className="text-sm sm:text-base text-[#F5E8C7] font-medium">گالری اینانا برای زنان توانا</p>
           <button
             id="hero-cta-collections"
             type="button"
             onClick={() => { setActiveTab('collections'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-            className="group inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full bg-[#1B2335] text-[#F5ECD7] font-bold text-sm sm:text-base hover:bg-[#232D44] active:scale-98 transition-all focus-visible:outline-2 focus-visible:outline-[#1B2335] focus-visible:outline-offset-2"
+            className="group inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#B38A30] text-slate-950 font-bold text-sm sm:text-base hover:brightness-105 active:scale-98 transition-all focus-visible:outline-2 focus-visible:outline-[#F5E8C7] focus-visible:outline-offset-2"
           >
             <span>مشاهده مجموعه‌ها</span>
             <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
