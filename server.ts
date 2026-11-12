@@ -2427,6 +2427,24 @@ app.get('/api/admin/logs', requireAdminAuth, (req: AuthenticatedRequest, res: Re
   res.json(result);
 });
 
+// Customer list for the admin panel: profile fields only, never credentials.
+app.get('/api/admin/users', requireAdminAuth, (_req: AuthenticatedRequest, res: Response) => {
+  const users = [...store.map<any>('users').values()].map(stored => {
+    const profile = sanitizeUser(stored);
+    const orders = ordersList.filter(order => order.userId === profile.uid);
+    const paid = orders.filter(order => !['رد شده', 'لغو شده', 'در انتظار بررسی'].includes(order.status));
+    return {
+      ...profile,
+      phoneVerified: stored.phoneVerified === true,
+      ordersCount: orders.length,
+      paidOrdersCount: paid.length,
+      paidTotal: paid.reduce((sum, order) => sum + (order.totalPrice || 0), 0),
+      lastOrderAt: orders.map(order => order.createdAt).sort().at(-1) || null,
+    };
+  }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  res.json({ users, total: users.length });
+});
+
 // Get logging statistics and counters (Strictly Admin Protected)
 app.get('/api/admin/logs/stats', requireAdminAuth, (_req: AuthenticatedRequest, res: Response) => {
   res.json(logger.getStats());
