@@ -8,7 +8,8 @@ import { emptyCosts, costSum, lineCost, saleTotals, returnedQuantity, returnedCo
 import { DEFAULT_SETTINGS } from '../src/utils/pricingEngine';
 
 export const ACCOUNTING_BUCKETS = ['accountingMeta', 'accountingPurchases', 'accountingSales', 'accountingMoney', 'accountingReturns', 'accountingAudit', 'accountingActions'];
-const ORDER_REJECTION_VOID = 'رد سفارش در مدیریت سایت؛ پرداخت تأییدشده نامعتبر اعلام شد.';
+export const RESET_CONFIRMATION = 'شروع از صفر';
+const ORDER_REJECTION_VOID ='رد سفارش در مدیریت سایت؛ پرداخت تأییدشده نامعتبر اعلام شد.';
 function fail(message: string, statusCode = 400): never { throw Object.assign(new Error(message), { statusCode }); }
 function money(value: unknown, label: string, optional = false): number {
   if (optional && value === undefined) return 0;
@@ -124,7 +125,11 @@ export function createAccounting(store: Store) {
     store.set('accountingMoney', id, entry); touch();
     audit('دریافت خودکار سفارش سایت', 'system', sale.id, entry);
   }
-  function syncOrder(order: Order, actor = 'system', channel: 'site' | 'instagram' = order.id.startsWith('instagram-') ? 'instagram' : 'site') {
+  // Orders the admin removed from the books (one sale, or everything before a fresh
+  // start) stay out: synchronization never brings them back.
+  const excludedKey = (orderId: string) => `excluded:${orderId}`;
+  function syncOrder(order: Order, actor = 'system', channel: 'site' | 'instagram' = order.id.startsWith('instagram-') ? 'instagram' : 'site'): AccountingSale | undefined {
+    if (store.get('accountingMeta', excludedKey(order.id))) return undefined;
     const previous = store.get<AccountingSale>('accountingSales', order.id);
     const sale: AccountingSale = previous ? structuredClone(previous) : {
       id: order.id, orderId: order.id, trackingCode: order.trackingCode, channel,
@@ -292,7 +297,7 @@ export function createAccounting(store: Store) {
         store.set('products', productId, { ...product, stock: product.stock! - count });
       }
       store.set('orders', order.id, order); store.set('trackingCodes', order.trackingCode, order.id);
-      const sale = syncOrder(order, actor, 'instagram');
+      const sale = syncOrder(order, actor, 'instagram')!;
       if (body.exchangeForSaleId) {
         const exchanged = findSale(text(body.exchangeForSaleId, 'فروش مرجوعی', true));
         if (!list<ReturnEntry>('accountingReturns').some(entry => entry.saleId === exchanged.id)) fail('ابتدا مرجوعی فروش قبلی را ثبت کنید.');
@@ -427,6 +432,43 @@ export function createAccounting(store: Store) {
         sale.status = 'لغو شده'; store.set('accountingSales', sale.id, sale);
       }
       result = entry;
+    } else if (action === 'sale-delete') {
+      // Removes one sale from the books only: the order, its status and the shop's stock are untouched.
+      const sale = findSale(text(body.saleId, 'فروش', true));
+      text(body.reason, 'دلیل حذف', true);
+      const returnIds = list<ReturnEntry>('accountingReturns').filter(entry => entry.saleId === sale.id).map(entry => entry.id);
+      const returnLots = list<PurchaseLot>('accountingPurchases').filter(lot => returnIds.some(id => lot.id.startsWith(`return-${id}-`)));
+      if (returnLots.some(lot => lot.remaining !== lot.quantity)) fail('کالای مرجوعیِ این فروش دوباره فروخته شده است؛ ابتدا آن فروش را حذف کنید.', 409);
+      // Pieces this sale took from purchases go back, so their cost is available again.
+      for (const line of sale.items) for (const allocation of line.allocations) {
+        const lot = store.get<PurchaseLot>('accountingPurchases', allocation.lotId);
+        if (lot) store.set('accountingPurchases', lot.id, { ...lot, remaining: Math.min(lot.quantity, lot.remaining + allocation.quantity) });
+      }
+      for (const lot of returnLots) store.map('accountingPurchases').delete(lot.id);
+      for (const id of returnIds) store.map('accountingReturns').delete(id);
+      for (const entry of list<MoneyEntry>('accountingMoney')) if (entry.saleId === sale.id) store.map('accountingMoney').delete(entry.id);
+      store.map('accountingSales').delete(sale.id);
+      store.set('accountingMeta', excludedKey(sale.orderId), { at: new Date().toISOString(), actor });
+      result = { id: sale.id, trackingCode: sale.trackingCode, customerName: sale.customerName, totalPrice: sale.totalPrice, deleted: true };
+    } else if (action === 'reset') {
+      // A fresh start: every accounting record goes. Products, stock, orders and the
+      // default cost settings stay. Finished orders never return to the new books;
+      // orders still in progress are entered again unless the admin excludes them too.
+      if (body.confirm !== RESET_CONFIRMATION) fail(`برای تأیید، عبارت «${RESET_CONFIRMATION}» را بنویسید.`);
+      if (typeof body.keepOpenOrders !== 'boolean') fail('وضعیت سفارش‌های در جریان را مشخص کنید.');
+      const removed: Record<string, number> = {};
+      for (const bucket of ['accountingPurchases', 'accountingSales', 'accountingMoney', 'accountingReturns', 'accountingAudit', 'accountingActions']) {
+        removed[bucket] = store.map(bucket).size;
+        for (const key of [...store.map(bucket).keys()]) store.map(bucket).delete(key);
+      }
+      const now = new Date().toISOString();
+      let excluded = 0;
+      for (const order of list<Order>('orders')) {
+        const finished = ['تکمیل شده', 'رد شده', 'لغو شده'].includes(order.status);
+        if (finished || !body.keepOpenOrders) { store.set('accountingMeta', excludedKey(order.id), { at: now, actor }); excluded++; }
+      }
+      store.set('accountingMeta', 'resetAt', { at: now, actor });
+      result = { id: 'reset', at: now, removed, excludedOrders: excluded };
     } else fail('عملیات حسابداری یافت نشد.', 404);
     touch(); audit(action, actor, result?.id || body.saleId || '', body);
     store.set('accountingActions', actionId, { hash, result });
