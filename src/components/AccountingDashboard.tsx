@@ -13,10 +13,11 @@ const inputClass = 'min-w-0 min-h-11 w-full bg-[#060B14] border border-slate-700
 const buttonClass = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold border border-slate-700 text-slate-200 hover:border-[#D4AF37] disabled:opacity-50 disabled:cursor-wait';
 const primary = `${buttonClass} bg-[#D4AF37] !text-slate-950 !border-[#D4AF37]`;
 const moneyKinds: Record<string, string> = { receipt: 'دریافت وجه مشتری', settlement: 'تسویهٔ پاسارگاد', expense: 'هزینهٔ عمومی', tax_payment: 'پرداخت مالیات', capital: 'ورود سرمایه', withdrawal: 'برداشت شخصی', opening: 'ماندهٔ اولیهٔ بانک' };
-const titles: Record<string, string> = { purchase: 'ثبت خرید و موجودی اولیه', 'purchase-correction': 'اصلاح قیمت خرید', 'money-void': 'ابطال ثبت اشتباه', sale: 'ثبت فروش اینستاگرام', costs: 'هزینه‌ها و مالیات سفارش', return: 'مرجوعی و بازپرداخت', settings: 'هزینه‌های پیش‌فرض', ...moneyKinds };
+const titles: Record<string, string> = { purchase: 'ثبت خرید و موجودی اولیه', 'purchase-correction': 'اصلاح قیمت خرید', 'money-void': 'ابطال ثبت اشتباه', 'sale-delete': 'حذف فروش از حسابداری', reset: 'شروع حسابداری از صفر', sale: 'ثبت فروش اینستاگرام', costs: 'هزینه‌ها و مالیات سفارش', return: 'مرجوعی و بازپرداخت', settings: 'هزینه‌های پیش‌فرض', ...moneyKinds };
 const costLabels: Record<keyof CostParts, string> = { gold: 'اصل طلای خریداری‌شده', making: 'اجرت خرید طلا', pearl: 'خرید مروارید', assembly: 'ساخت محصول آماده', other: 'سایر هزینه‌های خرید' };
 const dateText = (iso: string) => toPersianDigits(accountingDay(iso));
 const numberValue = (value: string) => latinDigits(value).replace(/٫/g, '.').replace(/[,٬\s]/g, '');
+const RESET_PHRASE = 'شروع از صفر';
 const gramsText = (value: number) => `${toPersianDigits(Number(value.toFixed(6)))} گرم`;
 const toneClass: Record<SaleStep['tone'], string> = { warning: 'bg-amber-500/15 text-amber-300', accent: 'bg-sky-500/15 text-sky-300', success: 'bg-emerald-500/15 text-emerald-300', muted: 'bg-slate-700/40 text-slate-400' };
 const stepFilters: Partial<Record<SaleStepKey, string>> = { payment: 'منتظر پول', complete: 'آمادهٔ تکمیل', cost: 'بدون قیمت خرید' };
@@ -171,6 +172,8 @@ export function AccountingDashboard() {
       if (dialog === 'purchase') { const { costs, goldPurchase, ...rest } = draft; await perform('purchase', { ...rest, quantity: n(draft.quantity), costs: convertCosts(costs), ...(products.find(product => product.id === draft.productId)?.isGold ? { goldPurchase: convertGold(goldPurchase) } : {}) }); }
       else if (dialog === 'purchase-correction') await perform('purchase-correction', { purchaseId: actionTarget, costs: convertCosts(draft.costs), ...(draft.goldPurchase ? { goldPurchase: convertGold(draft.goldPurchase) } : {}), reason: draft.reason });
       else if (dialog === 'money-void') await perform('money-void', { entryId: actionTarget, reason: draft.reason });
+      else if (dialog === 'sale-delete') await perform('sale-delete', { saleId: actionTarget, reason: draft.reason });
+      else if (dialog === 'reset') await perform('reset', { confirm: String(draft.confirm || '').trim(), keepOpenOrders: draft.keepOpenOrders === true });
       else if (dialog === 'sale') await perform('sale', { ...draft, items: draft.items.map((item: any) => ({ productId: item.productId, quantity: n(item.quantity), unitPrice: n(item.unitPrice), ...convertTax(item.tax), ...(products.find(product => product.id === item.productId)?.isGold ? { goldSale: { makingPercent: decimal(item.goldSale?.makingPercent ?? ''), profitPercent: decimal(item.goldSale?.profitPercent ?? ''), discountPercent: decimal(item.goldSale?.discountPercent ?? '') } } : {}) })) });
       else if (dialog === 'settings') await perform('settings', { packaging: n(draft.packaging), assembly: n(draft.assembly) });
       else if (dialog === 'costs') await perform('costs', { ...draft, saleId: actionTarget,
@@ -215,6 +218,7 @@ export function AccountingDashboard() {
           <button className={buttonClass} onClick={() => open('settings')} disabled={!data || busy}>هزینه‌های پیش‌فرض</button>
           <button className={buttonClass} onClick={() => void load()} disabled={busy || loading}><RefreshCw size={15} />تازه‌سازی</button>
           <button className={buttonClass} onClick={exportCsv} disabled={!data}><Download size={15} />خروجی اکسل CSV</button>
+          <button className={buttonClass + ' !border-rose-700/60 !text-rose-300'} disabled={!data || busy} onClick={() => { setActionTarget(''); setDraft({ confirm: '', keepOpenOrders: true }); setError(''); setSuccess(''); setDialog('reset'); }}>شروع حسابداری از صفر</button>
           <p className="text-xs text-slate-400 leading-6">خرید و سود طلا به گرم؛ هزینه‌ها و گردش پول به تومان. سفارش‌های سایت خودکار همگام می‌شوند.{lastSynced && ' آخرین دریافت: ' + new Date(lastSynced).toLocaleTimeString('fa-IR', { timeZone: 'Asia/Tehran' })}</p>
         </div>
       </details>
@@ -325,6 +329,7 @@ export function AccountingDashboard() {
               <button className={buttonClass} disabled={busy || totals.pendingSettlement <= 0} onClick={() => open('settlement', sale)}>تسویهٔ پاسارگاد</button>
               {!sale.recognizedAt && <button className={buttonClass} disabled={busy || totals.balance > 0 || totals.refunded > 0 || ['لغو شده', 'رد شده'].includes(sale.status)} onClick={() => void perform('complete', { saleId: sale.id, date: today })}>تکمیل فروش پس از تحویل</button>}
               <button className={buttonClass} disabled={busy || totals.paid <= totals.refunded} onClick={() => open('return', sale)}>مرجوعی / بازپرداخت</button>
+              <button className={buttonClass + ' !border-rose-700/60 !text-rose-300'} disabled={busy} onClick={() => { setActionTarget(sale.id); setDraft({ reason: '' }); setError(''); setSuccess(''); setDialog('sale-delete'); }}>حذف این فروش</button>
             </div>
             </div>
           </details>;
@@ -369,6 +374,17 @@ export function AccountingDashboard() {
         <form onSubmit={submit} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 space-y-4 pt-4">
           {dialog === 'settings' && <><p className="text-xs text-slate-400">این مقادیر برای ثبت‌های جدید هستند. مبلغ سفارش‌های قبلی حفظ می‌شود.</p>{moneyInput('packaging', 'هزینهٔ بسته‌بندی هر سفارش — تومان')}{moneyInput('assembly', 'هزینهٔ ساخت هر گردنبند مروارید — تومان')}</>}
           {dialog === 'purchase-correction' && <>{draft.goldPurchase && <GoldFields value={draft.goldPurchase} onChange={value => edit('goldPurchase', value)} />}<CostFields gold={!!draft.goldPurchase} value={draft.costs} onChange={value => edit('costs', value)} />{textInput('reason', 'دلیل اصلاح قیمت خرید', true)}<p className="text-xs text-slate-400">فقط خریدی که هنوز در فروش مصرف نشده قابل اصلاح است. سابقهٔ قیمت قبلی حفظ می‌شود.</p></>}
+          {dialog === 'sale-delete' && selectedSale && <>
+            <p className="text-sm text-amber-200 leading-7">فروش «{selectedSale.customerName}» به مبلغ {formatToman(selectedSale.totalPrice)} از حسابداری حذف می‌شود، همراه با دریافت‌ها و مرجوعی‌های ثبت‌شدهٔ همین فروش. این کار برگشت‌پذیر نیست.</p>
+            <p className="text-xs text-slate-400 leading-6">خودِ سفارش در بخش سفارش‌ها و موجودی کالا در سایت تغییر نمی‌کنند. اگر کالا باید به موجودی برگردد، سفارش را در بخش سفارش‌ها لغو کنید.</p>
+            {textInput('reason', 'دلیل حذف', true)}
+          </>}
+          {dialog === 'reset' && <>
+            <p className="text-sm text-rose-200 leading-7">همهٔ ثبت‌های حسابداری پاک می‌شوند: فروش‌ها، خریدها و قیمت‌های خرید، دریافت‌ها و پرداخت‌ها، مرجوعی‌ها و تاریخچهٔ ثبت‌ها. این کار برگشت‌پذیر نیست.</p>
+            <p className="text-xs text-slate-400 leading-6">محصولات، موجودی سایت، سفارش‌ها، کاربران و «هزینه‌های پیش‌فرض» دست نمی‌خورند. سفارش‌های تمام‌شده (تکمیل‌شده، ردشده، لغوشده) دیگر وارد حساب جدید نمی‌شوند.</p>
+            <label className="flex items-start gap-2 text-sm text-slate-200"><input type="checkbox" className="mt-1" checked={draft.keepOpenOrders === true} onChange={event => edit('keepOpenOrders', event.target.checked)} /><span>سفارش‌های در جریان (هنوز تکمیل‌نشده) در حساب جدید بمانند</span></label>
+            <Field label={'برای تأیید بنویسید: ' + RESET_PHRASE}><input className={inputClass} value={draft.confirm || ''} required onChange={event => edit('confirm', event.target.value)} /></Field>
+          </>}
           {dialog === 'money-void' && <><p className="text-sm text-amber-200">این کار فقط ثبت اشتباه را از محاسبات خارج می‌کند و وجهی جابه‌جا نمی‌کند. برای پولی که واقعاً به مشتری پس داده‌ای، «مرجوعی / بازپرداخت» را ثبت کن.</p>{textInput('reason', 'دلیل ابطال ثبت اشتباه', true)}</>}
           {dialog === 'purchase' && <>
             {productSelect(draft.productId, next => setDraft((previous: any) => ({ ...previous, productId: next, costs: emptyCosts(), goldPurchase: { weight: String(products.find(product => product.id === next)?.weight || ''), makingPercent: '' } })))}
@@ -428,9 +444,9 @@ export function AccountingDashboard() {
             {textInput('note', 'شرح', true)}
             {['capital', 'withdrawal', 'opening'].includes(dialog) && <p className="text-xs text-slate-400">این ثبت گردش پول را تغییر می‌دهد و در سود کسب‌وکار منظور نمی‌شود.</p>}
           </>}
-          {!['costs', 'settings', 'purchase-correction', 'money-void'].includes(dialog) && textInput('date', 'تاریخ شمسی، مانند ۱۴۰۵/۰۷/۱۳', true)}
+          {!['costs', 'settings', 'purchase-correction', 'money-void', 'sale-delete', 'reset'].includes(dialog) && textInput('date', 'تاریخ شمسی، مانند ۱۴۰۵/۰۷/۱۳', true)}
           {error && <div role="alert" className="bg-red-950/40 text-red-300 p-3 rounded-xl text-xs">{error}<button type="button" className={`${buttonClass} mr-2`} onClick={() => void load()} disabled={busy}>تازه‌سازی اطلاعات</button></div>}
-          <div className="accounting-form-actions sticky bottom-0 grid grid-cols-2 gap-2 py-4 bg-[#0A1120] border-t border-slate-700"><button type="submit" className={primary} disabled={busy || loading}>{busy ? 'در حال ثبت…' : 'ثبت و ذخیره'}</button><button type="button" className={buttonClass} disabled={busy} onClick={() => setDialog(null)}>انصراف</button></div>
+          <div className="accounting-form-actions sticky bottom-0 grid grid-cols-2 gap-2 py-4 bg-[#0A1120] border-t border-slate-700"><button type="submit" className={primary} disabled={busy || loading}>{busy ? 'در حال ثبت…' : dialog === 'sale-delete' ? 'حذف فروش' : dialog === 'reset' ? 'پاک‌کردن و شروع از صفر' : 'ثبت و ذخیره'}</button><button type="button" className={buttonClass} disabled={busy} onClick={() => setDialog(null)}>انصراف</button></div>
         </form>
       </div>
     </div>}
