@@ -6,7 +6,7 @@ import { readApiResponse } from '../utils/apiResponse';
 import { formatToman, toPersianDigits } from '../utils/persianFormatter';
 import { accountingDay, costSum, emptyCosts, lineCost, returnedQuantity, safeCsv, latinDigits, goldPurchaseCost, lineGoldCost, invoiceTaxAmount } from '../utils/accounting';
 import type { AccountingData, AccountingSale, CostParts } from '../types/accounting';
-import { accountingTodos, saleStep, type SaleStep, type SaleStepKey } from '../utils/accountingSteps';
+import { accountingTodos, productCostStatus, saleStep, type SaleStep, type SaleStepKey } from '../utils/accountingSteps';
 
 const panel = 'bg-[#0A1120] border border-slate-800 rounded-2xl p-4 sm:p-5';
 const inputClass = 'min-w-0 min-h-11 w-full bg-[#060B14] border border-slate-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white focus:outline-none focus:border-[#D4AF37]';
@@ -60,6 +60,7 @@ export function AccountingDashboard() {
   const [data, setData] = useState<AccountingData | null>(null);
   const products = data?.catalog || [];
   const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogFilter, setCatalogFilter] = useState<'needs' | 'complete' | 'all'>('needs');
   const [lastSynced, setLastSynced] = useState('');
   const today = accountingDay();
   const [from, setFrom] = useState(`${today.slice(0, 7)}/01`);
@@ -127,7 +128,7 @@ export function AccountingDashboard() {
 
   function open(kind: string, sale?: AccountingSale, productId?: string) {
     setError(''); setSuccess(''); setActionTarget(sale?.id || '');
-    if (kind === 'purchase') setDraft({ productId: productId || products[0]?.id || '', kind: 'opening', quantity: String(productId ? Math.max(1, products.find(product => product.id === productId)?.unknownQuantity || 1) : 1), costs: emptyCosts(), goldPurchase: { weight: String(products.find(product => product.id === (productId || products[0]?.id))?.weight || ''), makingPercent: '9.5' }, supplier: '', reference: '', date: today });
+    if (kind === 'purchase') setDraft({ productId: productId || products[0]?.id || '', kind: productId && !(products.find(product => product.id === productId)?.unknownQuantity) ? 'purchase' : 'opening', quantity: String(productId ? Math.max(1, products.find(product => product.id === productId)?.unknownQuantity || 1) : 1), costs: emptyCosts(), goldPurchase: { weight: String(products.find(product => product.id === (productId || products[0]?.id))?.weight || ''), makingPercent: '9.5' }, supplier: '', reference: '', date: today });
     else if (kind === 'sale') setDraft({ customerName: '', customerPhone: '', customerAddress: '', method: 'card_to_card', date: today, exchangeForSaleId: '', items: [{ productId: products[0]?.id || '', quantity: '1', unitPrice: '', goldSale: products[0]?.goldSale }] });
     else if (kind === 'settings') setDraft({ ...data!.settings });
     else if (kind === 'costs' && sale) setDraft({ packaging: sale.packaging, shippingReceived: sale.shippingReceived, shippingPaid: sale.shippingPaid, otherCosts: sale.otherCosts,
@@ -280,16 +281,64 @@ export function AccountingDashboard() {
             : todoRows.filter(([, count]) => count > 0).map(([key, count, label]) => <button type="button" key={key} className={`${panel} w-full flex items-center justify-between text-sm`} onClick={() => goToSales(key)}><span>{toPersianDigits(count)} {label}</span><ChevronDown size={16} className="rotate-90" /></button>)}
         </div>;
       })()}
-      {section === 'catalog' && <div className="space-y-3">
-        <p className="text-xs text-slate-400 leading-7">{toPersianDigits(products.length)} محصول از فهرست فعلی سایت. افزودن و ویرایش محصول در مدیریت سایت، این فهرست را هم به‌روز می‌کند. خرید جدید در حسابداری موجودی سایت را افزایش می‌دهد و فروش سایت و اینستاگرام از همان موجودی کم می‌شود.</p>
-        <input aria-label="جست‌وجوی محصولات حسابداری" placeholder="نام یا شناسهٔ محصول" className={inputClass} value={catalogSearch} onChange={event => setCatalogSearch(event.target.value)} />
-        {!products.length && <p className={panel}>محصولی در سایت ثبت نشده است.</p>}
-        {products.filter(product => `${product.title} ${product.id}`.includes(catalogSearch)).map(product => <article className={panel} key={product.id}>
-          <div className="flex flex-wrap justify-between gap-3"><h3 className="font-bold text-white">{product.title}</h3><span className="text-xs text-slate-400">{toPersianDigits(product.weight)} گرم</span></div>
-          <div className="flex flex-wrap gap-4 mt-3 text-xs"><span>موجودی سایت: {product.stock === null ? 'ثبت نشده' : toPersianDigits(product.stock)}</span><span>در سفارش فعال: {toPersianDigits(product.held)}</span><span className={product.unknownQuantity > 0 ? 'text-amber-200' : 'text-emerald-300'}>بدون قیمت خرید: {toPersianDigits(product.unknownQuantity)}</span><span>ارزش موجودی دارای قیمت خرید: {formatToman(product.inventoryCost)}</span></div>
-          <button className={`${buttonClass} mt-3`} disabled={busy} onClick={() => open('purchase', undefined, product.id)}>ثبت خرید / قیمت موجودی</button>
-        </article>)}
-      </div>}
+      {section === 'catalog' && (() => {
+        const rows = products.map(product => ({ product, status: productCostStatus(product) }));
+        const needs = rows.filter(row => row.status.key === 'missing' || row.status.key === 'partial');
+        const complete = rows.filter(row => row.status.key === 'complete');
+        const tabs = [['needs', 'نیاز به قیمت خرید', needs.length], ['complete', 'قیمت خرید دارند', complete.length], ['all', 'همه', rows.length]] as const;
+        const pool = catalogFilter === 'needs' ? needs : catalogFilter === 'complete' ? complete : rows;
+        const query = latinDigits(catalogSearch).toLowerCase().trim();
+        // Products that still need a price come first, then the rest by name.
+        const order = { missing: 0, partial: 1, complete: 2, empty: 3 };
+        const visible = pool.filter(row => !query || latinDigits(`${row.product.title} ${row.product.id}`).toLowerCase().includes(query))
+          .sort((a, b) => order[a.status.key] - order[b.status.key] || a.product.title.localeCompare(b.product.title, 'fa'));
+        return <div className="space-y-3">
+          <div className={`${panel} ${needs.length ? 'border-amber-600/50' : 'border-emerald-700/50'}`}>
+            <p className={`text-sm font-bold ${needs.length ? 'text-amber-200' : 'text-emerald-300'}`}>
+              {needs.length ? `${toPersianDigits(needs.length)} محصول هنوز قیمت خرید ندارد` : 'همهٔ محصولات موجود قیمت خرید دارند'}
+            </p>
+            <p className="text-xs text-slate-400 mt-1 leading-6">سود هر فروش = قیمت فروش منهای قیمت خرید. تا قیمت خرید یک محصول ثبت نشود، سودِ فروش آن حساب نمی‌شود.</p>
+            <details className="mt-2 text-xs text-slate-300">
+              <summary className="admin-card-summary cursor-pointer list-none text-[#D4AF37] min-h-9 flex items-center gap-1">این بخش چطور کار می‌کند؟ <ChevronDown size={14} /></summary>
+              <ol className="mt-2 space-y-2 leading-6 list-decimal pr-5">
+                <li>برای هر محصول «ثبت قیمت خرید» را بزنید و بنویسید آن را چند خریده‌اید. برای طلا: وزن و درصد اجرت بنکدار. برای مروارید: مبلغ خرید به تومان.</li>
+                <li>اگر کالا را از قبل داشته‌اید، نوع ثبت را «موجودی اولیه» بگذارید؛ تعداد سایت تغییر نمی‌کند. اگر تازه خریده‌اید، «خرید جدید» را انتخاب کنید تا به موجودی سایت هم اضافه شود.</li>
+                <li>از آن به بعد، با تکمیل هر فروش، سود آن خودکار حساب می‌شود.</li>
+              </ol>
+            </details>
+          </div>
+          <div className="grid grid-cols-3 gap-2" aria-label="فیلتر محصولات">
+            {tabs.map(([key, label, count]) => <button type="button" key={key} aria-pressed={catalogFilter === key} className={catalogFilter === key ? primary : buttonClass} onClick={() => setCatalogFilter(key)}>{label} ({toPersianDigits(count)})</button>)}
+          </div>
+          <input aria-label="جست‌وجوی محصولات حسابداری" placeholder="نام محصول" className={inputClass} value={catalogSearch} onChange={event => setCatalogSearch(event.target.value)} />
+          {!products.length && <p className={panel}>محصولی در سایت ثبت نشده است.</p>}
+          {!!products.length && !visible.length && <p className={`${panel} text-sm text-slate-400`}>{catalogFilter === 'needs' && !query ? 'محصولی بدون قیمت خرید نمانده است.' : 'محصولی با این جست‌وجو و فیلتر پیدا نشد.'}</p>}
+          {visible.map(({ product, status }) => {
+            const lots = data.purchases.filter(lot => lot.productId === product.id && lot.remaining > 0);
+            return <article className={panel} key={product.id}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <h3 className="font-bold text-white">{product.title}</h3>
+                <span className={`shrink-0 rounded-lg px-2 py-1 text-xs ${status.tone === 'success' ? 'bg-emerald-500/15 text-emerald-300' : status.tone === 'warning' ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-700/40 text-slate-400'}`}>{status.label}</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-2">
+                {product.isGold ? `طلا · ${toPersianDigits(product.weight)} گرم` : 'قیمت ثابت'} · موجودی سایت: {product.stock === null ? 'ثبت نشده' : toPersianDigits(product.stock)}
+                {product.held > 0 && ` · ${toPersianDigits(product.held)} عدد در سفارش‌های در جریان`}
+              </p>
+              {lots.length > 0 && <ul className="mt-2 space-y-1 text-xs text-slate-200">
+                {lots.map(lot => <li key={lot.id}>
+                  {toPersianDigits(lot.remaining)} عدد با قیمت خرید هر عدد: {lot.goldPurchase
+                    ? `${gramsText(lot.goldPurchase.weight)} طلا با اجرت بنکدار ${toPersianDigits(lot.goldPurchase.makingPercent)}٪${costSum(lot.costs) ? ` + ${formatToman(costSum(lot.costs))}` : ''}`
+                    : formatToman(costSum(lot.costs))}
+                </li>)}
+              </ul>}
+              {status.key !== 'empty' && <button className={`${status.tone === 'warning' ? primary : buttonClass} mt-3 w-full sm:w-auto`} disabled={busy} onClick={() => open('purchase', undefined, product.id)}>
+                {status.tone === 'warning' ? 'ثبت قیمت خرید' : 'ثبت خرید جدید'}
+              </button>}
+              {status.key === 'empty' && <button className={`${buttonClass} mt-3 w-full sm:w-auto`} disabled={busy} onClick={() => open('purchase', undefined, product.id)}>ثبت خرید جدید</button>}
+            </article>;
+          })}
+        </div>;
+      })()}
       {section === 'sales' && <div className="space-y-3">
         <div className="grid grid-cols-3 gap-2" aria-label="فیلتر فروش‌ها">{[['all', 'همه'], ['balance', 'مانده‌دار'], ['incomplete', 'تکمیل‌نشده']].map(([key, label]) => <button type="button" key={key} aria-pressed={saleFilter === key} className={saleFilter === key ? primary : buttonClass} onClick={() => setSaleFilter(key)}>{label}</button>)}</div>
         {saleFilter in stepFilters && <button type="button" className={`${buttonClass} w-full !border-[#D4AF37] text-[#D4AF37]`} onClick={() => setSaleFilter('all')}>فقط «{stepFilters[saleFilter as SaleStepKey]}» <X size={14} /> نمایش همه</button>}

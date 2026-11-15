@@ -59,7 +59,9 @@ try {
   const previousOverflow = document.body.style.overflow;
   await update(() => button('محصولات و قیمت خرید').click());
   assert.match(document.body.textContent, new RegExp(INITIAL_PRODUCTS[0].title));
-  assert.equal(buttons().filter(element => element.textContent.trim() === 'ثبت خرید / قیمت موجودی').length, 2, 'Existing site products appear without registering purchases');
+  assert.equal(buttons().filter(element => element.textContent.trim() === 'ثبت قیمت خرید').length, 2, 'Existing site products appear, each asking for its purchase price');
+  assert.match(document.body.textContent, /۲ محصول هنوز قیمت خرید ندارد/, 'The section says plainly how many products lack a purchase price');
+  assert.equal(buttons().find(element => element.textContent.trim().startsWith('نیاز به قیمت خرید')).getAttribute('aria-pressed'), 'true', 'Products needing a price are shown first');
   await update(() => button('هزینه‌های پیش‌فرض').click());
   assert.equal(document.body.style.overflow, 'hidden', 'Background stays still while the accounting form is open');
   assert.ok(document.querySelector('[role="dialog"] .accounting-form-actions'), 'Form actions have a persistent footer');
