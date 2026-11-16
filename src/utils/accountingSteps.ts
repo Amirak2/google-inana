@@ -36,3 +36,17 @@ export function accountingTodos(data: AccountingData) {
   }
   return counts;
 }
+
+type CatalogRow = AccountingData['catalog'][number];
+export type CostStatusKey = 'missing' | 'partial' | 'complete' | 'empty';
+export interface CostStatus { key: CostStatusKey; label: string; tone: 'warning' | 'success' | 'muted'; total: number }
+
+// Whether the pieces of a product that the shop still holds (on the site or in an
+// open order) have a purchase price, which is what profit is calculated from.
+export function productCostStatus(row: CatalogRow): CostStatus {
+  const total = (row.stock || 0) + row.held;
+  if (total <= 0) return { key: 'empty', label: 'موجودی ندارد', tone: 'muted', total };
+  if (row.unknownQuantity <= 0) return { key: 'complete', label: 'قیمت خرید ثبت شده', tone: 'success', total };
+  if (row.unknownQuantity >= total) return { key: 'missing', label: 'قیمت خرید ندارد', tone: 'warning', total };
+  return { key: 'partial', label: `${row.unknownQuantity.toLocaleString('fa-IR')} عدد بدون قیمت خرید`, tone: 'warning', total };
+}

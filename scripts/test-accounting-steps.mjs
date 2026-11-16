@@ -21,3 +21,14 @@ const data = { sales: [sale({ id: 'a' }), sale({ id: 'b' }), sale({ id: 'c', ...
   totals: { a: totals(), b: totals({ balance: 0, paid: 1000 }), c: totals({ balance: 0 }), d: totals() } };
 assert.deepEqual(accountingTodos(data), { payment: 1, complete: 1, cost: 1 });
 console.log('PASS: each sale gets one next step (payment, completion, purchase cost) and the home to-do counts match.');
+
+// Purchase-price status of a product, as shown in "محصولات و قیمت خرید".
+const { productCostStatus } = await import('../src/utils/accountingSteps.ts');
+const row = extra => ({ id: 'p', title: 'کالا', weight: 0, isGold: false, stock: 3, held: 0, knownQuantity: 0, unknownQuantity: 3, inventoryCost: 0, ...extra });
+assert.equal(productCostStatus(row({})).key, 'missing');
+assert.equal(productCostStatus(row({ knownQuantity: 3, unknownQuantity: 0 })).key, 'complete');
+assert.deepEqual([productCostStatus(row({ knownQuantity: 1, unknownQuantity: 2 })).key, productCostStatus(row({ knownQuantity: 1, unknownQuantity: 2 })).label], ['partial', '۲ عدد بدون قیمت خرید']);
+assert.equal(productCostStatus(row({ stock: 0, unknownQuantity: 0 })).key, 'empty', 'Nothing in stock needs no price');
+assert.equal(productCostStatus(row({ stock: 0, held: 1, unknownQuantity: 1 })).key, 'missing', 'A piece held by an open order still needs its price');
+assert.equal(productCostStatus(row({ stock: null, unknownQuantity: 0 })).key, 'empty');
+console.log('PASS: product purchase-price status (missing, partial, complete, empty).');
