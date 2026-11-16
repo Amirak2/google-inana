@@ -1689,3 +1689,7 @@ export const TESTIMONIALS_DATA: Testimonial[] = [
     purchasedItem: 'دستبند النگویی آرشیتکتورال',
   },
 ];
+
+// Owner's photos for the admin-created locket "ستاره راهنما" (front, on model, velvet scene, open, back).
+export const GUIDING_STAR_PRODUCT_ID = 'ina-prod-1794761932318';
+export const GUIDING_STAR_PHOTOS = [1, 2, 3, 4, 5, 6, 7].map(n => `/products/pearls/setare-rahnama-20261116-${n}.jpeg`);
