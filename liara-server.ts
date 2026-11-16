@@ -13,7 +13,7 @@ import { securityHeaders } from './server/securityHeaders';
 import { renderPage, resolvePage, robotsTxt, sitemapXml } from './server/pageMeta';
 import { startGoldScheduler } from './server/goldScheduler';
 import { startSmsScheduler } from './server/smsOutbox';
-import { PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS, UNCOLLECTED_GOLD_PRODUCTS } from './src/data/seedData';
+import { PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS, UNCOLLECTED_GOLD_PRODUCTS, GUIDING_STAR_PHOTOS } from './src/data/seedData';
 
 const app = express();
 app.disable('x-powered-by');
@@ -97,7 +97,7 @@ async function handleRequest(req: express.Request, res: express.Response): Promi
 app.all(['/api/*', '/media/*'], (req, res) => { void handleRequest(req, res); });
 
 // Preserve existing product URLs while serving their bytes from the private bucket.
-const productMediaPaths = new Set([...PEARL_PRODUCTS, ...PEARL_GOLD_PRODUCTS, ...LETTER_PRODUCTS, ...SEA_PRODUCTS, ...UNCOLLECTED_GOLD_PRODUCTS].flatMap(product => product.images)
+const productMediaPaths = new Set([...PEARL_PRODUCTS, ...PEARL_GOLD_PRODUCTS, ...LETTER_PRODUCTS, ...SEA_PRODUCTS, ...UNCOLLECTED_GOLD_PRODUCTS].flatMap(product => product.images).concat(GUIDING_STAR_PHOTOS)
   .filter(url => /^\/products\/(pearls|letters|sea|catalog)\/[\w.-]+$/.test(url)));
 app.get(['/products/pearls/:filename', '/products/letters/:filename', '/products/sea/:filename', '/products/catalog/:filename'], async (req, res) => {
   if (!productMediaPaths.has(req.path)) {
@@ -107,7 +107,7 @@ app.get(['/products/pearls/:filename', '/products/letters/:filename', '/products
     let data = await getMediaObject(req.path.slice(1));
     // Stage this catalog addition into the existing private bucket on first access.
     // Subsequent requests and deployments keep using the stored object.
-    if (!data && /^(?:(a3blcwh|a4|ashki-20261024|avizorange|meshkikhelal|medusa-20261024|deforange|p9-20261024|defmeshki)-[123]|avizheart-[234]|p9-model-20261027)\.jpeg$/.test(req.params.filename)) {
+    if (!data && /^(?:(a3blcwh|a4|ashki-20261024|avizorange|meshkikhelal|medusa-20261024|deforange|p9-20261024|defmeshki)-[123]|avizheart-[234]|p9-model-20261027|setare-rahnama-20261116-[1-7])\.jpeg$/.test(req.params.filename)) {
       const staged = await readFile(path.join(currentDir, 'product-media', 'pearls', req.params.filename));
       await putMediaObject(req.path.slice(1), staged, 'image/jpeg');
       data = await getMediaObject(req.path.slice(1));

@@ -14,7 +14,7 @@ import { createNotifications } from './server/notifications';
 
 import crypto from 'crypto';
 
-import { RETIRED_COLLECTION_NAMES, INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS, UNCOLLECTED_GOLD_PRODUCTS } from './src/data/seedData';
+import { RETIRED_COLLECTION_NAMES, INITIAL_COLLECTIONS, INITIAL_PRODUCTS, PEARL_PRODUCTS, PEARL_GOLD_PRODUCTS, LETTER_PRODUCTS, SEA_PRODUCTS, UNCOLLECTED_GOLD_PRODUCTS, GUIDING_STAR_PRODUCT_ID, GUIDING_STAR_PHOTOS } from './src/data/seedData';
 import { GoldHistoryPoint, GoldPriceData, Order, OtherMarketsData, PricingSettings, Product, SystemLogModule } from './src/types';
 import { calculateProductPrice, DEFAULT_SETTINGS } from './src/utils/pricingEngine';
 import { productGoldSale } from './src/utils/accounting';
@@ -430,6 +430,13 @@ if (!store.get('migrations', 'pearlAvizheartDropPhoto1V1')) {
     store.set('products', current.id, { ...current, images: current.images.filter(image => image !== '/products/pearls/avizheart-1.jpeg') });
   }
   store.set('migrations', 'pearlAvizheartDropPhoto1V1', true);
+}
+// Replace the gallery of the admin-created locket "ستاره راهنما" with the owner's seven photos
+// (the earlier ones were temporary links that expire); every other product field stays as it is.
+if (!store.get('migrations', 'guidingStarPhotos20261116V1')) {
+  const current = store.get<Product>('products', GUIDING_STAR_PRODUCT_ID);
+  if (current) store.set('products', current.id, { ...current, images: [...GUIDING_STAR_PHOTOS] });
+  store.set('migrations', 'guidingStarPhotos20261116V1', true);
 }
 seedProductsOnce('pearlMeshkikhelalV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-meshkikhelal'));
 seedProductsOnce('pearlDeforangeV1', PEARL_PRODUCTS.filter((product) => product.id === 'pearl-deforange'));
