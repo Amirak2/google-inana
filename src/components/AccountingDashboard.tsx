@@ -138,7 +138,7 @@ export function AccountingDashboard() {
     if (kind === 'purchase') setDraft({ productId: productId || products[0]?.id || '', kind: productId && !(products.find(product => product.id === productId)?.unknownQuantity) ? 'purchase' : 'opening', quantity: String(productId ? Math.max(1, products.find(product => product.id === productId)?.unknownQuantity || 1) : 1), costs: emptyCosts(), goldPurchase: { weight: String(products.find(product => product.id === (productId || products[0]?.id))?.weight || ''), makingPercent: '9.5' }, supplier: '', reference: '', date: today });
     else if (kind === 'sale') setDraft({ customerName: '', customerPhone: '', customerAddress: '', method: 'card_to_card', date: today, exchangeForSaleId: '', items: [{ productId: products[0]?.id || '', quantity: '1', unitPrice: '', goldSale: products[0]?.goldSale }] });
     else if (kind === 'settings') setDraft({ ...data!.settings });
-    else if (kind === 'costs' && sale) setDraft({ packaging: sale.packaging, shippingReceived: sale.shippingReceived, shippingPaid: sale.shippingPaid, otherCosts: sale.otherCosts,
+    else if (kind === 'costs' && sale) setDraft({ packaging: 0, shippingReceived: sale.shippingReceived, shippingPaid: 0, otherCosts: (sale.packaging || 0) + (sale.shippingPaid || 0) + (sale.otherCosts || 0),
       expensesDate: sale.expensesAt ? accountingDay(sale.expensesAt) : '', recognizedDate: sale.recognizedAt ? accountingDay(sale.recognizedAt) : '', reason: '',
       items: sale.items.map(line => ({ key: line.key, tax: line.tax ? { ...line.tax } : { taxableAmount: '', ratePercent: 10 }, costs: line.overrideCosts || emptyCosts(), goldPurchase: line.overrideGoldPurchase || { weight: String(line.weight), makingPercent: '' }, goldRevenueGrams: '', enterCosts: !!line.overrideCosts, extraAssembly: line.extraAssembly,
         extraAssemblyPaid: line.extraAssemblyPaid === true, extraAssemblyDate: line.extraAssemblyPaidAt ? accountingDay(line.extraAssemblyPaidAt) : '' })) });
@@ -480,7 +480,9 @@ export function AccountingDashboard() {
               </>}
               {!selectedSale.costsLocked && <button type="button" className={buttonClass} onClick={() => updateLine(index, 'extraAssembly', data.settings.assembly)}>استفاده از هزینهٔ ثابت ساخت</button>}
             </div>)}
-            <div className="grid sm:grid-cols-2 gap-3">{moneyInput('packaging', 'بسته‌بندی سفارش — تومان')}{moneyInput('shippingReceived', 'هزینهٔ ارسال دریافتی از مشتری — تومان')}{moneyInput('shippingPaid', 'هزینهٔ واقعی ارسال پرداختی — تومان')}{moneyInput('otherCosts', 'سایر هزینه‌های همین سفارش — تومان')}</div>
+            {/* One box for every cost of the order; older records split into packaging / shipping / other are opened as their sum. */}
+            {moneyInput('otherCosts', 'هزینهٔ کل همین سفارش — تومان')}
+            <p className="text-xs text-slate-400">بسته‌بندی، ارسال و هر هزینهٔ دیگرِ این سفارش را جمع بزنید و در همین یک کادر بنویسید.</p>
             {textInput('expensesDate', 'تاریخ شمسی پرداخت هزینه‌ها (اختیاری؛ پیش‌فرض تاریخ تکمیل فروش)')}
             {selectedSale.recognizedAt && textInput('recognizedDate', 'تاریخ واقعی تکمیل فروش — شمسی')}
             {selectedSale.recognizedAt && selectedSale.costsLocked && textInput('reason', 'دلیل اصلاح هزینه‌های سفارش', true)}
