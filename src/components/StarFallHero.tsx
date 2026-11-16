@@ -19,8 +19,8 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
   const s = Math.min(W, H) / 700 + 0.55;
   const gy = H * 0.8;
   const fallPoint = (t: number) => {
-    // Starts low enough to clear the header, which is taller on phones with a status-bar inset.
-    const sx = W * 0.64, sy = H * 0.24, cx = W * 0.12, cy = H * 0.34, ex = W * 0.5, ey = gy, u = 1 - t;
+    // Rests in the middle of the stage, swings out to the side and lands in the middle of the ground.
+    const sx = W * 0.5, sy = H * 0.5, cx = W * 0.14, cy = H * 0.5, ex = W * 0.5, ey = gy, u = 1 - t;
     return { x: u * u * sx + 2 * u * t * cx + t * t * ex, y: u * u * sy + 2 * u * t * cy + t * t * ey };
   };
 
@@ -208,18 +208,12 @@ export const StarFallHero: React.FC = () => {
             const end = window.scrollY + section.getBoundingClientRect().top + section.offsetHeight - stage.clientHeight;
             if (reduced) window.scrollTo(0, end); else glideTo(end);
           }}
-          className="absolute inset-x-0 mx-auto w-fit bottom-[calc(var(--mobile-nav-offset)+1.25rem)] md:bottom-8 flex flex-col items-center gap-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#D4AF37] focus-visible:outline-offset-4 rounded-2xl"
-          aria-label="پایین بکشید"
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-14 flex flex-col items-center gap-2 pt-28 px-6 pb-2 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#D4AF37] focus-visible:outline-offset-4 rounded-2xl"
         >
-          <span className="rounded-full border border-[#D4AF37]/45 bg-[#0B152B]/80 px-5 py-2 text-sm font-bold text-[#E8C766] shadow-[0_0_24px_rgba(212,175,55,0.18)]">
-            پایین بکشید
-          </span>
-          {/* Three chevrons light up top to bottom, pointing the way down. */}
-          <span aria-hidden="true" className="flex flex-col items-center -space-y-1.5">
-            {[0, 1, 2].map(i => (
-              <span key={i} className="star-scroll-chevron block w-3 h-3 border-b-2 border-r-2 border-[#D4AF37]" style={{ animationDelay: `${i * 0.18}s` }} />
-            ))}
-          </span>
+          {/* The empty top of this button lies over the star in the middle of the stage, so
+              touching or clicking the star itself starts the fall; the words sit just below it. */}
+          <span className="text-sm font-bold text-[#E8C766] whitespace-nowrap md:hidden">ستاره را لمس کنید</span>
+          <span className="hidden md:inline text-sm font-bold text-[#E8C766] whitespace-nowrap">بر روی ستاره کلیک کنید</span>
         </button>
       </div>
     </section>
