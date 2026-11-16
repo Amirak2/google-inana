@@ -76,9 +76,10 @@ try {
   assert.equal(mutations[0].body.actionId, mutations[1].body.actionId, 'Same draft retry keeps its idempotency key');
   await update(() => button('خرید طلا یا مروارید').click());
   const quantityInput = await input('تعداد قطعه', '2');
-  await input('خرید مروارید — تومان برای هر عدد', '۹۰۰۰');
+  assert.equal(document.querySelector('[role="dialog"]').closest('.accounting-overlay').parentElement, document.body, 'The form sits on top of the whole page, not inside a card');
+  await input('قیمت خرید هر عدد، همهٔ هزینه‌ها با هم — تومان', '۹۰۰۰');
   await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
-  const purchase = mutations.at(-1); assert.ok(purchase.url.endsWith('/purchase')); assert.equal(purchase.body.costs.pearl, 9000); assert.equal(purchase.body.kind, 'opening');
+  const purchase = mutations.at(-1); assert.ok(purchase.url.endsWith('/purchase')); assert.deepEqual(purchase.body.costs, { ...emptyCosts(), other: 9000 }, 'All costs of a piece go in one box'); assert.equal(purchase.body.kind, 'opening');
   await update(() => button('خرید طلا یا مروارید').click());
   const goldSelect = document.querySelector('[role="dialog"] select');
   await update(() => { goldSelect.value = INITIAL_PRODUCTS[1].id; goldSelect.dispatchEvent(new window.Event('change', { bubbles: true })); });
@@ -87,11 +88,10 @@ try {
   await input('اجرت بنکدار — درصد', '۱۶٫۵');
   assert.match(document.querySelector('[role="dialog"]').textContent, /۰.۹۷۸۶ گرم/);
   assert.doesNotMatch(document.querySelector('[role="dialog"]').textContent, /اصل طلای خریداری‌شده/);
-  await input('خرید مروارید — تومان برای هر عدد', '۲۰۰۰۰۰');
-  await input('ساخت محصول آماده — تومان برای هر عدد', '۵۰۰۰۰');
+  await input('هزینه‌های تومانی هر عدد، غیر از طلا — تومان', '۲۵۰۰۰۰');
   await update(() => document.querySelector('form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
   assert.deepEqual(mutations.at(-1).body.goldPurchase, { weight: 0.84, makingPercent: 16.5 });
-  assert.deepEqual(mutations.at(-1).body.costs, { ...emptyCosts(), pearl: 200000, assembly: 50000 }, 'Gold purchase retains independent cash components');
+  assert.deepEqual(mutations.at(-1).body.costs, { ...emptyCosts(), other: 250000 }, 'Gold purchase keeps its toman costs beside the gold weight');
   await update(() => button('فروش اینستاگرام').click());
   const saleSelect = document.querySelector('[role="dialog"] select');
   await update(() => { saleSelect.value = INITIAL_PRODUCTS[1].id; saleSelect.dispatchEvent(new window.Event('change', { bubbles: true })); });

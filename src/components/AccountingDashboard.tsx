@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, RefreshCw, Download, Wallet, TrendingUp, Package, X, Settings, ShieldCheck, ArrowDownLeft, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useGoldStore } from '../context/GoldStoreContext';
@@ -40,7 +41,13 @@ function GoldSaleFields({ value, onChange }: { value: any; onChange: (value: any
   return <div className="grid sm:grid-cols-3 gap-3">{[['makingPercent', 'اجرت فروش — درصد'], ['profitPercent', 'سود فروش — درصد'], ['discountPercent', 'تخفیف بخش طلا — درصد']].map(([key, label]) => <NumberField key={key} decimal label={label} value={value?.[key] ?? ''} onChange={next => onChange({ ...value, [key]: next })} />)}</div>;
 }
 function CostFields({ value, onChange, gold = false }: { value: CostParts; onChange: (value: CostParts) => void; gold?: boolean }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{Object.keys(costLabels).filter(key => !gold || !['gold', 'making'].includes(key)).map(key => <NumberField key={key} label={`${costLabels[key]} — تومان برای هر عدد`} value={value[key]} onChange={next => onChange({ ...value, [key]: next })} />)}</div>;
+  // One box for every toman cost of a piece. The amount is kept in "other"; older
+  // records that were split into parts are shown as their sum and saved back as one.
+  const keys = (Object.keys(costLabels) as (keyof CostParts)[]).filter(key => !gold || !['gold', 'making'].includes(key));
+  const rest = keys.filter(key => key !== 'other').reduce((sum, key) => sum + (Number(value[key]) || 0), 0);
+  const shown = rest > 0 ? String(rest + (Number(value.other) || 0)) : value.other;
+  const merged = (next: any) => ({ ...value, ...Object.fromEntries(keys.map(key => [key, 0])), other: next }) as CostParts;
+  return <NumberField label={gold ? 'هزینه‌های تومانی هر عدد، غیر از طلا — تومان' : 'قیمت خرید هر عدد، همهٔ هزینه‌ها با هم — تومان'} value={shown} onChange={next => onChange(merged(next))} />;
 }
 function TaxFields({ value, onChange, gold }: { value: any; onChange: (value: any) => void; gold: boolean }) {
   const draft = value || { taxableAmount: '', ratePercent: 10 };
@@ -417,7 +424,7 @@ export function AccountingDashboard() {
       </div>}
       {section === 'audit' && <div className="space-y-2">{data.audit.map(entry => <div className={panel} key={entry.id}><p className="text-sm">{titles[entry.action] || entry.action}</p><p className="text-xs text-slate-400 mt-2">{dateText(entry.createdAt)} · {entry.actor} · {data.sales.find(sale => sale.id === entry.target)?.trackingCode || entry.target}</p></div>)}</div>}
     </>}
-    {dialog && data && <div className="accounting-overlay fixed inset-0 z-[100] bg-black/75 sm:p-6 flex items-stretch sm:items-center justify-center" onClick={event => { if (event.target === event.currentTarget && !busy) setDialog(null); }}>
+    {dialog && data && createPortal(<div dir="rtl" className="accounting-overlay fixed inset-0 z-[1000] bg-black/75 sm:p-6 flex items-stretch sm:items-center justify-center" onClick={event => { if (event.target === event.currentTarget && !busy) setDialog(null); }}>
       <div role="dialog" aria-modal="true" aria-labelledby="accounting-dialog-title" className="admin-accounting-dialog bg-[#0A1120] sm:border border-slate-700 sm:rounded-2xl w-full max-w-2xl h-[100dvh] sm:h-auto sm:max-h-[90dvh] overflow-hidden flex flex-col">
         <div className="shrink-0 flex justify-between items-start gap-3 p-4 sm:p-6 border-b border-slate-800"><div><h3 id="accounting-dialog-title" className="font-bold text-lg text-white">{titles[dialog]}</h3>{selectedSale && <p className="text-xs text-slate-400 mt-1">{selectedSale.customerName} · {selectedSale.trackingCode}</p>}</div><button className={buttonClass} aria-label="بستن فرم حسابداری" disabled={busy} onClick={() => setDialog(null)}><X size={16} /></button></div>
         <form onSubmit={submit} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 space-y-4 pt-4">
@@ -442,8 +449,7 @@ export function AccountingDashboard() {
             {moneyInput('quantity', 'تعداد قطعه')}
             {products.find(product => product.id === draft.productId)?.isGold && <GoldFields value={draft.goldPurchase} onChange={value => edit('goldPurchase', value)} />}
             <CostFields gold={products.find(product => product.id === draft.productId)?.isGold} value={draft.costs} onChange={value => edit('costs', value)} />
-            <button type="button" className={buttonClass} onClick={() => edit('costs', { ...draft.costs, assembly: data.settings.assembly })}>استفاده از هزینهٔ ثابت ساخت برای محصول آماده</button>
-            <p className="text-xs text-slate-400">مروارید، ساخت و سایر هزینه‌های خرید به تومان کنار وزن طلا ذخیره می‌شوند. سود طلا همچنان به گرم محاسبه می‌شود.</p>
+            <p className="text-xs text-slate-400">{products.find(product => product.id === draft.productId)?.isGold ? 'مروارید، ساخت و هر هزینهٔ تومانی دیگر را جمع بزنید و در همین یک کادر بنویسید. خودِ طلا با وزن و اجرت بالا حساب می‌شود.' : 'خرید، ساخت و هر هزینهٔ دیگر را جمع بزنید و در همین یک کادر بنویسید.'}</p>
             {textInput('supplier', 'تأمین‌کننده')}{textInput('reference', 'شماره فاکتور خرید')}
           </>}
           {dialog === 'sale' && <>
@@ -498,7 +504,7 @@ export function AccountingDashboard() {
           <div className="accounting-form-actions sticky bottom-0 grid grid-cols-2 gap-2 py-4 bg-[#0A1120] border-t border-slate-700"><button type="submit" className={primary} disabled={busy || loading}>{busy ? 'در حال ثبت…' : dialog === 'sale-delete' ? 'حذف فروش' : dialog === 'reset' ? 'پاک‌کردن و شروع از صفر' : 'ثبت و ذخیره'}</button><button type="button" className={buttonClass} disabled={busy} onClick={() => setDialog(null)}>انصراف</button></div>
         </form>
       </div>
-    </div>}
+    </div>, document.body)}
   </div>;
 }
 
