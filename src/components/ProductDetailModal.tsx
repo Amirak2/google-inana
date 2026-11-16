@@ -10,6 +10,7 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import { Product } from '../types';
+import { descriptionText } from '../utils/descriptionText';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
 import { calculateProductPrice } from '../utils/pricingEngine';
@@ -236,8 +237,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               </div>
 
               {/* Description */}
-              <p className="text-sm text-slate-300 leading-relaxed mb-6 font-light">
-                {product.description}
+              <p className="text-sm text-slate-300 leading-relaxed mb-6 font-light whitespace-pre-line">
+                {descriptionText(product.description)}
               </p>
 
               {/* Features List */}
