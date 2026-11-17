@@ -26,16 +26,20 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
 
   // The night sky stays as it is throughout; the impact only throws a brief glow
   // from the ground, which is gone again by the time the brand appears.
-  ctx.fillStyle = '#050A14';
+  // White-and-gold test theme (?theme=light): ivory sky, deeper gold so the star shows on white.
+  const whiteTheme = document.documentElement.dataset.theme === 'light';
+  const sky = whiteTheme ? '#FFFDF8' : '#050A14', speck = whiteTheme ? '176,136,40' : '245,236,215', warm = whiteTheme ? '212,168,60' : '255,228,150';
+  const tail = whiteTheme ? '196,150,45' : '255,214,120', sparkle = whiteTheme ? '186,142,40' : '255,246,214', halo = whiteTheme ? '226,186,80' : '255,236,170';
+  ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
   for (const f of FIELD) {
-    ctx.fillStyle = `rgba(245,236,215,${0.25 + 0.3 * Math.sin(time / 800 + f.ph)})`;
+    ctx.fillStyle = `rgba(${speck},${0.25 + 0.3 * Math.sin(time / 800 + f.ph)})`;
     ctx.beginPath(); ctx.arc(f.x * W, f.y * H, f.r, 0, Math.PI * 2); ctx.fill();
   }
   const afterglow = Math.max(impact, light) * (1 - light);
   if (afterglow > 0) {
     const g = ctx.createRadialGradient(W / 2, gy, 0, W / 2, gy, Math.min(W, H) * 0.6);
-    g.addColorStop(0, `rgba(255,228,150,${0.5 * afterglow})`);
+    g.addColorStop(0, `rgba(${warm},${0.5 * afterglow})`);
     g.addColorStop(0.4, `rgba(212,175,55,${0.2 * afterglow})`);
     g.addColorStop(1, 'rgba(212,175,55,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
@@ -45,12 +49,12 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
   const tailFade = 1 - clamp((p - 0.6) / 0.05);
   if (fall > 0 && tailFade > 0) {
     const steps = 60, length = 0.22;
-    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    ctx.save(); ctx.globalCompositeOperation = whiteTheme ? 'source-over' : 'lighter'; ctx.lineCap = 'round';
     let previous = fallPoint(easeIn(clamp(fall - length)));
     for (let k = 1; k <= steps; k++) {
       const along = k / steps;
       const q = fallPoint(easeIn(clamp(fall - length * (1 - along))));
-      ctx.strokeStyle = `rgba(255,214,120,${0.45 * along * along * tailFade})`;
+      ctx.strokeStyle = `rgba(${tail},${0.45 * along * along * tailFade})`;
       ctx.lineWidth = (1 + along * 9) * s;
       ctx.beginPath(); ctx.moveTo(previous.x, previous.y); ctx.lineTo(q.x, q.y); ctx.stroke();
       previous = q;
@@ -61,7 +65,7 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
     for (let k = 0; k < 22; k++) {
       const t = clamp(fall - k * 0.02 - 0.01); if (t <= 0) break;
       const q = fallPoint(easeIn(t)); const jitter = (rand(k + Math.floor(time / 90)) - 0.5) * 18 * s;
-      ctx.fillStyle = `rgba(255,246,214,${0.7 * (1 - k / 22) * (1 - impact)})`;
+      ctx.fillStyle = `rgba(${sparkle},${0.7 * (1 - k / 22) * (1 - impact)})`;
       ctx.beginPath(); ctx.arc(q.x + jitter, q.y - jitter * 0.6, 1.4, 0, Math.PI * 2); ctx.fill();
     }
   }
@@ -72,8 +76,8 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
     if (fall === 0) q.y += Math.sin(time / 900) * 4;
     const R = (16 + fall * 10) * s, alpha = 1 - impact, rotation = time / 2600 + fall * 7;
     const glow = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, R * 3.2);
-    glow.addColorStop(0, `rgba(255,236,170,${0.55 * alpha})`);
-    glow.addColorStop(1, 'rgba(255,236,170,0)');
+    glow.addColorStop(0, `rgba(${halo},${0.55 * alpha})`);
+    glow.addColorStop(1, `rgba(${halo},0)`);
     ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(q.x, q.y, R * 3.2, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath();
     for (let i = 0; i < 16; i++) {
@@ -81,19 +85,19 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
       ctx.lineTo(q.x + Math.cos(a) * r, q.y + Math.sin(a) * r);
     }
     ctx.closePath();
-    ctx.fillStyle = `rgba(232,199,102,${alpha})`; ctx.fill();
-    ctx.lineWidth = 1; ctx.strokeStyle = `rgba(255,246,214,${alpha})`; ctx.stroke();
+    ctx.fillStyle = (whiteTheme ? `rgba(214,168,48,${alpha})` : `rgba(232,199,102,${alpha})`); ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = whiteTheme ? `rgba(122,90,12,${alpha})` : `rgba(255,246,214,${alpha})`; ctx.stroke();
   }
 
   // Impact: a warm burst of light from the ground and a widening ring.
   if (impact > 0 && impact < 1) {
     const flash = Math.sin(impact * Math.PI);
     const burstLight = ctx.createRadialGradient(W / 2, gy, 0, W / 2, gy, Math.min(W, H) * 0.75);
-    burstLight.addColorStop(0, `rgba(255,240,190,${0.8 * flash})`);
+    burstLight.addColorStop(0, `rgba(${warm},${0.8 * flash})`);
     burstLight.addColorStop(0.3, `rgba(240,196,90,${0.3 * flash})`);
     burstLight.addColorStop(1, 'rgba(240,196,90,0)');
     ctx.fillStyle = burstLight; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = `rgba(255,232,170,${1 - impact})`; ctx.lineWidth = 3 * (1 - impact) + 0.5;
+    ctx.strokeStyle = `rgba(${tail},${1 - impact})`; ctx.lineWidth = 3 * (1 - impact) + 0.5;
     ctx.beginPath(); ctx.ellipse(W / 2, gy, impact * W * 0.7, impact * H * 0.12, 0, 0, Math.PI * 2); ctx.stroke();
   }
 
@@ -103,7 +107,7 @@ function drawScene(ctx: CanvasRenderingContext2D, W: number, H: number, p: numbe
     for (let i = 0; i < 40; i++) {
       const angle = Math.PI + rand(i + 3) * Math.PI;
       const dist = burst * (60 + rand(i + 50) * Math.min(W, H) * 0.4);
-      ctx.fillStyle = `rgba(255,236,170,${1 - burst})`;
+      ctx.fillStyle = `rgba(${sparkle},${1 - burst})`;
       ctx.beginPath(); ctx.arc(W / 2 + Math.cos(angle) * dist, gy + Math.sin(angle) * dist + burst * burst * 70, 1.2 + rand(i) * 1.6, 0, Math.PI * 2); ctx.fill();
     }
   }
