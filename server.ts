@@ -31,6 +31,7 @@ import {
 } from './server/validation';
 import { createLogger } from './server/logger';
 import { createDb } from './server/db';
+import { defaultLockColor, isLockColor, offersLockColor } from './src/utils/lockColor';
 
 export function createApp(store: Store, env: Record<string, any>) {
 const fetch: typeof globalThis.fetch = env.marketFetch || globalThis.fetch;
@@ -1800,6 +1801,15 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res: Resp
           });
         }
       }
+
+      // The clasp colour does not change the price, so it is taken from the request for both
+      // quoted and unquoted orders, and only for products whose clasp colour can be chosen.
+      validatedItems = validatedItems.map((orderItem) => {
+        const requested = Array.isArray(items) ? items.find((item: any) => item && String(item.productId) === orderItem.productId) : undefined;
+        const product = productsList.find((p) => p.id === orderItem.productId);
+        if (!product || !offersLockColor(product)) return orderItem;
+        return { ...orderItem, lockColor: isLockColor(requested?.lockColor) ? requested.lockColor : defaultLockColor(product) };
+      });
 
       // C. Aggregate quantities strictly from authoritative items
       const aggregatedQuantities = new Map<string, number>();

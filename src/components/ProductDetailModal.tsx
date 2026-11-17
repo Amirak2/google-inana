@@ -17,6 +17,8 @@ import { calculateProductPrice } from '../utils/pricingEngine';
 import { productPath } from '../utils/siteRoutes';
 import { productWeightOptions, productAvailability } from '../utils/productVariants';
 import { ProductImageViewer } from './ProductImageViewer';
+import { PhotoArrows } from './PhotoArrows';
+import { LOCK_COLORS, defaultLockColor, featuresWithoutLock, offersLockColor, type LockColor } from '../utils/lockColor';
 import { sizedImage } from '../utils/productImages';
 
 interface ProductDetailModalProps {
@@ -32,6 +34,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   const [quantity, setQuantity] = useState(1);
   const [linkMessage, setLinkMessage] = useState('');
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [lockColor, setLockColor] = useState<LockColor>('نقره‌ای');
   const closeImageViewer = useCallback(() => setImageViewerOpen(false), []);
 
   useEffect(() => {
@@ -39,6 +42,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
     setQuantity(1);
     setLinkMessage('');
     setImageViewerOpen(false);
+    if (product) setLockColor(defaultLockColor(product));
   }, [product?.id]);
 
   if (!product) return null;
@@ -53,7 +57,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
   const handleAddToCart = () => {
     if (!priceReady || productAvailability(product) <= 0) return;
-    addToCart(product, Math.min(quantity, productAvailability(product)));
+    addToCart(product, Math.min(quantity, productAvailability(product)), offersLockColor(product) ? lockColor : undefined);
     onClose();
   };
 
@@ -133,7 +137,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         <div id="product-detail-content" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8 items-start">
           {/* Product photo gallery */}
           <div className="lg:col-span-5 flex flex-col gap-4">
-            {/* Main Stage Image */}
+            {/* Main Stage Image, with arrows to page through the photos */}
+            <div className="relative w-fit max-w-full self-center lg:w-full">
             <button type="button" aria-label={`بزرگ‌نمایی تصویر ${product.title}`} aria-haspopup="dialog"
               onClick={() => setImageViewerOpen(true)}
               className={`relative w-fit max-w-full self-center lg:w-full lg:aspect-[4/5] rounded-2xl overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#0B152B]'} border border-[#D4AF37]/25 group cursor-zoom-in focus-visible:outline-2 focus-visible:outline-[#D4AF37]`}>
@@ -151,6 +156,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                 <ZoomIn className="h-4 w-4" /> بزرگ‌نمایی
               </span>
             </button>
+            <PhotoArrows count={images.length} index={selectedImageIndex} onChange={setSelectedImageIndex} />
+            </div>
 
             {/* Thumbnails */}
             {images.length > 1 && (
@@ -241,12 +248,28 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                 {descriptionText(product.description)}
               </p>
 
+              {/* Clasp colour, chosen by the customer for products with a metal clasp */}
+              {offersLockColor(product) && (
+                <fieldset className="mb-6">
+                  <legend className="text-xs font-bold text-white mb-2">رنگ قفل را انتخاب کنید:</legend>
+                  <div className="flex gap-2">
+                    {LOCK_COLORS.map(color => (
+                      <button key={color} type="button" aria-pressed={lockColor === color} onClick={() => setLockColor(color)}
+                        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold transition-colors ${lockColor === color ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#E6CA65]' : 'border-slate-600 text-slate-200 hover:border-slate-400'}`}>
+                        <span aria-hidden="true" className={`h-4 w-4 rounded-full border border-white/40 ${color === 'طلایی' ? 'bg-gradient-to-br from-[#F3D77A] to-[#B38A30]' : 'bg-gradient-to-br from-[#F1F3F6] to-[#9AA3AE]'}`} />
+                        {color}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+
               {/* Features List */}
-              {product.features && product.features.length > 0 && (
+              {featuresWithoutLock(product).length > 0 && (
                 <div className="mb-6">
                   <span className="text-xs font-bold text-white block mb-2">ویژگی‌ها و مزایا:</span>
                   <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-300">
-                    {product.features.map((f, idx) => (
+                    {featuresWithoutLock(product).map((f, idx) => (
                       <li key={idx} className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#D4AF37]" />
                         <span>{f}</span>
@@ -347,7 +370,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         </div>
       </div>
       {imageViewerOpen && <ProductImageViewer
-        src={images[selectedImageIndex] || images[0]} title={product.title} onClose={closeImageViewer} />}
+        src={images[selectedImageIndex] || images[0]} title={product.title} onClose={closeImageViewer}
+        count={images.length} index={selectedImageIndex} onIndexChange={setSelectedImageIndex} />}
     </div>
   );
 };

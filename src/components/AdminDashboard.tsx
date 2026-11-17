@@ -2503,7 +2503,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                                   className="flex flex-wrap justify-between items-start gap-2 text-xs py-2 border-b border-slate-800/40 last:border-0"
                                 >
                                   <span>
-                                    {it.productTitle} ({toPersianDigits(it.quantity)} عدد)
+                                    {it.productTitle} ({toPersianDigits(it.quantity)} عدد){it.lockColor ? ` — قفل ${it.lockColor}` : ''}
                                     {it.weight > 0 ? ` - وزن: ${formatWeight(it.weight)}` : ' - قیمت ثابت'}
                                   </span>
                                   <span className="font-bold text-white">{formatToman(it.totalPrice)}</span>
