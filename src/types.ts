@@ -92,6 +92,7 @@ export interface CalculatedPriceBreakdown {
 export interface CartItem {
   product: Product;
   quantity: number;
+  lockColor?: import('./utils/lockColor').LockColor; // Clasp colour chosen by the customer.
 }
 
 export type OrderStatus = import('./utils/orderWorkflow').CanonicalOrderStatus | 'تایید شده' | 'تأیید شد و در حال ساخت';
@@ -109,6 +110,7 @@ export interface OrderItem {
   goldSale?: import('./types/accounting').GoldSaleTerms;
   tax?: import('./types/accounting').InvoiceTax;
   makingChargePercent: number;
+  lockColor?: import('./utils/lockColor').LockColor; // Clasp colour chosen by the customer.
 }
 
 export interface Order {

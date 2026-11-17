@@ -10,6 +10,7 @@ import {
   Product,
 } from '../types';
 import { DEFAULT_SETTINGS } from '../utils/pricingEngine';
+import { defaultLockColor, offersLockColor, type LockColor } from '../utils/lockColor';
 import { getAuthHeaders } from '../utils/authHelper';
 import { useAuth } from './AuthContext';
 import { NAVIGATION_KEY, readNavigationState, saveSessionValue } from '../utils/navigationState';
@@ -44,7 +45,8 @@ interface GoldStoreContextType extends CatalogFilters {
   openCatalog: (filters?: Partial<CatalogFilters>) => void;
   setQuickViewProduct: (product: Product | null) => void;
   setIsCartOpen: (open: boolean) => void;
-  addToCart: (product: Product, quantity?: number) => void;
+  addToCart: (product: Product, quantity?: number, lockColor?: LockColor) => void;
+  setCartLockColor: (productId: string, lockColor: LockColor) => void;
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
@@ -281,7 +283,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   }, []);
 
-  const addToCart = (product: Product, quantity = 1) => {
+  const addToCart = (product: Product, quantity = 1, lockColor?: LockColor) => {
+    // Products with a metal clasp carry the customer's colour (the product's own colour if none was picked).
+    const clasp = offersLockColor(product) ? lockColor || defaultLockColor(product) : undefined;
     setCart((prev) => {
       const available = Math.max(0, product.availableStock ?? product.stock ?? 0);
       if (available === 0) return prev;
@@ -289,13 +293,17 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (existing) {
         return prev.map((item) =>
           item.product.id === product.id
-            ? { ...item, quantity: Math.min(available, item.quantity + quantity) }
+            ? { ...item, quantity: Math.min(available, item.quantity + quantity), ...(lockColor && clasp ? { lockColor: clasp } : {}) }
             : item
         );
       }
-      return [...prev, { product, quantity: Math.min(available, Math.max(1, quantity)) }];
+      return [...prev, { product, quantity: Math.min(available, Math.max(1, quantity)), ...(clasp ? { lockColor: clasp } : {}) }];
     });
     setIsCartOpen(true);
+  };
+
+  const setCartLockColor = (productId: string, lockColor: LockColor) => {
+    setCart((prev) => prev.map((item) => item.product.id === productId && offersLockColor(item.product) ? { ...item, lockColor } : item));
   };
 
   const removeFromCart = (productId: string) => {
@@ -459,6 +467,7 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setQuickViewProduct,
         setIsCartOpen,
         addToCart,
+        setCartLockColor,
         removeFromCart,
         updateCartQuantity,
         clearCart,

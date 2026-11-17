@@ -36,6 +36,7 @@ import { calculateProductPrice } from '../utils/pricingEngine';
 import { Order } from '../types';
 import { getAuthHeaders } from '../utils/authHelper';
 import { sizedImage } from '../utils/productImages';
+import { LOCK_COLORS, defaultLockColor, offersLockColor } from '../utils/lockColor';
 
 const generateIdempotencyKey = () =>
   `idemp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -55,7 +56,7 @@ const normalizeIranianMobile = (value: string) => {
 };
 
 const AccountCartDrawer: React.FC = () => {
-  const { cart, isCartOpen, setIsCartOpen, removeFromCart, updateCartQuantity, clearCart, goldPrice, settings, refreshProducts } =
+  const { cart, isCartOpen, setIsCartOpen, removeFromCart, updateCartQuantity, setCartLockColor, clearCart, goldPrice, settings, refreshProducts } =
     useGoldStore();
   const { userProfile, currentUser, openAuthModal } = useAuth();
   const isAuthenticated = !!(currentUser || userProfile);
@@ -391,6 +392,7 @@ const AccountCartDrawer: React.FC = () => {
         items: cart.map((item) => ({
           productId: item.product.id,
           quantity: item.quantity,
+          ...(offersLockColor(item.product) ? { lockColor: item.lockColor || defaultLockColor(item.product) } : {}),
         })),
       };
 
@@ -664,6 +666,16 @@ const AccountCartDrawer: React.FC = () => {
                             </div>
                             {item.product.pricingMode !== 'fixed' && (item.product.pearlPrice ?? 0) > 0 && (
                               <p className="text-[11px] text-slate-300 mt-1">مروارید هر عدد: {formatToman(item.product.pearlPrice!)} ثابت؛ به‌علاوهٔ طلا با نرخ روز</p>
+                            )}
+                            {offersLockColor(item.product) && (
+                              <div role="group" aria-label={`رنگ قفل ${item.product.title}`} className="flex items-center gap-1.5 mt-1.5 text-[11px] text-slate-300">
+                                <span>رنگ قفل:</span>
+                                {LOCK_COLORS.map(color => {
+                                  const active = (item.lockColor || defaultLockColor(item.product)) === color;
+                                  return <button key={color} type="button" aria-pressed={active} onClick={() => setCartLockColor(item.product.id, color)}
+                                    className={`rounded-full border px-2.5 py-0.5 ${active ? 'border-[#D4AF37] bg-[#D4AF37]/15 text-[#E6CA65] font-bold' : 'border-slate-600 text-slate-300'}`}>{color}</button>;
+                                })}
+                              </div>
                             )}
                           </div>
 

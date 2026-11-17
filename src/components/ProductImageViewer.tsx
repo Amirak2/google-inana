@@ -2,14 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ZoomIn, ZoomOut } from 'lucide-react';
 import { toPersianDigits } from '../utils/persianFormatter';
+import { PhotoArrows } from './PhotoArrows';
 
 interface ProductImageViewerProps {
   src: string;
   title: string;
   onClose: () => void;
+  count?: number;
+  index?: number;
+  onIndexChange?: (index: number) => void;
 }
 
-export function ProductImageViewer({ src, title, onClose }: ProductImageViewerProps) {
+export function ProductImageViewer({ src, title, onClose, count = 1, index = 0, onIndexChange }: ProductImageViewerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
@@ -34,7 +38,20 @@ export function ProductImageViewer({ src, title, onClose }: ProductImageViewerPr
       scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
       scroller.scrollTop = (scroller.scrollHeight - scroller.clientHeight) / 2;
     }
-  }, [zoom]);
+  }, [zoom, src]);
+
+  // Keyboard paging; in right-to-left reading the left arrow key is "next".
+  useEffect(() => {
+    if (!onIndexChange || count < 2) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      setZoom(1);
+      onIndexChange((index + (event.key === 'ArrowLeft' ? 1 : -1) + count) % count);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [count, index, onIndexChange]);
 
   return createPortal(
     <dialog ref={dialogRef} aria-label={`نمای بزرگ تصویر ${title}`} dir="rtl"
@@ -48,6 +65,8 @@ export function ProductImageViewer({ src, title, onClose }: ProductImageViewerPr
             <X className="h-6 w-6" />
           </button>
         </div>
+        <div className="relative min-h-0 flex-1 flex flex-col">
+        {onIndexChange && <PhotoArrows size="lg" count={count} index={index} onChange={next => { setZoom(1); onIndexChange(next); }} />}
         <div ref={scrollRef} dir="ltr" className="min-h-0 flex-1 overflow-auto overscroll-contain"
           onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
           <div className="flex items-center justify-center" style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}>
@@ -55,6 +74,7 @@ export function ProductImageViewer({ src, title, onClose }: ProductImageViewerPr
               className="h-full w-full object-contain p-3 sm:p-6"
               onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=85'; }} />
           </div>
+        </div>
         </div>
         <div className="flex shrink-0 items-center justify-center gap-4 border-t border-white/15 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button type="button" aria-label="بزرگ‌تر کردن تصویر" disabled={zoom >= 3} onClick={() => setZoom(value => Math.min(3, value + 0.5))}
