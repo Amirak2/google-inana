@@ -8,15 +8,18 @@ import './index.css';
 import './theme-light.css';
 import { initClientErrorLogging } from './utils/clientLogger';
 
-// Test theme: ?theme=light shows the white-and-gold look (remembered on this device), ?theme=dark goes back.
+// The site is white and gold. ?theme=dark shows the old navy look (remembered on this device), ?theme=light goes back.
 try {
   const requested = new URLSearchParams(location.search).get('theme');
   if (requested === 'light' || requested === 'dark') localStorage.setItem('inana-theme', requested);
-  if (localStorage.getItem('inana-theme') === 'light') {
+  if (localStorage.getItem('inana-theme') !== 'dark') {
     document.documentElement.dataset.theme = 'light';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#FFFFFF');
+  } else {
+    delete document.documentElement.dataset.theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#050A14');
   }
-} catch { /* storage blocked: keep the normal theme */ }
+} catch { document.documentElement.dataset.theme = 'light'; }
 
 initClientErrorLogging();
 
