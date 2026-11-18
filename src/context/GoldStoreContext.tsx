@@ -65,6 +65,9 @@ interface GoldStoreContextType extends CatalogFilters {
     discountPercent?: number
   ) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
+  saveCollection: (collection: Partial<CollectionInfo>) => Promise<CollectionInfo>;
+  deleteCollection: (id: string) => Promise<void>;
+  reorderCollections: (ids: string[]) => Promise<void>;
 }
 
 const initialGoldPrice: GoldPriceData = {
@@ -92,7 +95,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
-  const [collections, setCollections] = useState<CollectionInfo[]>(INITIAL_COLLECTIONS);
+  // Filled from the server (the admin edits them); the built-in list is only a fallback if that fails.
+  const [collections, setCollections] = useState<CollectionInfo[]>([]);
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('inana_cart');
@@ -233,10 +237,8 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setProducts(data);
       setProductsLoading(false);
       const colRes = await fetch('/api/collections');
-      if (colRes.ok) {
-        const cols = await colRes.json();
-        setCollections(cols);
-      }
+      const cols = colRes.ok ? await colRes.json().catch(() => null) : null;
+      setCollections(Array.isArray(cols) ? cols : INITIAL_COLLECTIONS);
       const setRes = await fetch('/api/settings');
       if (setRes.ok) {
         const sets = await setRes.json();
@@ -423,6 +425,36 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setProducts((prev) => prev.map((p) => p.id === productId ? { ...p, ...data.product } : p));
   };
 
+  // Collections: new when there is no id, otherwise an edit. Renaming moves the collection's products too.
+  const saveCollection = async (collection: Partial<CollectionInfo>) => {
+    const res = await fetch(collection.id ? `/api/admin/collections/${collection.id}` : '/api/admin/collections', {
+      method: collection.id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(collection),
+    });
+    const data = await readApiResponse<CollectionInfo | { collection: CollectionInfo; movedProducts: number }>(res, 'ذخیرهٔ کالکشن انجام نشد.');
+    const saved = 'collection' in data ? data.collection : data;
+    const previous = collections.find(c => c.id === saved.id);
+    setCollections(list => [...list.filter(c => c.id !== saved.id), saved].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+    if (previous && previous.name !== saved.name) setProducts(list => list.map(p => p.collection === previous.name ? { ...p, collection: saved.name } : p));
+    return saved;
+  };
+
+  const deleteCollection = async (id: string) => {
+    const res = await fetch(`/api/admin/collections/${id}`, { method: 'DELETE', headers: { ...getAuthHeaders() } });
+    await readApiResponse(res, 'حذف کالکشن انجام نشد.');
+    setCollections(list => list.filter(c => c.id !== id));
+  };
+
+  const reorderCollections = async (ids: string[]) => {
+    const res = await fetch('/api/admin/collections/order', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ ids }),
+    });
+    setCollections(await readApiResponse<CollectionInfo[]>(res, 'تغییر ترتیب کالکشن‌ها انجام نشد.'));
+  };
+
   const deleteProduct = async (id: string) => {
     const res = await fetch(`/api/admin/products/${id}`, {
       method: 'DELETE',
@@ -481,6 +513,9 @@ export const GoldStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updateProduct,
         updateSingleProductPricing,
         deleteProduct,
+        saveCollection,
+        deleteCollection,
+        reorderCollections,
       }}
     >
       {favoriteError && <div role="alert" className="fixed top-20 inset-x-4 z-[200] mx-auto max-w-lg rounded-xl bg-rose-950 text-white p-3 text-sm shadow-lg flex gap-3 justify-between"><span>{favoriteError}</span><button type="button" aria-label="بستن پیام" onClick={() => setFavoriteError(null)}>×</button></div>}

@@ -33,6 +33,7 @@ import { createLogger } from './server/logger';
 import { createDb } from './server/db';
 import { defaultLockColor, isLockColor, offersLockColor } from './src/utils/lockColor';
 import { cleanFeatures } from './src/utils/productFeatures';
+import { CollectionError, createCollections } from './server/collections';
 
 export function createApp(store: Store, env: Record<string, any>) {
 const fetch: typeof globalThis.fetch = env.marketFetch || globalThis.fetch;
@@ -1324,9 +1325,27 @@ app.delete('/api/products/:id', requireAdminAuth, (req: AuthenticatedRequest, re
 });
 
 // 4. Collections & Categories
+const collections = createCollections(store, INITIAL_COLLECTIONS);
 app.get('/api/collections', (_req: Request, res: Response) => {
-  res.json(INITIAL_COLLECTIONS);
+  res.json(collections.list());
 });
+const collectionAction = (action: (req: AuthenticatedRequest) => unknown, log: string) => (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = action(req);
+    logger.security('ADMIN', log, { admin: req.user?.email, collectionId: req.params.id });
+    res.json(result);
+  } catch (error: any) {
+    if (error instanceof CollectionError) { res.status(error.status).json({ error: error.message }); return; }
+    throw error;
+  }
+};
+app.post('/api/admin/collections', requireAdminAuth, collectionAction(req => collections.add(req.body || {}), 'افزودن کالکشن توسط مدیر'));
+app.put('/api/admin/collections/order', requireAdminAuth, collectionAction(req => collections.reorder(req.body?.ids), 'تغییر ترتیب کالکشن‌ها توسط مدیر'));
+app.put('/api/admin/collections/:id', requireAdminAuth, collectionAction(req => {
+  const result = collections.update(String(req.params.id), req.body || {}, productsList);
+  return result;
+}, 'ویرایش کالکشن توسط مدیر'));
+app.delete('/api/admin/collections/:id', requireAdminAuth, collectionAction(req => { collections.remove(String(req.params.id)); return { success: true }; }, 'حذف کالکشن توسط مدیر'));
 
 // 5. Settings
 app.get('/api/settings', (_req: Request, res: Response) => {
