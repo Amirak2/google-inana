@@ -32,6 +32,7 @@ import {
 import { createLogger } from './server/logger';
 import { createDb } from './server/db';
 import { defaultLockColor, isLockColor, offersLockColor } from './src/utils/lockColor';
+import { cleanFeatures } from './src/utils/productFeatures';
 
 export function createApp(store: Store, env: Record<string, any>) {
 const fetch: typeof globalThis.fetch = env.marketFetch || globalThis.fetch;
@@ -1139,7 +1140,7 @@ app.post('/api/admin/products', requireAdminAuth, (req: AuthenticatedRequest, re
       'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=85',
     ],
     description: req.body.description ? String(req.body.description).slice(0, 2000) : isFixedPrice ? 'توضیحات محصول مرواریدی' : 'توضیحات محصول طلای لوکس اینانا',
-    features: Array.isArray(req.body.features) ? req.body.features.slice(0, 10) : isFixedPrice ? [] : ['طلای ۱۸ عیار استاندارد ۷۵۰', 'شناسنامه و فاکتور رسمی'],
+    features: cleanFeatures(req.body.features),
     dimensions: req.body.dimensions ? String(req.body.dimensions).slice(0, 100) : 'استاندارد',
     sku: req.body.sku ? String(req.body.sku).trim().slice(0, 50) : `INA-${Math.floor(1000 + Math.random() * 9000)}`,
     stock: stockVal.value,
@@ -1242,6 +1243,7 @@ app.put('/api/admin/products/:id', requireAdminAuth, (req: AuthenticatedRequest,
         ? Math.min(90, Math.max(0, Number(req.body.discountPercent)))
         : productsList[index].discountPercent,
     stock: req.body.stock !== undefined ? Math.max(0, Number(req.body.stock)) : productsList[index].stock,
+    features: req.body.features !== undefined ? cleanFeatures(req.body.features) : productsList[index].features,
   };
 
   // Availability and pricing are calculated by the server, never persisted from an admin form.

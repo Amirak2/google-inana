@@ -3,8 +3,8 @@ import { motion } from 'motion/react';
 import { Heart, Eye, ShoppingBag } from 'lucide-react';
 import { Product } from '../types';
 import { useGoldStore } from '../context/GoldStoreContext';
-import { formatToman, formatWeight } from '../utils/persianFormatter';
-import { calculateProductPrice } from '../utils/pricingEngine';
+import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
+import { calculateProductPrice, priceBeforeDiscount } from '../utils/pricingEngine';
 import { productPath } from '../utils/siteRoutes';
 import { productWeightOptions, productAvailability } from '../utils/productVariants';
 import { sizedImage } from '../utils/productImages';
@@ -30,6 +30,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
   // Dynamic live calculation
   const priceBreakdown = calculateProductPrice(product, goldPrice.pricePerGram, settings);
   const finalPrice = priceBreakdown.finalPrice;
+  const oldPrice = priceBeforeDiscount(product, priceBreakdown);
 
   const handleQuickView = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -93,7 +94,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none bg-[radial-gradient(circle_at_center,rgba(212,175,55,0.12)_0%,transparent_70%)]" />
 
         {/* Vignette Depth Gradient */}
-        {!showFullPhoto && <div className="absolute inset-0 bg-gradient-to-t from-[#060B15] via-transparent to-transparent opacity-75" />}
 
         <div className="absolute top-3 left-3 z-10">
           <motion.button
@@ -147,6 +147,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
         <div className="mt-2 sm:mt-4 pt-2 sm:pt-3 border-t border-slate-700/80 group-hover:border-slate-700 flex items-center justify-between transition-colors duration-300">
           <div className="flex flex-col">
             <span className="text-[10px] text-slate-300 font-light">{isFixed ? 'قیمت ثابت' : 'قیمت روز'}</span>
+            {priceReady && oldPrice && (
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <s className="text-[10px] sm:text-xs text-slate-400" aria-label="قیمت قبل از تخفیف">{formatToman(oldPrice)}</s>
+                <span className="text-[9px] sm:text-[10px] font-bold text-white bg-rose-600 rounded px-1">{toPersianDigits(priceBreakdown.discountPercent)}٪</span>
+              </span>
+            )}
             <span className="text-[11px] sm:text-base font-bold text-white gold-gradient-text whitespace-nowrap tracking-tight group-hover:brightness-115 transition-all">
               {priceReady ? `${hasWeightOptions ? 'از ' : ''}${formatToman(finalPrice)}` : 'در حال دریافت نرخ...'}
             </span>

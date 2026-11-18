@@ -13,7 +13,7 @@ import { Product } from '../types';
 import { descriptionText } from '../utils/descriptionText';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
-import { calculateProductPrice } from '../utils/pricingEngine';
+import { calculateProductPrice, priceBeforeDiscount } from '../utils/pricingEngine';
 import { productPath } from '../utils/siteRoutes';
 import { productWeightOptions, productAvailability } from '../utils/productVariants';
 import { ProductImageViewer } from './ProductImageViewer';
@@ -54,6 +54,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   const priceReady = isFixed ? (product.fixedPrice ?? 0) > 0 : goldPrice.pricePerGram > 0;
   const priceBreakdown = calculateProductPrice(product, goldPrice.pricePerGram, settings);
   const finalPrice = priceBreakdown.finalPrice;
+  const oldPrice = priceBeforeDiscount(product, priceBreakdown);
+  const oldPriceTag = (times: number) => priceReady && oldPrice ? (
+    <span className="flex items-center gap-1.5 text-xs">
+      <s className="text-slate-400" aria-label="قیمت قبل از تخفیف">{formatToman(oldPrice * times)}</s>
+      <span className="font-bold text-white bg-rose-600 rounded px-1.5 py-0.5 text-[10px]">{toPersianDigits(priceBreakdown.discountPercent)}٪ تخفیف</span>
+    </span>
+  ) : null;
 
   const handleAddToCart = () => {
     if (!priceReady || productAvailability(product) <= 0) return;
@@ -112,6 +119,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
         <div className="lg:hidden shrink-0 px-3 pt-3 pb-2 border-b border-[#D4AF37]/15">
           <h1 id="product-detail-title" className="text-lg font-extrabold text-white leading-7">{product.title}</h1>
+          {oldPriceTag(1)}
           <p className="mt-1 text-base font-bold text-[#E6CA65]">{priceReady ? formatToman(finalPrice) : 'در حال دریافت نرخ...'}</p>
         </div>
 
@@ -348,6 +356,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           <div className="flex items-center justify-between gap-3 mb-2">
             <div className="min-w-0">
               <span className="text-[11px] text-slate-400">{isFixed ? 'قیمت ثابت' : 'قیمت روز'}{quantity > 1 ? ` / ${toPersianDigits(quantity)} عدد` : ''}</span>
+              {oldPriceTag(quantity)}
               <p className="text-base sm:text-xl font-extrabold text-[#E6CA65]">{priceReady ? formatToman(finalPrice * quantity) : 'در حال دریافت نرخ...'}</p>
             </div>
             {(product.availableStock ?? product.stock ?? 0) > 0 && (

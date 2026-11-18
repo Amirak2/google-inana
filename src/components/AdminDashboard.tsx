@@ -2,6 +2,7 @@ import { AdminProductGallery } from './AdminProductGallery';
 import { AccountingDashboard } from './AccountingDashboard';
 import { AdminUsers } from './AdminUsers';
 import { useAdminDraft } from '../hooks/useAdminDraft';
+import { cleanFeatures } from '../utils/productFeatures';
 import { changedProductFields, numberOrDefault } from '../utils/adminProductForm';
 import { readApiResponse } from '../utils/apiResponse';
 import { normalizeOrderStatus, orderStatusOptions, isApprovedOrderStatus, canTransitionOrderStatus, canArchiveOrder, nextOrderStatus } from '../utils/orderWorkflow';
@@ -210,7 +211,7 @@ export const AdminDashboard: React.FC = () => {
     discountPercent: 0,
     stock: 5,
     description: '',
-    features: ['طلای ۱۸ عیار استاندارد ۷۵۰', 'دست‌ساز با پرداخت آینه‌ای'],
+    features: [],
     images: [
       'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=80',
     ],
@@ -302,7 +303,7 @@ export const AdminDashboard: React.FC = () => {
     try {
     if (isEditingProduct && productForm.id) {
       if (!productBaseline.current) throw new Error('فرم ویرایش را دوباره باز کنید.');
-      const updates = changedProductFields(productBaseline.current, productForm);
+      const updates = changedProductFields(productBaseline.current, { ...productForm, features: cleanFeatures(productForm.features) });
       if (Object.keys(updates).length) await updateProduct(productForm.id, updates);
     } else {
       const newProd: Product = {
@@ -327,7 +328,7 @@ export const AdminDashboard: React.FC = () => {
         stoneCost: 0,
         stock: Number(productForm.stock ?? 1),
         description: productForm.description || '',
-        features: productForm.features || (isFixedPrice ? [] : ['طلای ۱۸ عیار ۷۵۰']),
+        features: cleanFeatures(productForm.features),
         images:
           productForm.images && productForm.images.length > 0
             ? productForm.images
@@ -1461,6 +1462,19 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
                 </div>
 
                 <AdminProductGallery images={productForm.images || []} onChange={images => setProductForm(previous => ({ ...previous, images }))} />
+
+                <div>
+                  <label htmlFor="admin-product-features" className="block text-slate-300 font-semibold mb-1">ویژگی‌ها و مزایا (هر ویژگی در یک خط):</label>
+                  <textarea
+                    id="admin-product-features"
+                    rows={5}
+                    value={(productForm.features || []).join('\n')}
+                    onChange={(e) => setProductForm(previous => ({ ...previous, features: e.target.value.split('\n') }))}
+                    placeholder={'مثلاً:\nکیفیت: 3A+\nطول گردنبند: ۴۵ سانتی‌متر\nقفل: نقره‌ای'}
+                    className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-3.5 py-2 text-white outline-none resize-y leading-7"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">هر خط یک ویژگی در صفحهٔ محصول می‌شود. خط خالی نمایش داده نمی‌شود. اگر خطی با «قفل:» و رنگ نقره‌ای یا طلایی بنویسید، مشتری می‌تواند رنگ قفل را انتخاب کند.</p>
+                </div>
 
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">توضیحات معرفی محصول:</label>
