@@ -154,6 +154,8 @@ export interface CollectionInfo {
   coverImage: string;
   accentQuote: string;
   tag: string;
+  /** Position in the collections list (smaller first). */
+  sortOrder?: number;
 }
 
 export interface UserNotification {

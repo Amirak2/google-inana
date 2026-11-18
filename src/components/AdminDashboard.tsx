@@ -12,6 +12,7 @@ import {
   Sliders,
   TrendingUp,
   Package,
+  Layers,
   Plus,
   Trash2,
   Archive,
@@ -60,6 +61,7 @@ import { latinDigits } from '../utils/accounting';
 import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
 import { calculateProductPrice, calculateCustomGoldQuotation } from '../utils/pricingEngine';
 import { SystemLogsViewer } from './SystemLogsViewer';
+import { AdminCollections } from './AdminCollections';
 import { getAuthHeaders } from '../utils/authHelper';
 
 export const AdminDashboard: React.FC = () => {
@@ -67,6 +69,7 @@ export const AdminDashboard: React.FC = () => {
     goldPrice,
     settings,
     products,
+    collections,
     updateStoreSettings,
     addProduct,
     updateProduct,
@@ -619,6 +622,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
     { id: 'orders', label: 'سفارش‌ها', icon: ShoppingBag },
     { id: 'accounting', label: 'حسابداری و سود', icon: CreditCard },
     { id: 'products', label: 'مدیریت کل محصولات', icon: Package },
+    { id: 'collections', label: 'کالکشن‌ها', icon: Layers },
     { id: 'users', label: 'کاربران', icon: Users },
     { id: 'direct-pricing', label: 'تنظیم مستقیم اجرت و سود طلا', icon: Percent },
     { id: 'gold-rate', label: 'نرخ پایه و فرمول', icon: TrendingUp },
@@ -695,6 +699,7 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
         {/* TAB 1: DIRECT SINGLE-PRODUCT MAKING CHARGE & PROFIT CONFIGURATOR (MAIN) */}
         {/* ========================================================================= */}
         {activeAdminTab === 'accounting' && <AccountingDashboard />}
+        {activeAdminTab === 'collections' && <AdminCollections />}
         {activeAdminTab === 'direct-pricing' && (
           <div className="space-y-8">
             {/* Top Notification Banner */}
@@ -1329,15 +1334,19 @@ ${calcDiscount > 0 ? `تخفیف ویژه اختصاصی: ${calcDiscount}٪ (${f
 
                   <div>
                     <label className="block text-slate-300 font-semibold mb-1">کالکشن:</label>
-                    <input
-                      type="text"
+                    <select
+                      aria-label="کالکشن محصول"
                       value={productForm.collection || ''}
                       onChange={(e) =>
                         setProductForm({ ...productForm, collection: e.target.value })
                       }
                       className="w-full bg-[#060B14] border border-slate-700 focus:border-[#D4AF37] rounded-xl px-3.5 py-2.5 text-white outline-none"
-                      placeholder="INANA LETTERS, INANA PEARLS, INANA SEA, ..."
-                    />
+                    >
+                      <option value="">بدون کالکشن</option>
+                      {collections.map(collection => <option key={collection.id} value={collection.name}>{collection.titleFa} ({collection.name})</option>)}
+                      {productForm.collection && !collections.some(collection => collection.name === productForm.collection) && <option value={productForm.collection}>{productForm.collection} (کالکشن حذف‌شده)</option>}
+                    </select>
+                    <p className="mt-1 text-[11px] text-slate-400">کالکشن جدید را از بخش «کالکشن‌ها» در همین پنل بسازید.</p>
                   </div>
                 </div>
 
