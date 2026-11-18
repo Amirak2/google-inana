@@ -146,10 +146,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* Product photo gallery */}
           <div className="lg:col-span-5 flex flex-col gap-4">
             {/* Main Stage Image, with arrows to page through the photos */}
-            <div className="relative w-fit max-w-full self-center lg:w-full">
+            <div className="relative w-fit min-w-[min(100%,240px)] max-w-full self-center lg:w-full">
             <button type="button" aria-label={`بزرگ‌نمایی تصویر ${product.title}`} aria-haspopup="dialog"
               onClick={() => setImageViewerOpen(true)}
-              className={`relative w-fit max-w-full self-center lg:w-full lg:aspect-[4/5] rounded-2xl overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#0B152B]'} border border-[#D4AF37]/25 group cursor-zoom-in focus-visible:outline-2 focus-visible:outline-[#D4AF37]`}>
+              className={`relative flex w-full min-h-[min(32dvh,280px)] sm:min-h-[360px] items-center justify-center lg:min-h-0 lg:aspect-[4/5] rounded-2xl overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#0B152B]'} border border-[#D4AF37]/25 group cursor-zoom-in focus-visible:outline-2 focus-visible:outline-[#D4AF37]`}>
               <img
                 src={images[selectedImageIndex] || images[0]}
                 alt={product.title}
