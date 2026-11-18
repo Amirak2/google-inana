@@ -147,3 +147,12 @@ export function calculateCustomGoldQuotation(
     finalPrice,
   };
 }
+
+/** The price before the product's discount, rounded the same way as the final price; null when there is no discount. */
+export function priceBeforeDiscount(product: Partial<Product>, breakdown: CalculatedPriceBreakdown): number | null {
+  const percent = breakdown.discountPercent;
+  if (!(percent > 0) || percent >= 100) return null;
+  const full = breakdown.rawFinalPrice / (1 - percent / 100);
+  const rounded = product.pricingMode === 'fixed' ? Math.round(full) : Math.round(full / 1000) * 1000;
+  return rounded > breakdown.finalPrice ? rounded : null;
+}

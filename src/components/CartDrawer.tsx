@@ -32,7 +32,7 @@ import confetti from 'canvas-confetti';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { useAuth } from '../context/AuthContext';
 import { formatToman, formatWeight, toPersianDigits } from '../utils/persianFormatter';
-import { calculateProductPrice } from '../utils/pricingEngine';
+import { calculateProductPrice, priceBeforeDiscount } from '../utils/pricingEngine';
 import { Order } from '../types';
 import { getAuthHeaders } from '../utils/authHelper';
 import { sizedImage } from '../utils/productImages';
@@ -190,6 +190,7 @@ const AccountCartDrawer: React.FC = () => {
     const breakdown = calculateProductPrice(item.product, goldPrice.pricePerGram, settings);
     const unitPrice = breakdown.finalPrice;
     const itemTotal = unitPrice * item.quantity;
+    const oldUnitPrice = priceBeforeDiscount(item.product, breakdown);
     if (item.product.pricingMode !== 'fixed') totalWeight += item.product.weight * item.quantity;
     subtotalPrice += itemTotal;
 
@@ -197,6 +198,7 @@ const AccountCartDrawer: React.FC = () => {
       ...item,
       unitPrice,
       itemTotal,
+      oldTotal: oldUnitPrice ? oldUnitPrice * item.quantity : null,
       effectiveMakingCharge: breakdown.effectiveMakingChargePercent,
     };
   });
@@ -680,8 +682,11 @@ const AccountCartDrawer: React.FC = () => {
                           </div>
 
                           <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700/80">
-                            <span className="text-xs font-bold text-white gold-gradient-text">
-                              {priceReady ? formatToman(item.itemTotal) : 'در حال محاسبه...'}
+                            <span className="flex flex-col">
+                              {priceReady && item.oldTotal && <s className="text-[10px] text-slate-400" aria-label="قیمت قبل از تخفیف">{formatToman(item.oldTotal)}</s>}
+                              <span className="text-xs font-bold text-white gold-gradient-text">
+                                {priceReady ? formatToman(item.itemTotal) : 'در حال محاسبه...'}
+                              </span>
                             </span>
 
                             {/* Quantity buttons */}
