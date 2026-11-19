@@ -27,7 +27,12 @@ assert.ok(admin.includes('قفل ${it.lockColor}'), 'The admin order list shows 
 
 // Photo arrows on the product page and in the large view.
 const modal = await readFile(new URL('../src/components/ProductDetailModal.tsx', import.meta.url), 'utf8');
-assert.ok(modal.includes('<PhotoArrows count={images.length} index={selectedImageIndex} onChange={setSelectedImageIndex} />'));
+assert.ok(modal.includes('<ProductPhotoSlider key={product.id} images={images}'));
+const slider = await readFile(new URL('../src/components/ProductPhotoSlider.tsx', import.meta.url), 'utf8');
+assert.ok(slider.includes('<PhotoArrows count={images.length} index={index} onChange={onChange} />'), 'The photo slider keeps the arrows');
+assert.ok(slider.includes('snap-x snap-mandatory') && slider.includes("w-[86%] lg:w-full"), 'Photos swipe, with the next one peeking in');
+const viewer = await readFile(new URL('../src/components/ProductImageViewer.tsx', import.meta.url), 'utf8');
+assert.ok(viewer.includes('aria-label="همهٔ عکس‌ها"') && modal.includes('images={images} />'), 'The large view has a strip of all photos');
 const arrows = await readFile(new URL('../src/components/PhotoArrows.tsx', import.meta.url), 'utf8');
 assert.ok(arrows.includes('(index + step + count) % count'), 'Arrows wrap around from the last photo to the first');
 console.log('PASS: clasp colour choice (silver / gold) reaches the order; photo arrows page through the gallery.');
