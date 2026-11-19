@@ -4,7 +4,6 @@ import {
   Heart,
   ShoppingBag,
   Sparkles,
-  Info,
   Send,
   Link,
   ZoomIn,
@@ -31,7 +30,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
   const { products, goldPrice, settings, addToCart, toggleFavorite, isFavorite, setQuickViewProduct } = useGoldStore();
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [showFormulaBreakdown, setShowFormulaBreakdown] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [linkMessage, setLinkMessage] = useState('');
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
@@ -206,7 +204,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               </div>
 
               {/* Key Specs Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
                 {!isFixed && <div className="bg-[#081224] border border-[#D4AF37]/20 p-3 rounded-xl text-center">
                   <span className="text-[11px] text-slate-400 block">وزن طلا</span>
                   <span className="text-sm font-bold text-white mt-1 block">
@@ -217,12 +215,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                   <span className="text-[11px] text-slate-400 block">{isFixed ? 'کیفیت' : 'عیار قطعه'}</span>
                   <span className="text-sm font-bold text-white mt-1 block">{product.purity}</span>
                 </div>
-                {!isFixed && <div className="bg-[#081224] border border-[#D4AF37]/20 p-3 rounded-xl text-center">
-                  <span className="text-[11px] text-slate-400 block">درصد اجرت</span>
-                  <span className="text-sm font-bold text-[#E6CA65] mt-1 block">
-                    {priceBreakdown.effectiveMakingChargePercent}٪
-                  </span>
-                </div>}
                 <div className="bg-[#081224] border border-[#D4AF37]/20 p-3 rounded-xl text-center">
                   <span className="text-[11px] text-slate-400 block">وضعیت موجودی</span>
                   <span
@@ -271,56 +263,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                 </div>
               )}
 
-              {/* Price Breakdown Drawer Toggle */}
-              {!isFixed && <div className="mb-6">
-                <button
-                  type="button"
-                  onClick={() => setShowFormulaBreakdown(!showFormulaBreakdown)}
-                  className="flex items-center gap-1.5 text-xs text-[#D4AF37] hover:underline"
-                >
-                  <Info className="w-3.5 h-3.5" />
-                  <span>
-                    {showFormulaBreakdown ? 'بستن ریز محاسبات قیمت' : 'مشاهده ریز فرمول قیمت‌گذاری'}
-                  </span>
-                </button>
-
-                {showFormulaBreakdown && (
-                  <div className="mt-3 p-4 rounded-2xl bg-[#13254A] border border-slate-700/80 text-xs space-y-2 animate-in fade-in duration-200">
-                    {priceBreakdown.pearlCost > 0 && (
-                      <div className="flex justify-between text-slate-200">
-                        <span>قیمت ثابت مروارید (بدون اجرت و سود):</span>
-                        <span className="font-bold">{formatToman(priceBreakdown.pearlCost)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-slate-200">
-                      <span>ارزش طلای خام ({formatWeight(product.weight)}):</span>
-                      <span className="font-bold">{formatToman(priceBreakdown.baseGoldValue)}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-200">
-                      <span>
-                        اجرت ساخت ({priceBreakdown.effectiveMakingChargePercent}٪):
-                      </span>
-                      <span className="font-bold">{formatToman(priceBreakdown.makingChargeAmount)}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-200">
-                      <span>سود فروشنده ({priceBreakdown.profitPercent}٪):</span>
-                      <span className="font-bold">{formatToman(priceBreakdown.profitAmount)}</span>
-                    </div>
-                    {priceBreakdown.discountPercent > 0 && (
-                      <div className="flex justify-between text-emerald-400 bg-emerald-500/15 p-2 rounded-lg border border-emerald-500/30">
-                        <span>تخفیف ویژه گالری ({priceBreakdown.discountPercent}٪):</span>
-                        <span className="font-bold">- {formatToman(priceBreakdown.discountAmount)}</span>
-                      </div>
-                    )}
-                    {priceBreakdown.stoneCost > 0 && (
-                      <div className="flex justify-between text-slate-200">
-                        <span>ارزش سنگ و مخراج‌کاری:</span>
-                        <span className="font-bold">{formatToman(priceBreakdown.stoneCost)}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>}
             </div>
 
             <div className="flex flex-wrap items-center gap-4 border-t border-[#D4AF37]/20 pt-3 text-xs">
