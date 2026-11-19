@@ -17,6 +17,7 @@ import { calculateProductPrice, priceBeforeDiscount } from '../utils/pricingEngi
 import { productPath } from '../utils/siteRoutes';
 import { productWeightOptions, productAvailability } from '../utils/productVariants';
 import { ProductImageViewer } from './ProductImageViewer';
+import { ProductPhotoSlider } from './ProductPhotoSlider';
 import { PhotoArrows } from './PhotoArrows';
 import { LOCK_COLORS, defaultLockColor, featuresWithoutLock, offersLockColor, type LockColor } from '../utils/lockColor';
 import { sizedImage } from '../utils/productImages';
@@ -117,11 +118,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           </div>
         </div>
 
-        <div className="lg:hidden shrink-0 px-3 pt-3 pb-2 border-b border-[#D4AF37]/15">
-          <h1 id="product-detail-title" className="text-lg font-extrabold text-white leading-7">{product.title}</h1>
-          {oldPriceTag(1)}
-          <p className="mt-1 text-base font-bold text-[#E6CA65]">{priceReady ? formatToman(finalPrice) : 'در حال دریافت نرخ...'}</p>
-        </div>
 
         {weightOptions.length > 1 && (
           <fieldset className="shrink-0 px-3 py-3 sm:px-6 border-b border-[#D4AF37]/20">
@@ -145,31 +141,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         <div id="product-detail-content" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8 items-start">
           {/* Product photo gallery */}
           <div className="lg:col-span-5 flex flex-col gap-4">
-            {/* Main Stage Image, with arrows to page through the photos */}
-            <div className="relative w-fit min-w-[min(100%,240px)] max-w-full self-center lg:w-full">
-            <button type="button" aria-label={`بزرگ‌نمایی تصویر ${product.title}`} aria-haspopup="dialog"
-              onClick={() => setImageViewerOpen(true)}
-              className={`relative flex w-full min-h-[min(32dvh,280px)] sm:min-h-[360px] items-center justify-center lg:min-h-0 lg:aspect-[4/5] rounded-2xl overflow-hidden ${isFixed ? 'bg-white' : 'bg-[#0B152B]'} border border-[#D4AF37]/25 group cursor-zoom-in focus-visible:outline-2 focus-visible:outline-[#D4AF37]`}>
-              <img
-                src={images[selectedImageIndex] || images[0]}
-                alt={product.title}
-                className="block w-auto max-w-full h-auto max-h-[min(32dvh,280px)] sm:max-h-[360px] lg:w-full lg:h-full lg:max-h-none object-contain object-center"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=800&q=85';
-                }}
-              />
-              <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-slate-950/80 px-2 py-1 text-xs text-white">
-                <ZoomIn className="h-4 w-4" /> بزرگ‌نمایی
-              </span>
-            </button>
-            <PhotoArrows count={images.length} index={selectedImageIndex} onChange={setSelectedImageIndex} />
-            </div>
+            {/* Swipeable photos: the next one peeks in from the side; tap opens the large view. */}
+            <ProductPhotoSlider key={product.id} images={images} title={product.title} index={selectedImageIndex}
+              onChange={setSelectedImageIndex} onOpen={() => setImageViewerOpen(true)} light={isFixed} />
 
             {/* Thumbnails */}
             {images.length > 1 && (
-              <div className="flex items-center gap-3 overflow-x-auto pb-2">
+              <div className="hidden lg:flex items-center gap-3 overflow-x-auto pb-2">
                 {images.map((img, idx) => (
                   <button
                     key={idx}
@@ -197,6 +175,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
             )}
           </div>
 
+          {/* Name and price under the photos on phones */}
+          <div className="lg:hidden -mt-1 px-1">
+              <h1 id="product-detail-title" className="text-lg font-extrabold text-white leading-7">{product.title}</h1>
+              {oldPriceTag(1)}
+              <p className="mt-1 text-base font-bold text-[#E6CA65]">{priceReady ? formatToman(finalPrice) : 'در حال دریافت نرخ...'}</p>
+          </div>
           {/* Details & Pricing Column (7 Cols) */}
           <div className="lg:col-span-7 flex flex-col justify-between">
             <div>
@@ -380,7 +364,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
       </div>
       {imageViewerOpen && <ProductImageViewer
         src={images[selectedImageIndex] || images[0]} title={product.title} onClose={closeImageViewer}
-        count={images.length} index={selectedImageIndex} onIndexChange={setSelectedImageIndex} />}
+        count={images.length} index={selectedImageIndex} onIndexChange={setSelectedImageIndex} images={images} />}
     </div>
   );
 };

@@ -86,7 +86,6 @@ html[data-theme="light"] .bg-slate-950 { background-color: #FFFFFF !important; }
 html[data-theme="light"] .bg-slate-950\/70 { background-color: color-mix(in oklab, #FFFFFF 70%, transparent) !important; }
 html[data-theme="light"] .bg-slate-950\/75 { background-color: color-mix(in oklab, #FFFFFF 75%, transparent) !important; }
 html[data-theme="light"] .bg-slate-950\/80 { background-color: color-mix(in oklab, #FFFFFF 80%, transparent) !important; }
-html[data-theme="light"] .bg-slate-950\/95 { background-color: color-mix(in oklab, #FFFFFF 95%, transparent) !important; }
 html[data-theme="light"] .bg-teal-950\/60 { background-color: color-mix(in oklab, #f0fdfa 60%, transparent) !important; }
 html[data-theme="light"] .border-amber-800\/60 { border-color: color-mix(in oklab, #fde68a 60%, transparent) !important; }
 html[data-theme="light"] .border-amber-900\/40 { border-color: color-mix(in oklab, #fde68a 40%, transparent) !important; }
