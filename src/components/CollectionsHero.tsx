@@ -66,15 +66,15 @@ export const CollectionsHero: React.FC = () => {
 
       <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-8 px-4 sm:px-6 lg:grid-cols-12 lg:gap-12 lg:px-8">
         {/* Brand */}
-        <div className="flex flex-col items-center text-center lg:col-span-4 lg:items-start lg:text-right">
+        <div className="flex flex-col items-center text-center lg:col-span-4">
           <img src="/inana-logo-gold.png" alt="لوگوی اینانا گلد" width={88} height={88} draggable={false}
             className="h-16 w-16 object-contain sm:h-20 sm:w-20" />
-          <h1 id="inana-hero-title" dir="ltr" className="mt-4 font-serif-brand text-[clamp(26px,7vw,52px)] font-bold uppercase leading-none tracking-[0.22em] gold-gradient-text">
+          <h1 id="inana-hero-title" dir="ltr" className="mt-4 whitespace-nowrap font-serif-brand text-[clamp(26px,7vw,52px)] lg:text-[34px] xl:text-[40px] font-bold uppercase leading-none tracking-[0.22em] lg:tracking-[0.18em] -mr-[0.22em] lg:-mr-[0.18em] gold-gradient-text">
             INANA GOLD
           </h1>
           <Ornament className="mt-4" />
           <p className="mt-4 text-base font-medium text-[#F5E8C7] sm:text-lg">گالری اینانا برای زنان توانا</p>
-          <div className="mt-6 hidden flex-wrap gap-3 lg:flex">
+          <div className="mt-6 hidden flex-wrap justify-center gap-3 lg:flex">
             <button id="hero-cta-collections" type="button" onClick={() => go('collections')}
               className="group inline-flex items-center gap-2.5 rounded-full bg-gradient-to-r from-[#D4AF37] via-[#C5A059] to-[#B38A30] px-7 py-3.5 text-sm font-bold text-slate-950 transition-all hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D4AF37]">
               <span>مشاهده مجموعه‌ها</span>
