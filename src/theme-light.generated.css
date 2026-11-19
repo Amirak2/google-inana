@@ -167,7 +167,6 @@ html[data-theme="light"] .hover\:text-white:hover { color: #1F1A12 !important; }
 html[data-theme="light"] .placeholder-slate-400::placeholder { color: #625846 !important; }
 html[data-theme="light"] .placeholder-slate-500::placeholder { color: #625846 !important; }
 html[data-theme="light"] .selection\:text-\[\#FBF4E2\]::selection { color: #1F1A12 !important; }
-html[data-theme="light"] .text-\[\#7A5A0C\] { color: #625846 !important; }
 html[data-theme="light"] .text-\[\#D4AF37\] { color: #7A5A0C !important; }
 html[data-theme="light"] .text-\[\#E6CA65\] { color: #8C6A14 !important; }
 html[data-theme="light"] .text-\[\#E8C766\] { color: #8C6A14 !important; }
