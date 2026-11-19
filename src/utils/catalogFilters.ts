@@ -78,6 +78,8 @@ export function catalogCategoryCounts(products: Product[], filters: CatalogFilte
   return counts;
 }
 
+export const WEIGHT_SLIDER_MAX = 2;
+
 /** A null ceiling means unlimited; slider bounds reflect the selected catalog's gold. */
 export function catalogWeightBounds(products: Product[], filters: CatalogFilters) {
   const weights = products.filter(product => product.pricingMode !== 'fixed' && Number.isFinite(product.weight) && product.weight > 0
@@ -85,7 +87,8 @@ export function catalogWeightBounds(products: Product[], filters: CatalogFilters
     && (!filters.selectedCollection || product.collection === filters.selectedCollection)).map(product => product.weight);
   if (!weights.length) return null;
   if (filters.maxWeight !== null) weights.push(filters.maxWeight);
-  const min = Math.floor(Math.min(...weights) * 1000) / 1000;
-  const max = Math.ceil(Math.max(...weights) * 1000) / 1000;
-  return { min, max: Math.max(max, min + 0.001), step: 0.001 };
+  // The slider runs from the lightest piece up to 2 grams (or the heaviest piece, if heavier), in steps of 10 سوت.
+  const min = Math.floor(Math.min(...weights) * 100) / 100;
+  const max = Math.max(WEIGHT_SLIDER_MAX, Math.ceil(Math.max(...weights) * 100) / 100);
+  return { min, max: Math.max(max, min + 0.01), step: 0.01 };
 }

@@ -88,7 +88,7 @@ try {
   await update(() => catalogHarness.openCatalog());
   const range = catalog().querySelector('input[type="range"]');
   assert.equal(Number(range.min), 0.26);
-  assert.equal(Number(range.max), 0.38);
+  assert.equal(Number(range.max), 2, 'The gold weight slider goes up to 2 grams');
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(range, '0.3');
     range.dispatchEvent(new window.Event('input', {bubbles: true}));

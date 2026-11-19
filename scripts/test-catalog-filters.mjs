@@ -18,6 +18,7 @@ assert.equal(catalogWeightBounds(products, pearls), null, 'Fixed price pearls mu
 const gold = {...filters, selectedCategory: 'حروف انگلیسی'};
 const range = catalogWeightBounds(products, gold);
 assert.ok(range.min <= 0.26 && range.max >= 0.38 && range.step <= 0.01);
+assert.equal(range.max, 2, 'The gold weight slider goes up to 2 grams');
 const light = filterCatalogProducts(products, {...gold, maxWeight: 0.3});
 assert.deepEqual(light.map(product => product.letter).sort(), ['A', 'F']);
 const heavy = {...products.find(product => product.letter === 'M'), id: 'local-heavy', weight: 12};

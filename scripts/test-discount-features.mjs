@@ -31,3 +31,8 @@ assert.ok(server.includes('features: cleanFeatures(req.body.features),') && serv
 const card = await readFile(new URL('../src/components/ProductCard.tsx', import.meta.url), 'utf8');
 assert.ok(!card.includes('bg-gradient-to-t from-[#060B15] via-transparent to-transparent opacity-75'));
 console.log('PASS: struck-through old price on discounts, admin-written features, no fade over product photos.');
+
+// The product page does not show the making charge or the price formula.
+const productPage = await readFile(new URL('../src/components/ProductDetailModal.tsx', import.meta.url), 'utf8');
+assert.ok(!productPage.includes('درصد اجرت') && !productPage.includes('ریز فرمول قیمت‌گذاری') && !productPage.includes('اجرت ساخت ('), 'Making charge and formula stay private');
+console.log('PASS: product page hides the making charge and the price formula.');

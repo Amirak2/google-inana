@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { CATEGORIES_LIST } from '../data/seedData';
 import { ProductCard } from './ProductCard';
+import { sizedImage } from '../utils/productImages';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { toPersianDigits, formatWeight } from '../utils/persianFormatter';
 import { catalogCategoryCounts, catalogWeightBounds, filterCatalogProducts, sortCatalogProducts, type CatalogSort } from '../utils/catalogFilters';
@@ -47,6 +48,9 @@ export const ShopCatalog: React.FC = () => {
   const categoryTotal = [...categoryCounts.values()].reduce((total, count) => total + count, 0);
   const letterProducts = useMemo(() => filterCatalogProducts(products, { ...filters, selectedLetter: null }), [products, filters]);
   const weightBounds = useMemo(() => catalogWeightBounds(products, filters), [products, filters]);
+  // While the weight slider is in use, the matching gold pieces show right under it, lightest first.
+  const weightMatches = useMemo(() => maxWeight === null ? [] : filteredProducts
+    .filter(product => product.pricingMode !== 'fixed').sort((a, b) => a.weight - b.weight), [filteredProducts, maxWeight]);
   const alphabetLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   const clearAllFilters = resetCatalogFilters;
   const collectionTitle = collections.find(collection => collection.name === selectedCollection)?.titleFa || selectedCollection;
@@ -268,6 +272,29 @@ export const ShopCatalog: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {/* Gold pieces up to the chosen weight, updating as the slider moves. */}
+          {maxWeight !== null && (
+            <div className="mt-3 w-full min-w-0" aria-live="polite">
+              <p className="mb-2 text-xs text-slate-300">
+                {weightMatches.length ? `${toPersianDigits(weightMatches.length)} محصول طلا تا ${formatWeight(maxWeight)}:` : `محصول طلایی تا ${formatWeight(maxWeight)} نیست.`}
+              </p>
+              {weightMatches.length > 0 && (
+                <ul className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {weightMatches.map(product => (
+                    <li key={product.id} className="shrink-0">
+                      <button type="button" onClick={() => setQuickViewProduct(product)} aria-label={`${product.title}، ${formatWeight(product.weight)}`}
+                        className="flex w-20 flex-col items-center gap-1 rounded-xl border border-[#D4AF37]/25 bg-white p-1.5 text-center hover:border-[#D4AF37]/60">
+                        <img src={sizedImage(product.images?.[0] || '', 240)} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-16 w-16 rounded-lg object-cover" />
+                        <span className="w-full truncate text-[10px] font-bold text-white">{product.title}</span>
+                        <span className="text-[10px] text-[#D4AF37]">{formatWeight(product.weight)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
         {/* Product Grid */}
         {productsLoading && products.length === 0 ? (
