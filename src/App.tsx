@@ -5,7 +5,7 @@ import { NotificationCenter } from './components/NotificationCenter';
 import { GoldStoreProvider, useGoldStore } from './context/GoldStoreContext';
 import { Navbar } from './components/Navbar';
 // The earlier opener lives in ./components/HeroSection; import it here instead to restore it.
-import { StarFallHero } from './components/StarFallHero';
+import { CollectionsHero } from './components/CollectionsHero';
 import { LiveGoldTicker } from './components/LiveGoldTicker';
 import { ShopCatalog } from './components/ShopCatalog';
 import { CollectionsShowcase } from './components/CollectionsShowcase';
@@ -63,7 +63,7 @@ const MainLayout: React.FC = () => {
       <main className="flex-1 relative w-full max-w-full overflow-x-clip">
         {activeTab === 'home' && (
           <>
-            <StarFallHero />
+            <CollectionsHero />
             <HomeShowcase />
             <LiveGoldTicker compact />
             <TestimonialsFAQ compact />

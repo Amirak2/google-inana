@@ -2,6 +2,7 @@ import React from 'react';
 import { Sparkles, ArrowLeft } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
 import { sizedImage } from '../utils/productImages';
+import { collectionCover } from '../utils/collectionCover';
 
 interface CollectionsShowcaseProps {
   limit?: number;
@@ -53,8 +54,7 @@ export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit,
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {collections.slice(0, limit ?? collections.length).map((col) => {
             const letterProducts = col.name === 'INANA LETTERS' ? products.filter(product => product.collection === col.name && product.letter) : [];
-            const letterPhoto = letterProducts.flatMap(product => product.images || []).find(image => !image.includes('images.unsplash.com'));
-            const coverImage = col.name === 'INANA LETTERS' ? letterPhoto : col.coverImage;
+            const coverImage = collectionCover(col, products);
             return (
             <div
               key={col.id}
