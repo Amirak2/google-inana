@@ -48,7 +48,7 @@ export const CollectionsHero: React.FC = () => {
 
   return (
     <section id="inana-luxury-hero" aria-labelledby="inana-hero-title"
-      className="relative w-full overflow-hidden bg-[#050A14] pt-24 pb-10 sm:pt-32 sm:pb-16 lg:pb-20">
+      className="relative w-full overflow-hidden bg-[#050A14] pt-32 pb-10 sm:pt-32 sm:pb-16 lg:pb-20">
       {/* Soft gold light and a faint dot pattern behind everything; nothing is laid over the photos. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 inana-pattern-bg opacity-60 [mask-image:linear-gradient(to_bottom,black,transparent_75%)]" />
       <div aria-hidden="true" className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(212,175,55,0.18),transparent)]" />
