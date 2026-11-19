@@ -59,9 +59,10 @@ export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit,
             <div
               key={col.id}
               onClick={() => handleCollectionSelect(col.name)}
-              className="group relative h-[420px] rounded-3xl overflow-hidden cursor-pointer border border-[#D4AF37]/25 hover:border-[#D4AF37]/60 transition-all duration-700 hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.75),0_0_30px_rgba(212,175,55,0.2)] bg-[#070E1E]"
+              className="group relative flex flex-col rounded-3xl overflow-hidden cursor-pointer border border-[#D4AF37]/25 hover:border-[#D4AF37]/60 transition-all duration-700 hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(0,0,0,0.75),0_0_30px_rgba(212,175,55,0.2)] bg-[#070E1E]"
             >
-              {/* Cover Image */}
+              {/* Cover photo, shown clean; the text sits below it so nothing is laid over the photo. */}
+              <div className="relative h-[260px] shrink-0 overflow-hidden">
               {coverImage ? <img
                 src={sizedImage(coverImage, 960)}
                 loading="lazy"
@@ -69,14 +70,11 @@ export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit,
                 alt={col.titleFa}
                 className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-1000 ease-out"
                 referrerPolicy="no-referrer"
-              /> : <div aria-label="حروف موجود در کالکشن اختصاصی" className="absolute inset-0 flex items-center justify-center bg-[#0B152B] pb-32">
+              /> : <div aria-label="حروف موجود در کالکشن اختصاصی" className="absolute inset-0 flex items-center justify-center bg-[#0B152B]">
                 <span aria-hidden="true" className="font-serif-brand text-6xl sm:text-7xl tracking-[0.12em] text-[#D4AF37]" dir="ltr">
                   {letterProducts.map(product => product.letter).slice(0, 4).join(' ') || 'INANA'}
                 </span>
               </div>}
-
-              {/* Luxury Gradient Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#060B15] via-[#060B15]/70 to-black/30 group-hover:opacity-90 transition-opacity" />
 
               {/* Tag Badge */}
               <div className="absolute top-4 right-4 z-10">
@@ -84,9 +82,10 @@ export const CollectionsShowcase: React.FC<CollectionsShowcaseProps> = ({ limit,
                   {col.tag}
                 </span>
               </div>
+              </div>
 
               {/* Content Box */}
-              <div className="absolute bottom-0 inset-x-0 p-6 z-10 flex flex-col justify-end">
+              <div className="flex flex-1 flex-col justify-end p-5 sm:p-6">
                 <span className="text-xs font-serif-brand uppercase tracking-[0.2em] text-[#D4AF37] mb-1">
                   {col.name}
                 </span>
