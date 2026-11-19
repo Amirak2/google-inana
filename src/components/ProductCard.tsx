@@ -56,7 +56,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       onClick={handleQuickView}
       whileHover={{ y: -7 }}
       transition={{ type: 'spring', stiffness: 340, damping: 24 }}
-      className="group relative flex flex-col luxury-glass-card rounded-2xl overflow-hidden cursor-pointer transition-colors duration-500 hover:border-[#D4AF37]/50 border border-[#D4AF37]/15 hover:shadow-[0_24px_50px_-12px_rgba(2,6,23,0.9),0_0_35px_rgba(212,175,55,0.2)] w-full min-w-0"
+      className="group relative flex h-full flex-col luxury-glass-card rounded-2xl overflow-hidden cursor-pointer transition-colors duration-500 hover:border-[#D4AF37]/50 border border-[#D4AF37]/15 hover:shadow-[0_24px_50px_-12px_rgba(2,6,23,0.9),0_0_35px_rgba(212,175,55,0.2)] w-full min-w-0"
     >
       {/* Luxury Golden Crest Top Border Accent on Hover */}
       <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent opacity-0 group-hover:opacity-100 transition-all duration-700 transform scale-x-0 group-hover:scale-x-100 z-30 pointer-events-none" />
@@ -128,7 +128,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       {/* Product Information */}
       <div className="p-2.5 sm:p-5 flex flex-col flex-1 justify-between">
         <div>
-          <h3 className="text-xs sm:text-base leading-5 font-bold text-white line-clamp-2 min-h-10 sm:min-h-0 group-hover:text-[#F5E8C7] transition-colors duration-300">
+          <h3 className="text-xs sm:text-base leading-5 sm:leading-6 font-bold text-white line-clamp-2 min-h-10 sm:min-h-12 group-hover:text-[#F5E8C7] transition-colors duration-300">
             <a href={productPath(product.id)} onClick={event => {
               event.stopPropagation();
               if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -137,22 +137,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
             }}>{product.title}</a>
           </h3>
           {isFixed ? (
-            <p className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-slate-300">{product.category}</p>
+            <p className="mt-1 sm:mt-2 truncate text-[11px] sm:text-xs text-slate-300">{product.category}</p>
           ) : (
-            <p className="mt-1 sm:mt-2 text-[11px] sm:text-xs text-slate-300">وزن: <span className="font-bold text-white">{hasWeightOptions ? weightOptions.map(option => formatWeight(option.weight)).join(' / ') : formatWeight(product.weight)}</span></p>
+            <p className="mt-1 sm:mt-2 truncate text-[11px] sm:text-xs text-slate-300">وزن: <span className="font-bold text-white">{hasWeightOptions ? weightOptions.map(option => formatWeight(option.weight)).join(' / ') : formatWeight(product.weight)}</span></p>
           )}
         </div>
 
         {/* Dynamic Computed Price & Action Button Footer */}
         <div className="mt-2 sm:mt-4 pt-2 sm:pt-3 border-t border-slate-700/80 group-hover:border-slate-700 flex items-center justify-between transition-colors duration-300">
-          <div className="flex flex-col">
-            <span className="text-[10px] text-slate-300 font-light">{isFixed ? 'قیمت ثابت' : 'قیمت روز'}</span>
-            {priceReady && oldPrice && (
-              <span className="flex items-center gap-1 whitespace-nowrap">
-                <s className="text-[10px] sm:text-xs text-slate-400" aria-label="قیمت قبل از تخفیف">{formatToman(oldPrice)}</s>
-                <span className="text-[9px] sm:text-[10px] font-bold text-white bg-rose-600 rounded px-1">{toPersianDigits(priceBreakdown.discountPercent)}٪</span>
-              </span>
-            )}
+          <div className="flex min-w-0 flex-col">
+            {/* The old price shares the label's line, so discounted cards are as tall as the rest. */}
+            <span className="flex h-4 items-center gap-1 whitespace-nowrap text-[10px] text-slate-300 font-light">
+              {priceReady && oldPrice ? <>
+                <s className="text-slate-400" aria-label="قیمت قبل از تخفیف">{formatToman(oldPrice)}</s>
+                <span className="text-[9px] font-bold text-white bg-rose-600 rounded px-1 leading-4">{toPersianDigits(priceBreakdown.discountPercent)}٪</span>
+              </> : (isFixed ? 'قیمت ثابت' : 'قیمت روز')}
+            </span>
             <span className="text-[11px] sm:text-base font-bold text-white gold-gradient-text whitespace-nowrap tracking-tight group-hover:brightness-115 transition-all">
               {priceReady ? `${hasWeightOptions ? 'از ' : ''}${formatToman(finalPrice)}` : 'در حال دریافت نرخ...'}
             </span>

@@ -3,10 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { useGoldStore } from '../context/GoldStoreContext';
 import type { CollectionInfo } from '../types';
 import { collectionCover } from '../utils/collectionCover';
-import { toPersianDigits } from '../utils/persianFormatter';
 import { sizedImage } from '../utils/productImages';
-
-const number = (index: number) => toPersianDigits(String(index + 1).padStart(2, '0'));
 
 /** A thin gold rule with a small diamond in the middle. */
 const Ornament = ({ className = '' }: { className?: string }) => (
@@ -28,19 +25,11 @@ function CollectionCard({ collection, index, cover, tall, onOpen }: {
           ? <img src={sizedImage(cover, tall ? 960 : 640)} alt="" loading={index < 2 ? 'eager' : 'lazy'} decoding="async" draggable={false} referrerPolicy="no-referrer"
               className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-[1200ms] ease-out group-hover:scale-105" />
           : <span className="absolute inset-0 flex items-center justify-center font-serif-brand text-4xl tracking-[0.2em] text-[#D4AF37]" dir="ltr">INANA</span>}
-        <span className="absolute top-3 right-3 rounded-full border border-[#D4AF37]/40 bg-white/95 px-2.5 py-1 font-serif-brand text-[11px] font-bold tracking-widest text-[#7A5A0C]">
-          {number(index)}
-        </span>
       </span>
-      <span className="mt-3 flex items-end justify-between gap-3 px-1">
-        <span className="min-w-0">
-          <span dir="ltr" className="block truncate text-left font-serif-brand text-[10px] uppercase tracking-[0.25em] text-[#D4AF37]">{collection.name}</span>
-          <span className={`mt-0.5 block truncate font-extrabold text-white ${tall ? 'text-lg sm:text-xl' : 'text-base'}`}>{collection.titleFa}</span>
-          {collection.subtitleFa && <span className="mt-0.5 block truncate text-xs text-slate-400">{collection.subtitleFa}</span>}
-        </span>
-        <span aria-hidden="true" className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D4AF37]/40 text-[#D4AF37] transition-colors duration-300 group-hover:bg-[#D4AF37] group-hover:text-slate-950">
-          <ArrowLeft className="h-4 w-4" />
-        </span>
+      <span className="mt-3 block px-1 text-center">
+        <span dir="ltr" className="block truncate font-serif-brand text-[10px] uppercase tracking-[0.25em] text-[#D4AF37]">{collection.name}</span>
+        <span className={`mt-0.5 block truncate font-extrabold text-white ${tall ? 'text-lg sm:text-xl' : 'text-base'}`}>{collection.titleFa}</span>
+        {collection.subtitleFa && <span className="mt-0.5 block truncate text-xs text-slate-400">{collection.subtitleFa}</span>}
       </span>
     </button>
   );
@@ -68,8 +57,8 @@ export const CollectionsHero: React.FC = () => {
         {/* Brand */}
         <div className="flex flex-col items-center text-center lg:col-span-4">
           <img src="/inana-logo-gold.png" alt="لوگوی اینانا گلد" width={88} height={88} draggable={false}
-            className="h-12 w-12 object-contain sm:h-20 sm:w-20" />
-          <h1 id="inana-hero-title" dir="ltr" className="mt-3 sm:mt-4 whitespace-nowrap font-serif-brand text-[clamp(26px,7vw,52px)] lg:text-[34px] xl:text-[40px] font-bold uppercase leading-none tracking-[0.22em] lg:tracking-[0.18em] -mr-[0.22em] lg:-mr-[0.18em] gold-gradient-text">
+            className="hidden object-contain sm:block sm:h-20 sm:w-20" />
+          <h1 id="inana-hero-title" dir="ltr" className="sm:mt-4 whitespace-nowrap font-serif-brand text-[clamp(26px,7vw,52px)] lg:text-[34px] xl:text-[40px] font-bold uppercase leading-none tracking-[0.22em] lg:tracking-[0.18em] -mr-[0.22em] lg:-mr-[0.18em] gold-gradient-text">
             INANA GOLD
           </h1>
           <Ornament className="mt-3 sm:mt-4" />
