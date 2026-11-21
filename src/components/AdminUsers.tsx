@@ -5,6 +5,7 @@ import { readApiResponse } from '../utils/apiResponse';
 import { formatToman, toPersianDigits } from '../utils/persianFormatter';
 import { latinDigits } from '../utils/accounting';
 import type { UserProfile } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface AdminUser extends UserProfile {
   phoneVerified: boolean;
@@ -17,13 +18,41 @@ interface AdminUser extends UserProfile {
 const dateText = (iso?: string | null) => iso ? new Date(iso).toLocaleDateString('fa-IR', { timeZone: 'Asia/Tehran' }) : '—';
 const normalize = (value = '') => latinDigits(value).toLowerCase().replace(/ي/g, 'ی').replace(/ك/g, 'ک').trim();
 
-// Read-only list of registered accounts for the shop owner.
+// Registered accounts for the shop owner. Only the owner's master account can give or remove admin access.
 export const AdminUsers: React.FC = () => {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'customers' | 'buyers' | 'admins'>('all');
+  const [changing, setChanging] = useState('');
+  const [notice, setNotice] = useState('');
+  const { currentUser } = useAuth();
+  const isOwner = currentUser?.uid === 'ina_admin_master';
+
+  const changeRole = async (user: AdminUser) => {
+    const makeAdmin = user.role !== 'admin';
+    const name = user.displayName || user.phoneNumber || 'این کاربر';
+    const question = makeAdmin
+      ? `به «${name}» دسترسی مدیر داده شود؟
+
+مدیرها همهٔ سفارش‌ها، اطلاعات مشتری‌ها و حسابداری را می‌بینند و می‌توانند محصولات و قیمت‌ها را تغییر دهند.`
+      : `دسترسی مدیر «${name}» برداشته شود؟`;
+    if (!window.confirm(question)) return;
+    setChanging(user.uid); setError(''); setNotice('');
+    try {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(user.uid)}/role`, {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ role: makeAdmin ? 'admin' : 'customer' }),
+      });
+      await readApiResponse(response, 'تغییر دسترسی انجام نشد.');
+      setUsers(list => list && list.map(item => item.uid === user.uid ? { ...item, role: makeAdmin ? 'admin' : 'customer' } : item));
+      setNotice(makeAdmin ? `«${name}» حالا مدیر است. با یک بار تازه کردن صفحه، پنل مدیریت برایش باز می‌شود.` : `دسترسی مدیر «${name}» برداشته شد.`);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'ارتباط با سرور برقرار نشد.');
+    } finally { setChanging(''); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -62,6 +91,7 @@ export const AdminUsers: React.FC = () => {
       </div>
 
       {error && <p role="alert" className="rounded-xl border border-rose-500/40 bg-rose-950/40 p-3 text-sm text-rose-300">{error}</p>}
+      {notice && <p role="status" className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3 text-sm text-emerald-300">{notice}</p>}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {filters.map(item => (
@@ -103,6 +133,14 @@ export const AdminUsers: React.FC = () => {
               <div><dt className="text-slate-400">جمع خرید تأییدشده</dt><dd className="mt-0.5 text-[#F5E8C7]">{user.paidTotal ? formatToman(user.paidTotal) : '—'}</dd></div>
             </dl>
             {user.address && <p className="border-t border-slate-800 pt-2 text-xs text-slate-300"><span className="text-slate-400">نشانی: </span>{user.address}</p>}
+            {isOwner && user.uid !== 'ina_admin_master' && user.uid !== currentUser?.uid && (
+              <div className="flex justify-end border-t border-slate-800 pt-2">
+                <button type="button" disabled={changing === user.uid} onClick={() => void changeRole(user)}
+                  className={`min-h-10 rounded-xl border px-3 text-xs font-bold disabled:opacity-50 ${user.role === 'admin' ? 'border-rose-700 text-rose-300' : 'border-[#D4AF37]/60 text-[#E6CA65]'}`}>
+                  {changing === user.uid ? 'در حال ذخیره…' : user.role === 'admin' ? 'برداشتن دسترسی مدیر' : 'دادن دسترسی مدیر'}
+                </button>
+              </div>
+            )}
           </article>
         ))}
       </div>

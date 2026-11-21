@@ -37,7 +37,7 @@ import { CollectionError, createCollections } from './server/collections';
 
 export function createApp(store: Store, env: Record<string, any>) {
 const fetch: typeof globalThis.fetch = env.marketFetch || globalThis.fetch;
-const { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp } = createAuthStore(store, env);
+const { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, updateUser, setUserRole, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp } = createAuthStore(store, env);
 const { logger, requestLoggerMiddleware } = createLogger(store);
 const { runDbTransaction,
   getAllProductsFromDb,
@@ -2481,6 +2481,17 @@ app.get('/api/admin/users', requireAdminAuth, (_req: AuthenticatedRequest, res: 
     };
   }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   res.json({ users, total: users.length });
+});
+
+// Only the owner's master account can give or remove admin access; it applies on the user's next request.
+app.put('/api/admin/users/:uid/role', requireAdminAuth, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const updated = setUserRole(req.user!.uid, String(req.params.uid), req.body?.role);
+    logger.security('ADMIN', `${updated.role === 'admin' ? 'دادن' : 'برداشتن'} دسترسی مدیر: ${updated.displayName || updated.phoneNumber}`, { admin: req.user?.email, userId: updated.uid });
+    res.json({ user: updated });
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'تغییر دسترسی انجام نشد.' });
+  }
 });
 
 // Get logging statistics and counters (Strictly Admin Protected)

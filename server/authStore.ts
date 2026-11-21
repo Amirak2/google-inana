@@ -420,6 +420,23 @@ function loginUser(
   return { user: sanitizeUser(user), token };
 }
 
+/**
+ * Gives or removes admin access. Only the owner's master account may do this, and the
+ * master account itself (and the owner's own account) can never be changed here.
+ */
+function setUserRole(actorUid: string, targetUid: string, role: unknown): UserProfile {
+  if (actorUid !== 'ina_admin_master') throw Object.assign(new Error('فقط حساب اصلی مدیر می‌تواند دسترسی مدیر بدهد یا بردارد.'), { statusCode: 403 });
+  if (role !== 'admin' && role !== 'customer') throw Object.assign(new Error('نقش کاربر معتبر نیست.'), { statusCode: 400 });
+  let target: StoredUser | undefined;
+  for (const u of usersCache.values()) if (u.uid === targetUid) { target = u; break; }
+  if (!target) throw Object.assign(new Error('کاربر مورد نظر یافت نشد.'), { statusCode: 404 });
+  if (target.uid === 'ina_admin_master' || target.uid === actorUid) throw Object.assign(new Error('دسترسی حساب اصلی مدیر تغییر نمی‌کند.'), { statusCode: 400 });
+  target.role = role;
+  target.updatedAt = new Date().toISOString();
+  saveUsers();
+  return sanitizeUser(target);
+}
+
 function updateUser(
   uid: string,
   updates: Partial<UserProfile>
@@ -771,5 +788,5 @@ function verifyPhoneChangeOtp(userId: string, code: string): UserProfile {
 }
 
 
-return { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, registerUser, loginUser, loginWithUsername, setPasswordCredentials, updateUser, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp };
+return { hashPassword, checkRateLimit, normalizeIranianMobile, isValidIranianMobile, createSessionToken, revokeSessionToken, verifySessionToken, sanitizeUser, findUserByMobile, registerUser, loginUser, loginWithUsername, setPasswordCredentials, updateUser, setUserRole, sendSmsOtpCode, verifySmsOtpAndAuthenticate, requestPhoneChangeOtp, verifyPhoneChangeOtp };
 }
